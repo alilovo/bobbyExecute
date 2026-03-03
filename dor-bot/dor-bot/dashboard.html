@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>🌴 BOOBY BOT 🌴</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+:root {
+  --bg:     #000e1f;
+  --panel:  #001833;
+  --border: #0055dd;
+  --ocean:  #00ffee;
+  --sand:   #ffcc44;
+  --palm:   #44ff88;
+  --hot:    #ff3388;
+  --sky:    #33bbff;
+  --sun:    #ffaa00;
+  --win:    #00ff88;
+  --loss:   #ff2244;
+  --px: 3px;
+}
+
+* { box-sizing:border-box; margin:0; padding:0; image-rendering:pixelated; }
+
+body {
+  background: var(--bg);
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: 8px;
+  color: var(--ocean);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* CRT scanlines */
+body::after {
+  content:'';
+  position:fixed; inset:0;
+  background: repeating-linear-gradient(0deg,
+    transparent, transparent 2px,
+    rgba(0,0,0,0.09) 2px, rgba(0,0,0,0.09) 4px);
+  pointer-events:none;
+  z-index:9998;
+}
+
+/* ═══════════════════ HEADER ═══════════════════ */
+.header {
+  background: linear-gradient(180deg, #000a1a 0%, #001a3d 50%, #000a1a 100%);
+  border-bottom: 3px solid var(--sand);
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+.header::before {
+  content:'';
+  position:absolute; inset:0;
+  background: repeating-linear-gradient(90deg,
+    transparent 0, transparent 15px, rgba(255,204,68,0.025) 15px, rgba(255,204,68,0.025) 16px);
+}
+
+.logo-wrap { display:flex; align-items:center; gap:12px; }
+
+.palm { font-size:32px; animation:sway 3s ease-in-out infinite; display:inline-block; }
+.palm.r { animation-delay:.7s; animation-direction:alternate-reverse; }
+@keyframes sway { 0%,100%{transform:rotate(-6deg)} 50%{transform:rotate(6deg)} }
+
+.logo-text {
+  font-size:17px;
+  color: var(--sand);
+  text-shadow: 3px 3px 0 var(--hot), 6px 6px 0 rgba(255,51,136,0.35);
+  letter-spacing:3px;
+  animation: glitch 6s infinite;
+}
+@keyframes glitch {
+  0%,89%,100% { text-shadow:3px 3px 0 var(--hot),6px 6px 0 rgba(255,51,136,0.35); transform:none; }
+  90% { text-shadow:6px 0 0 #f04,-6px 0 0 var(--ocean); transform:skewX(-3deg); }
+  92% { text-shadow:-6px 0 0 #f04,6px 0 0 var(--ocean); transform:skewX(3deg); }
+  94% { text-shadow:3px 3px 0 var(--hot); transform:none; }
+}
+.logo-sub { font-size:6px; color:var(--hot); margin-top:4px; letter-spacing:2px; }
+
+.header-right { display:flex; align-items:center; gap:16px; }
+.balance-display { font-size:10px; color:var(--sand); }
+
+.pill {
+  padding:5px 12px; font-size:7px;
+  border:3px solid var(--win); color:var(--win);
+  background:rgba(0,255,136,0.08);
+  animation:pill-blink 1.5s infinite;
+}
+@keyframes pill-blink {
+  0%,100% { border-color:var(--win); box-shadow:0 0 10px var(--win); }
+  50% { border-color:rgba(0,255,136,0.2); box-shadow:none; }
+}
+.live-dot { width:8px;height:8px;background:var(--win);display:inline-block;animation:blink .8s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+/* ═══════════════════ BEACH SCENE ═══════════════════ */
+
+/* Banana-Boot im Meer */
+.banana-boat {
+  position: absolute;
+  bottom: 44px;
+  left: 15%;
+  font-size: 8px;
+  line-height: 1.4;
+  white-space: pre;
+  color: #ffee22;
+  text-shadow: 0 0 4px #ffaa00;
+  animation: boat-drift 6s ease-in-out infinite;
+  z-index: 4;
+}
+@keyframes boat-drift {
+  0%,100% { transform: translateX(0) rotate(-1deg); }
+  25%      { transform: translateX(8px) rotate(1deg); }
+  50%      { transform: translateX(14px) rotate(-0.5deg); }
+  75%      { transform: translateX(6px) rotate(1.5deg); }
+}
+
+/* Sandburg rechts */
+.sandcastle {
+  position: absolute;
+  bottom: 0;
+  right: 8%;
+  font-size: 8px;
+  line-height: 1.4;
+  white-space: pre;
+  color: var(--sand);
+  text-shadow: 0 0 3px rgba(255,204,68,0.6);
+  z-index: 5;
+}
+
+/* Pelikan/Möwe auf dem Boot */
+.seagull-boat {
+  position: absolute;
+  bottom: 58px;
+  left: 15.5%;
+  font-size: 7px;
+  white-space: pre;
+  color: #ffffff;
+  animation: seagull-bob 6s ease-in-out infinite;
+  z-index: 5;
+}
+@keyframes seagull-bob {
+  0%,100% { transform: translateX(0) translateY(0) rotate(-1deg); }
+  25%      { transform: translateX(8px) translateY(-1px) rotate(1deg); }
+  50%      { transform: translateX(14px) translateY(0) rotate(-0.5deg); }
+  75%      { transform: translateX(6px) translateY(-1px) rotate(1.5deg); }
+}
+
+/* Fisch spring */
+.fish {
+  position: absolute;
+  bottom: 39px;
+  left: 35%;
+  font-size: 7px;
+  color: #44ffee;
+  animation: fish-jump 4s ease-in-out infinite;
+  z-index: 4;
+}
+@keyframes fish-jump {
+  0%,100%  { transform: translateY(0) rotate(0deg); opacity:0; }
+  10%      { opacity: 1; }
+  30%      { transform: translateY(-18px) rotate(-20deg); opacity: 1; }
+  50%      { transform: translateY(0) rotate(0deg); opacity: 0.5; }
+  100%     { opacity: 0; }
+}
+
+.beach {
+  height: 150px;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    #000a1a 0%,
+    #001a3d 30%,
+    #0033aa 55%,
+    #0055cc 68%,
+    #cc8833 68%,
+    #ddaa44 80%,
+    #cc9933 100%
+  );
+  border-bottom: 3px solid var(--sand);
+}
+
+/* Sun */
+.sun {
+  position:absolute;
+  top:12px; right:90px;
+  width:50px; height:50px;
+  background: var(--sun);
+  box-shadow: 0 0 0 4px #000, 0 0 0 6px var(--sun), 0 0 30px rgba(255,170,0,0.7);
+  animation: sun-beat 2s ease-in-out infinite;
+  clip-path: polygon(
+    50% 0%, 58% 32%, 93% 20%, 76% 46%,
+    100% 55%, 76% 64%, 93% 90%, 58% 78%,
+    50% 100%, 42% 78%, 7% 90%, 24% 64%,
+    0% 55%, 24% 46%, 7% 20%, 42% 32%
+  );
+}
+@keyframes sun-beat { 0%,100%{transform:scale(1) rotate(0deg)} 50%{transform:scale(1.07) rotate(12deg)} }
+
+/* Birds */
+.birds { position:absolute; top:20px; left:30px; font-size:8px; color:rgba(0,0,0,0.5); animation:fly 8s linear infinite; }
+@keyframes fly { 0%{transform:translateX(-40px)} 100%{transform:translateX(calc(100vw + 40px))} }
+
+/* Waves */
+.wave1 { position:absolute; bottom:37px; left:0; right:0; height:5px;
+  background:repeating-linear-gradient(90deg,var(--ocean) 0,var(--ocean) 4px,transparent 4px,transparent 9px);
+  opacity:.75; animation:wave 1.8s linear infinite; }
+.wave2 { position:absolute; bottom:44px; left:0; right:0; height:3px;
+  background:repeating-linear-gradient(90deg,var(--sky) 0,var(--sky) 3px,transparent 3px,transparent 8px);
+  opacity:.4; animation:wave 2.5s linear infinite reverse; }
+@keyframes wave { 0%{transform:translateX(0)} 100%{transform:translateX(-9px)} }
+
+/* Girls container */
+.girls { position:absolute; bottom:0; left:0; right:0; display:flex; justify-content:space-around; align-items:flex-end; padding:0 10px; }
+
+.girl {
+  font-size:9.5px;
+  line-height:1.55;
+  white-space:pre;
+  text-shadow:0 0 6px currentColor;
+  animation:bob 2s ease-in-out infinite;
+  position:relative;
+  z-index:3;
+  padding-bottom:2px;
+}
+.g1 { color:var(--sand);   animation-delay:0s;    }
+.g2 { color:var(--hot);    animation-delay:0.35s; }
+.g3 { color:#ffaaee;       animation-delay:0.7s;  }
+.g4 { color:var(--palm);   animation-delay:1.0s;  }
+.g5 { color:#aaddff;       animation-delay:1.35s; }
+@keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+
+/* ═══════════════════ VOLLEYBALL ═══════════════════ */
+#vball-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+  image-rendering: pixelated;
+}
+/* Netz */
+.vball-net {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 48px;
+  background: repeating-linear-gradient(
+    180deg,
+    var(--sand) 0px, var(--sand) 3px,
+    transparent 3px, transparent 6px
+  );
+  z-index: 4;
+  box-shadow: 0 0 6px rgba(255,204,68,0.5);
+}
+.vball-net::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -22px;
+  width: 50px; height: 3px;
+  background: var(--sand);
+  box-shadow: 0 0 6px rgba(255,204,68,0.5);
+}
+
+/* Sound button */
+.sound-btn {
+  width:32px; height:32px;
+  border: 3px solid var(--sand);
+  background: rgba(255,204,68,0.08);
+  color: var(--sand);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex; align-items:center; justify-content:center;
+  transition: all 0.1s;
+  image-rendering: pixelated;
+}
+.sound-btn:hover { background: rgba(255,204,68,0.22); box-shadow: 0 0 12px var(--sand); }
+.sound-btn.muted { border-color: var(--loss); color: var(--loss); background: rgba(255,34,68,0.08); }
+.sound-btn.muted:hover { box-shadow: 0 0 12px var(--loss); }
+
+/* ═══════════════════ TICKER ═══════════════════ */
+.ticker {
+  background: linear-gradient(90deg, #aa0044, #cc3300, #ff6600, #cc3300, #aa0044);
+  padding:6px 0;
+  overflow:hidden;
+  border-bottom:2px solid var(--sand);
+}
+.ticker-track { display:flex; gap:50px; animation:scroll-left 30s linear infinite; white-space:nowrap; }
+@keyframes scroll-left { 0%{transform:translateX(100vw)} 100%{transform:translateX(-250%)} }
+.tick { color:#fff; font-size:7px; }
+
+/* ═══════════════════ MAIN GRID ═══════════════════ */
+.main { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; padding:8px; }
+
+/* Pixel box */
+.pbox {
+  border:3px solid var(--border);
+  box-shadow: inset 0 0 0 2px #000, 0 0 0 1px #000, 0 0 15px rgba(0,85,221,0.25);
+  background: var(--panel);
+  padding:10px;
+}
+
+.ptitle {
+  font-size:7px; color:var(--sand);
+  border-bottom:2px solid rgba(0,85,221,0.6);
+  padding-bottom:5px; margin-bottom:8px;
+  display:flex; align-items:center; gap:5px;
+}
+
+/* ── Stats ── */
+.stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+.sbox {
+  border:2px solid; padding:7px 5px; text-align:center; position:relative; overflow:hidden;
+}
+.sbox::before, .sbox::after { content:'◼'; position:absolute; font-size:4px; opacity:.45; }
+.sbox::before { top:2px;left:2px; } .sbox::after { bottom:2px;right:2px; }
+.sbox.y { border-color:var(--sand); background:rgba(255,204,68,0.04); }
+.sbox.g { border-color:var(--win);  background:rgba(0,255,136,0.04); }
+.sbox.b { border-color:var(--sky);  background:rgba(51,187,255,0.04); }
+.sbox.r { border-color:var(--loss); background:rgba(255,34,68,0.04); }
+.sbox .lbl { font-size:5.5px; color:rgba(0,255,238,0.55); margin-bottom:3px; }
+.sbox .val { font-size:13px; }
+.sbox.y .val { color:var(--sand); } .sbox.g .val { color:var(--win); }
+.sbox.b .val { color:var(--sky); }  .sbox.r .val { color:var(--loss); }
+
+/* Meter */
+.meter-wrap { margin-top:8px; }
+.meter-lbl { font-size:5.5px; color:rgba(0,255,238,.55); margin-bottom:3px; }
+.meter-track { height:10px; background:rgba(0,0,0,.5); border:2px solid var(--border); position:relative; overflow:hidden; }
+.meter-fill { height:100%; background:linear-gradient(90deg,var(--hot),var(--sand)); transition:width .4s; }
+.meter-fill::after { content:''; position:absolute; top:0;right:0; width:3px;height:100%; background:#fff; animation:blink .4s infinite; }
+.meter-val { position:absolute; top:50%; right:4px; transform:translateY(-50%); font-size:5px; color:#fff; z-index:1; }
+
+/* Health */
+.hrow { display:flex; align-items:center; gap:5px; margin:3px 0; font-size:5.5px; }
+.hlbl { color:rgba(0,255,238,.55); width:44px; flex-shrink:0; }
+.hbar { flex:1; height:7px; background:rgba(0,0,0,.5); border:1px solid var(--border); overflow:hidden; }
+.hfill { height:100%; transition:width .4s; }
+.hval { width:28px; text-align:right; color:var(--ocean); }
+
+/* Buttons */
+.btns { display:flex; gap:5px; margin-top:8px; }
+.btn { font-family:inherit; font-size:7px; padding:5px 8px; border:2px solid; background:transparent; cursor:pointer; }
+.btn:active { transform:translate(2px,2px); }
+.btn.go  { border-color:var(--win); color:var(--win); }
+.btn.go:hover  { background:rgba(0,255,136,.18); box-shadow:0 0 10px var(--win); }
+.btn.stp { border-color:var(--loss); color:var(--loss); }
+.btn.stp:hover { background:rgba(255,34,68,.18); box-shadow:0 0 10px var(--loss); }
+
+/* ── Positions ── */
+.pos-item {
+  border:2px solid var(--border); padding:5px 5px 5px 16px;
+  margin-bottom:5px; background:rgba(0,85,221,0.05); position:relative;
+}
+.pos-item::before { content:'▶'; position:absolute; left:4px; top:5px; color:var(--ocean); font-size:5.5px; animation:blink .9s infinite; }
+.pos-name { color:var(--sand); font-size:8px; }
+.pos-pnl  { font-size:10px; float:right; }
+.pos-pnl.p { color:var(--win); } .pos-pnl.n { color:var(--loss); }
+.pos-meta { font-size:5.5px; color:rgba(0,255,238,.45); margin-top:3px; }
+
+.no-pos { text-align:center; color:rgba(0,255,238,.28); font-size:7px; padding:18px 0; animation:float 3s ease-in-out infinite; }
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+
+/* Pattern badges */
+.pbadge { display:inline-block; padding:1px 5px; font-size:5px; border:1px solid; margin:1px; }
+.pbadge.quick_runner  { border-color:var(--win);  color:var(--win); }
+.pbadge.instant_dump  { border-color:var(--loss); color:var(--loss); }
+.pbadge.steady_gainer { border-color:var(--sky);  color:var(--sky); }
+.pbadge.slow_bleeder  { border-color:var(--hot);  color:var(--hot); }
+.pbadge.pump_and_dump { border-color:var(--sun);  color:var(--sun); }
+
+/* ── Chart ── */
+.chart {
+  height:78px; display:flex; align-items:flex-end; gap:2px;
+  padding-bottom:2px;
+  border-bottom:2px solid rgba(0,85,221,.35);
+}
+.bar { flex:1; min-height:3px; }
+.bar.w { background:var(--win); } .bar.l { background:var(--loss); }
+
+.trade-row { display:flex; justify-content:space-between; align-items:center; padding:2px 3px; border-bottom:1px solid rgba(0,85,221,.2); font-size:5.5px; }
+.tname { color:var(--sand); }
+.tpnl.w { color:var(--win); } .tpnl.l { color:var(--loss); }
+
+/* ── Terminal ── */
+.terminal {
+  grid-column:1/-1;
+  background:#00080f;
+  border:3px solid var(--border);
+  box-shadow:inset 0 0 25px rgba(0,0,0,.85);
+  position:relative; overflow:hidden;
+}
+.terminal::before {
+  content:''; position:absolute; top:-35%; left:0; width:100%; height:25%;
+  background:linear-gradient(transparent,rgba(0,255,238,.025),transparent);
+  animation:crt-scan 3.5s linear infinite;
+  pointer-events:none; z-index:1;
+}
+@keyframes crt-scan { 0%{top:-35%} 100%{top:100%} }
+
+.term-bar {
+  background:linear-gradient(90deg,var(--border),rgba(0,85,221,.4));
+  padding:4px 8px; font-size:7px; color:var(--sand);
+  display:flex; align-items:center; gap:6px;
+  border-bottom:2px solid var(--border);
+  position:sticky; top:0; z-index:2;
+}
+.term-body { padding:7px; max-height:230px; overflow-y:auto; font-size:7px; }
+.term-body::-webkit-scrollbar { width:3px; }
+.term-body::-webkit-scrollbar-thumb { background:var(--border); }
+
+.tline { padding:1.5px 0; border-bottom:1px solid rgba(0,85,221,.12); display:flex; gap:8px; animation:fadein .25s ease; }
+@keyframes fadein { from{opacity:0;transform:translateX(-3px)} to{opacity:1;transform:none} }
+.ttime { color:rgba(0,255,238,.38); flex-shrink:0; }
+.tmsg        { color:rgba(0,255,238,.8); }
+.tmsg.buy    { color:var(--win); }
+.tmsg.sell   { color:var(--sand); }
+.tmsg.warn   { color:var(--loss); }
+.tmsg.info   { color:var(--sky); }
+
+/* ── Footer ── */
+.footer {
+  background:#00080f;
+  border-top:2px solid var(--sand);
+  padding:5px 16px;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.ft { font-size:5px; color:rgba(0,255,238,.38); }
+
+/* Ocean bar */
+.ocean-bar {
+  height:16px;
+  background:linear-gradient(90deg,#003399,#0066ff,#003399);
+  background-size:200% 100%;
+  animation:ocean-move 3s linear infinite;
+  border-top:2px solid var(--ocean);
+}
+@keyframes ocean-move { 0%{background-position:0%} 100%{background-position:200%} }
+
+
+/* ── ML Panel ── */
+.ml-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:5px; margin-bottom:8px; }
+#equity-canvas { width:100%; height:60px; background:#00080f; border:1px solid var(--border); display:block; }
+.sbox.m { border-color:#aa44ff; background:rgba(170,68,255,0.04); }
+.sbox.m .val { color:#cc88ff; }
+
+/* Coin rain */
+.rain { position:fixed; inset:0; pointer-events:none; z-index:9997; display:none; }
+.coin { position:absolute; font-size:14px; animation:rain-fall 2s ease-in forwards; }
+@keyframes rain-fall { 0%{transform:translateY(-30px) rotate(0); opacity:1} 100%{transform:translateY(105vh) rotate(720deg); opacity:0} }
+</style>
+</head>
+<body>
+
+<!-- ══════════ HEADER ══════════ -->
+<header class="header">
+  <div class="logo-wrap">
+    <span class="palm">🌴</span>
+    <div>
+      <div class="logo-text">🍑 BOOBY BOT 🍑</div>
+      <div class="logo-sub">SOLANA SCALPER v30 · Q-LEARNING · KELLY · ATR STOPS · RE-ENTRY LEARNING · MIN LIQ $5K · HONEYPOT GUARD</div>
+    </div>
+    <span class="palm r">🌴</span>
+  </div>
+  <div class="header-right">
+    <button class="sound-btn" id="sound-btn" title="Sound an/aus">♪</button>
+    <div class="balance-display" id="hdr-bal">◎ ---</div>
+    <div class="pill"><span class="live-dot"></span><span id="stt" style="margin-left:4px">LIVE</span></div>
+    <div style="font-size:6px;color:rgba(0,255,238,.45)" id="uptime">00:00:00</div>
+  </div>
+</header>
+
+<!-- ══════════ BEACH SCENE ══════════ -->
+<div class="beach">
+  <div class="sun"></div>
+  <div class="birds">^ ^ ^  ^  ^</div>
+  <div class="wave1"></div>
+  <div class="wave2"></div>
+
+  <!-- 🍌 BANANA BOAT im Meer -->
+  <div class="seagull-boat">  🐦</div>
+  <div class="banana-boat">╔══════╗
+║🍌🍌🍌║
+╚══╤═══╝
+   ▓▓▓▓▓</div>
+
+  <!-- 🐟 Springender Fisch -->
+  <div class="fish">≋&gt;°)≫</div>
+
+  <!-- 🏰 Sandburg rechts -->
+  <div class="sandcastle"> ▲ ▲ ▲
+╔╪╗╔╪╗╔╪╗
+║█║║█║║█║
+╠═╬╩═╩╬═╣
+║  HODL  ║
+╚════════╝
+▓▓▓▓▓▓▓▓▓▓</div>
+
+  <!-- 🏐 Volleyball Netz + Canvas -->
+  <div class="vball-net"></div>
+  <canvas id="vball-canvas"></canvas>
+
+  <div class="girls">
+
+    <div class="girl g1"> ╔♥╗
+ ╚o╝
+ /|\
+ / \</div>
+
+    <div class="girl g2">  o
+ [♡]
+ /|
+/|\
+ ▲▲</div>
+
+    <div class="girl g3"> ♡ ♡
+ ╔═╗
+ ╚◉╝
+  |\
+ /▓\
+ / \</div>
+
+    <div class="girl g4"> ┌◈┐
+ └♥┘
+ \|/
+ /|\
+  Δ</div>
+
+    <div class="girl g5">  o
+╔♥♥╗
+╚═══╝
+  |
+ /|\
+ ▲ ▲</div>
+
+  </div>
+</div>
+
+<!-- ══════════ TICKER ══════════ -->
+<div class="ticker">
+  <div class="ticker-track" id="ticker">
+    <span class="tick">🌊 BOOBY BOT v30 LIVE</span>
+    <span class="tick">🍑 ONLY ACTIVE POOLS</span>
+    <span class="tick">🌴 MIN LIQ $5000</span>
+    <span class="tick">⚡ JUPITER BUY+SELL CHECK</span>
+    <span class="tick">🍯 HONEYPOT GUARD</span>
+    <span class="tick">🎯 PATTERN DETECTION AI</span>
+    <span class="tick">🛡 RUG GUARD 1S</span>
+    <span class="tick">💎 TIGHTENING TRAIL STOP</span>
+    <span class="tick">🔥 NO MINT / FREEZE AUTH</span>
+    <span class="tick">🌊 BOOBY BOT v30 LIVE</span>
+    <span class="tick">🍑 ONLY ACTIVE POOLS</span>
+    <span class="tick">🌴 MIN LIQ $3000</span>
+  </div>
+</div>
+
+<!-- ══════════ MAIN ══════════ -->
+<div class="main">
+
+  <!-- STATS -->
+  <div class="pbox">
+    <div class="ptitle">📊 BOOBY STATS</div>
+    <div class="stat-grid">
+      <div class="sbox y"><div class="lbl">TRADES</div><div class="val" id="s-trades">--</div></div>
+      <div class="sbox g"><div class="lbl">WIN RATE</div><div class="val" id="s-wr">--%</div></div>
+      <div class="sbox b" id="pnl-box"><div class="lbl">PNL SOL</div><div class="val" id="s-pnl">--</div></div>
+      <div class="sbox r"><div class="lbl">THRESHOLD</div><div class="val" id="s-th">--</div></div>
+    </div>
+
+    <div class="meter-wrap">
+      <div class="meter-lbl">⚡ SCORE THRESHOLD</div>
+      <div class="meter-track">
+        <div class="meter-fill" id="mfill" style="width:0%"></div>
+        <div class="meter-val" id="mval">0</div>
+      </div>
+    </div>
+
+    <div style="margin-top:9px">
+      <div class="ptitle" style="font-size:6px;margin-bottom:4px">💊 SYSTEM HEALTH</div>
+      <div class="hrow">
+        <div class="hlbl">WALLET</div>
+        <div class="hbar"><div class="hfill" id="hw" style="width:0%;background:linear-gradient(90deg,var(--win),var(--sky))"></div></div>
+        <div class="hval" id="hwv">--</div>
+      </div>
+      <div class="hrow">
+        <div class="hlbl">WIN %</div>
+        <div class="hbar"><div class="hfill" id="hwr" style="width:0%;background:linear-gradient(90deg,#ff8833,#ffcc44)"></div></div>
+        <div class="hval" id="hwrv">--</div>
+      </div>
+      <div class="hrow">
+        <div class="hlbl">POS SLOTS</div>
+        <div class="hbar"><div class="hfill" id="hp" style="width:0%;background:linear-gradient(90deg,var(--hot),#ff88cc)"></div></div>
+        <div class="hval" id="hpv">--</div>
+      </div>
+    </div>
+
+    <div class="btns">
+      <button class="btn go"  onclick="ctl('start')">▶ START</button>
+      <button class="btn stp" onclick="ctl('stop')">■ STOP</button>
+    </div>
+  </div>
+
+  <!-- POSITIONS -->
+  <div class="pbox">
+    <div class="ptitle">💰 POSITIONS <span id="pcnt" style="color:var(--hot)">(0/5)</span></div>
+    <div id="plist">
+      <div class="no-pos">🌊<br><br>NO ACTIVE<br>POSITIONS<br><br>WAITING<br>FOR WAVES...</div>
+    </div>
+    <div style="margin-top:8px;border-top:2px solid rgba(0,85,221,.3);padding-top:6px">
+      <div class="ptitle" style="font-size:6px">🎯 PATTERN TRACKER</div>
+      <div id="patterns" style="font-size:5.5px;color:rgba(0,255,238,.38)">NO DATA YET</div>
+    </div>
+  </div>
+
+  <!-- CHART -->
+  <div class="pbox">
+    <div class="ptitle">📈 LAST 20 TRADES</div>
+    <div class="chart" id="chart"></div>
+    <div id="tlist" style="margin-top:5px;max-height:145px;overflow-y:auto"></div>
+  </div>
+
+
+  <!-- ML STATUS PANEL -->
+  <div class="pbox" style="grid-column:1/-1">
+    <div class="ptitle">🧠 ML ENGINE · Q-LEARNING · KELLY CRITERION · ATR DYNAMIC STOPS</div>
+    <div class="ml-grid">
+      <div class="sbox m"><div class="lbl">THRESHOLD</div><div class="val" id="ml-th">--</div></div>
+      <div class="sbox g"><div class="lbl">AVG WIN</div><div class="val" id="ml-aw">--%</div></div>
+      <div class="sbox r"><div class="lbl">AVG LOSS</div><div class="val" id="ml-al">--%</div></div>
+      <div class="sbox b"><div class="lbl">QL STATES</div><div class="val" id="ml-qs">--</div></div>
+      <div class="sbox y"><div class="lbl">KELLY</div><div class="val" id="ml-k">--%</div></div>
+      <div class="sbox m"><div class="lbl">TREND</div><div class="val" id="ml-tr">--</div></div>
+    </div>
+    <div class="ptitle" style="font-size:6px;margin-bottom:4px">📈 EQUITY CURVE (BACKTEST WALK-FORWARD)</div>
+    <canvas id="equity-canvas"></canvas>
+    <div style="font-size:5.5px;color:rgba(0,255,238,.35);margin-top:3px" id="bt-stats">Loading backtest...</div>
+  </div>
+
+  <!-- TERMINAL (full width) -->
+  <div class="terminal">
+    <div class="term-bar">
+      <span class="live-dot"></span>
+      🖥 BOOBY TERMINAL
+      <span style="margin-left:auto;font-size:5.5px;color:rgba(0,255,238,.4)" id="lcnt">0 LINES</span>
+    </div>
+    <div class="term-body" id="tbody">
+      <div class="tline">
+        <span class="ttime">--:--:--</span>
+        <span class="tmsg">🌴 BOOBY TERMINAL BEREIT – WARTE AUF SIGNALE...</span>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- ══════════ FOOTER ══════════ -->
+<footer class="footer">
+  <div class="ft">🌴 BOOBY BOT v29 · SOLANA SCALPER</div>
+  <div class="ft" id="ft-wal">WALLET: ---</div>
+  <div class="ft">🍑 TROPICAL TRADING · MIN LIQ $3K · NO DEAD POOLS 🍑</div>
+</footer>
+<div class="ocean-bar"></div>
+<div class="rain" id="rain"></div>
+
+<script>
+// ══ State ══
+let lastLC = 0, prevPos = 0;
+
+// ══ API ══
+async function api(u) {
+  try { const r = await fetch(u); return r.ok ? r.json() : null; }
+  catch { return null; }
+}
+
+// ══ Coin Rain ══
+function coinRain() {
+  const r = document.getElementById('rain');
+  r.style.display = 'block'; r.innerHTML = '';
+  '💰🌴🍑⚡💎🌊🎯✨🔥'.split('').forEach((e) => {
+    for (let i = 0; i < 2; i++) {
+      const d = document.createElement('div');
+      d.className = 'coin'; d.textContent = e;
+      d.style.cssText = `left:${Math.random()*100}vw;animation-delay:${Math.random()*.8}s`;
+      r.appendChild(d);
+    }
+  });
+  setTimeout(() => r.style.display = 'none', 2800);
+}
+
+// ══ Status ══
+async function upStatus() {
+  const d = await api('/api/status'); if (!d) return;
+  const el = document.getElementById('stt'), pill = el.closest('.pill');
+  if (d.running) { el.textContent = '● LIVE'; pill.style.cssText = 'border-color:var(--win);color:var(--win)'; }
+  else           { el.textContent = '○ IDLE'; pill.style.cssText = 'border-color:var(--loss);color:var(--loss)'; }
+  if (d.uptime) document.getElementById('uptime').textContent = d.uptime;
+}
+
+// ══ Stats ══
+async function upStats() {
+  const d = await api('/api/stats'); if (!d) return;
+  const n       = d.real_trades || d.total_trades || 0;
+  const wr      = (d.win_rate * 100).toFixed(1);
+  const th      = Math.round(d.threshold);
+  const p       = d.pnl_sol || 0;
+  const streak  = d.loss_streak || 0;
+
+  document.getElementById('s-trades').textContent = n;
+  document.getElementById('s-wr').textContent     = wr + '%';
+  document.getElementById('s-th').textContent     = th;
+  const pe = document.getElementById('s-pnl');
+  pe.textContent = (p >= 0 ? '+' : '') + p.toFixed(3);
+  pe.style.color = p >= 0 ? 'var(--win)' : 'var(--loss)';
+  document.getElementById('pnl-box').className = 'sbox ' + (p >= 0 ? 'g' : 'r');
+
+  // Health bars
+  document.getElementById('hwr').style.width  = Math.min(100, d.win_rate * 200) + '%';
+  document.getElementById('hwrv').textContent = wr + '%';
+
+  // Meter
+  const tp = Math.min(100, Math.max(0, (th - 50) / 50 * 100));
+  document.getElementById('mfill').style.width = tp + '%';
+  document.getElementById('mval').textContent  = th;
+
+  // Loss streak warning
+  const streakEl = document.getElementById('patterns');
+  let ph = streak >= 3 ? `<span class="pbadge" style="background:#ff4444;color:#fff">⚠ LOSS STREAK: ${streak}x</span> ` : '';
+
+  // Patterns
+  const ss = d.strategy_stats || {};
+  for (const [k, v] of Object.entries(ss)) {
+    if (typeof v === 'object' && v.count > 0) {
+      ph += `<span class="pbadge ${k.replace(/[^a-z_]/g,'')}">${k.replace(/_/g,' ').toUpperCase()}: ${v.count}</span>`;
+    }
+  }
+  if (streakEl) streakEl.innerHTML = ph || 'NO DATA YET';
+
+  // Ticker update  
+  const streakTick = streak >= 3 ? `<span class="tick">⚠️ STREAK: ${streak}x LOSS</span>` : '';
+  document.getElementById('ticker').innerHTML = `
+    <span class="tick">🌊 BOOBY BOT v29</span>
+    <span class="tick">🍑 TRADES: ${n}</span>
+    <span class="tick">🎯 WIN: ${wr}%</span>
+    <span class="tick">💰 PNL: ${(p>=0?'+':'')+p.toFixed(4)} SOL</span>
+    <span class="tick">⚡ TH: ${th}</span>
+    ${streakTick}
+    <span class="tick">🦅 DEXSCREENER 3 SOURCES</span>
+    <span class="tick">🛡 RUG GUARD 1S</span>
+    <span class="tick">🔥 NO MINT/FREEZE</span>
+    <span class="tick">💎 PRICE: DEXSCREENER FIRST</span>
+    <span class="tick">🌊 BOOBY BOT v29</span>
+  `.repeat(2);
+}
+
+// ══ Balance ══
+async function upBal() {
+  const d = await api('/api/balance'); if (!d) return;
+  const b = d.sol || d.balance_sol || 0;
+  document.getElementById('hdr-bal').textContent  = '◎ ' + b.toFixed(3);
+  document.getElementById('ft-wal').textContent   = 'WALLET: ' + b.toFixed(4) + ' SOL';
+  document.getElementById('hw').style.width       = Math.min(100, b / 1.0 * 100) + '%';
+  document.getElementById('hwv').textContent      = b.toFixed(3);
+}
+
+// ══ Positions ══
+async function upPos() {
+  const d = await api('/api/positions'); if (!d) return;
+  document.getElementById('pcnt').textContent      = `(${d.length}/5)`;
+  document.getElementById('hp').style.width        = (d.length / 5 * 100) + '%';
+  document.getElementById('hpv').textContent       = d.length + '/5';
+
+  if (d.length > prevPos) coinRain();
+  prevPos = d.length;
+
+  const el = document.getElementById('plist');
+  if (!d.length) {
+    el.innerHTML = '<div class="no-pos">🌊<br><br>NO ACTIVE<br>POSITIONS<br><br>WAITING<br>FOR WAVES...</div>';
+    return;
+  }
+  el.innerHTML = d.map(p => {
+    const pnl = p.pnl_pct || 0, ps = (pnl>=0?'+':'')+(pnl*100).toFixed(1)+'%';
+    const pat = p.pattern || '';
+    const pb  = pat ? `<span class="pbadge ${pat}">${pat.replace(/_/g,' ').toUpperCase()}</span>` : '';
+    return `<div class="pos-item">
+      <span class="pos-name">${p.token_name||p.mint?.slice(0,8)||'?'}</span>
+      <span class="pos-pnl ${pnl>=0?'p':'n'}">${ps}</span>
+      <div class="pos-meta">◎${p.amount_sol||'--'} · ${p.strategy||'?'} · ${p.held_min?(p.held_min.toFixed(1)+'min'):'--'} ${pb}</div>
+    </div>`;
+  }).join('');
+}
+
+// ══ Trades / Chart ══
+async function upTrades() {
+  const d = await api('/api/trades'); if (!d || !d.length) return;
+  const r = d.slice(-20);
+  const mx = Math.max(...r.map(t => Math.abs(t.pnl_pct || 0)), .01);
+
+  document.getElementById('chart').innerHTML = r.map(t => {
+    const p = t.pnl_pct || 0, h = Math.max(3, Math.abs(p)/mx*72);
+    return `<div class="bar ${p>=0?'w':'l'}" style="height:${h}px" title="${(p*100).toFixed(1)}%"></div>`;
+  }).join('');
+
+  document.getElementById('tlist').innerHTML = r.slice(-9).reverse().map(t => {
+    const p = t.pnl_pct || 0, ps = (p>=0?'+':'')+(p*100).toFixed(1)+'%';
+    return `<div class="trade-row"><span class="tname">${(t.name||t.token||'?').slice(0,10)}</span><span class="tpnl ${p>=0?'w':'l'}">${ps}</span></div>`;
+  }).join('');
+}
+
+// ══ Logs ══
+async function upLogs() {
+  const d = await api('/api/logs'); if (!d || !d.lines) return;
+  if (d.lines.length === lastLC) return;
+  lastLC = d.lines.length;
+
+  const b = document.getElementById('tbody');
+  document.getElementById('lcnt').textContent = d.lines.length + ' LINES';
+  b.innerHTML = d.lines.slice(-110).map(l => {
+    const m = (l.msg || l.message || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    let c = '';
+    if      (m.includes('KAUF') || m.includes('⚡')) c = 'buy';
+    else if (m.includes('SELL') || m.includes('✅')) c = 'sell';
+    else if (m.includes('⛔')  || m.includes('🛑') || m.includes('WARN') || m.includes('ERROR')) c = 'warn';
+    else if (m.includes('🦅')  || m.includes('Signal')) c = 'info';
+    return `<div class="tline"><span class="ttime">${l.time||'--:--:--'}</span><span class="tmsg ${c}">${m}</span></div>`;
+  }).join('');
+  b.scrollTop = b.scrollHeight;
+}
+
+
+// ── ML Status ──
+async function upML() {
+  const d = await api('/api/ml_status'); if (!d) return;
+  document.getElementById('ml-th').textContent = Math.round(d.threshold || 0);
+  document.getElementById('ml-aw').textContent = ((d.avg_win||0)*100).toFixed(1)+'%';
+  document.getElementById('ml-al').textContent = ((d.avg_loss||0)*100).toFixed(1)+'%';
+  document.getElementById('ml-qs').textContent = d.ql_states || 0;
+  document.getElementById('ml-k').textContent  = ((d.kelly_fraction||0)*100).toFixed(0)+'%';
+  const tr = (d.trend||'neutral').toUpperCase();
+  const tml = document.getElementById('ml-tr');
+  tml.textContent = tr;
+  tml.style.color = tr==='BULL' ? 'var(--win)' : (tr==='BEAR' ? 'var(--loss)' : 'var(--sky)');
+}
+
+// ── Equity Curve ──
+async function upEquity() {
+  const d = await api('/api/backtest'); if (!d || !d.equity_curve) return;
+  const canvas = document.getElementById('equity-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth || 800;
+  const pts = d.equity_curve.map(p => p.equity);
+  if (pts.length < 2) return;
+  const mn = Math.min(...pts), mx = Math.max(...pts, mn + 0.001);
+  const w = canvas.width, h = canvas.height || 60;
+  ctx.clearRect(0, 0, w, h);
+  const isProfit = d.total_return_pct >= 0;
+  ctx.strokeStyle = isProfit ? '#00ff88' : '#ff2244';
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = ctx.strokeStyle;
+  ctx.shadowBlur = 4;
+  ctx.beginPath();
+  pts.forEach((v, i) => {
+    const x = (i / (pts.length - 1)) * w;
+    const y = h - ((v - mn) / (mx - mn)) * (h - 6) - 3;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  // Fill under curve
+  ctx.globalAlpha = 0.08;
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1;
+  // Stats label
+  const bts = document.getElementById('bt-stats');
+  if (bts) {
+    const sign = d.total_return_pct >= 0 ? '+' : '';
+    bts.textContent = `TRADES: ${d.n} | WR: ${(d.win_rate*100).toFixed(1)}% | MAX DD: ${(d.max_drawdown*100).toFixed(1)}% | RETURN: ${sign}${d.total_return_pct.toFixed(1)}% | EQUITY: ${d.final_equity.toFixed(3)} SOL`;
+    bts.style.color = d.total_return_pct >= 0 ? 'var(--win)' : 'var(--loss)';
+  }
+}
+
+// ══ Controls ══
+async function ctl(a) { await fetch('/api/'+a, {method:'POST'}); setTimeout(upStatus, 500); }
+
+// ══ Uptime Counter ══
+setInterval(() => {
+  const el = document.getElementById('uptime'), t = el.textContent;
+  if (!t.includes(':')) return;
+  const [h,m,s] = t.split(':').map(Number);
+  let tot = h*3600+m*60+s+1;
+  el.textContent = `${String(~~(tot/3600)).padStart(2,'0')}:${String(~~(tot%3600/60)).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;
+}, 1000);
+
+// ══ Refresh Loop ══
+async function refresh() {
+  await Promise.allSettled([upStatus(), upStats(), upBal(), upPos(), upTrades(), upLogs(), upML()]);
+  if (Math.random() < 0.1) upEquity(); // update equity curve ~every 20s
+}
+refresh();
+setInterval(refresh, 2000);
+</script>
+<script>
+// ══════════════════════════════════════════════════════════
+//  🏐 BEACH VOLLEYBALL – Pixel Art Canvas Animation
+// ══════════════════════════════════════════════════════════
+(function() {
+  const canvas = document.getElementById('vball-canvas');
+  const beach  = canvas.parentElement;
+  const ctx    = canvas.getContext('2d');
+
+  function resize() {
+    canvas.width  = beach.offsetWidth;
+    canvas.height = beach.offsetHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Colors from CSS vars
+  const C = {
+    ball:   '#ffcc44',
+    ballSh: '#ff6600',
+    trail:  'rgba(255,204,68,0.18)',
+    net:    '#ffcc44',
+    spark:  ['#ff3388','#00ffee','#ffcc44','#44ff88','#33bbff'],
+  };
+
+  // ── Net position (matches CSS) ─────────────────────────
+  function net() {
+    return { x: canvas.width / 2, top: canvas.height - 78, bot: canvas.height - 30 };
+  }
+
+  // ── Ball state ─────────────────────────────────────────
+  const GROUND = () => canvas.height - 34;
+  const BALL_R = 7;
+
+  let ball = {
+    x: canvas.width * 0.25,
+    y: GROUND() - BALL_R,
+    vx: 2.8,
+    vy: -7.5,
+    rot: 0,
+    trail: [],
+    sparks: [],
+  };
+
+  // ── Players: two pixel-art figures ────────────────────
+  // Player 1: LEFT side (sand color), arms up ready
+  // Player 2: RIGHT side (hot pink), arms stretched
+
+  let p1 = { x: canvas.width * 0.22, side: 'left',  jumping: false, jumpT: 0, armUp: false };
+  let p2 = { x: canvas.width * 0.78, side: 'right', jumping: false, jumpT: 0, armUp: false };
+
+  function drawPlayer(p, color, accentColor, armUp, jumping) {
+    const jOff = jumping ? -Math.sin(p.jumpT * Math.PI) * 18 : 0;
+    const base = GROUND() + jOff;
+    const px   = p.x;
+
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur  = 6;
+
+    // Body pixels (8x scale pixel art)
+    const S = 3; // pixel size
+
+    // Head
+    ctx.fillRect(px - S*1.5, base - S*9, S*3, S*3);
+
+    // Body
+    ctx.fillRect(px - S,     base - S*6, S*2, S*3);
+
+    // Arms
+    if (armUp) {
+      // Arms raised for hit
+      ctx.fillStyle = accentColor;
+      ctx.fillRect(px - S*3.5, base - S*8, S*2,   S);   // left arm up
+      ctx.fillRect(px + S*1.5, base - S*8, S*2,   S);   // right arm up
+    } else {
+      // Arms neutral
+      ctx.fillStyle = accentColor;
+      ctx.fillRect(px - S*3,   base - S*5, S*2,   S);
+      ctx.fillRect(px + S*1,   base - S*5, S*2,   S);
+    }
+
+    // Legs
+    ctx.fillStyle = color;
+    const legOff = jumping ? Math.sin(p.jumpT * Math.PI * 2) * S : 0;
+    ctx.fillRect(px - S*1.5, base - S*3, S,   S*3 + legOff);
+    ctx.fillRect(px + S*0.5, base - S*3, S,   S*3 - legOff);
+
+    ctx.shadowBlur = 0;
+  }
+
+  // ── Sparks on hit ──────────────────────────────────────
+  function spawnSparks(x, y) {
+    for (let i = 0; i < 10; i++) {
+      const angle = (Math.random() * Math.PI * 2);
+      const speed = 1.5 + Math.random() * 3;
+      ball.sparks.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 2,
+        life: 1.0,
+        color: C.spark[Math.floor(Math.random() * C.spark.length)],
+        size: 2 + Math.random() * 3,
+      });
+    }
+  }
+
+  // ── Score / hit counter ────────────────────────────────
+  let hits = 0;
+  let lastHitter = null; // 'p1' | 'p2'
+  let hitFlash   = 0;
+
+  // ── Physics update ────────────────────────────────────
+  const GRAVITY = 0.38;
+  const NET_BOUNCE_DAMP = 0.55;
+
+  function update() {
+    const n = net();
+    const ground = GROUND();
+
+    // Trail
+    ball.trail.unshift({ x: ball.x, y: ball.y });
+    if (ball.trail.length > 9) ball.trail.pop();
+
+    // Gravity
+    ball.vy += GRAVITY;
+    ball.x  += ball.vx;
+    ball.y  += ball.vy;
+    ball.rot += ball.vx * 3;
+
+    // ── Ground bounce ──
+    if (ball.y + BALL_R >= ground) {
+      ball.y  = ground - BALL_R;
+      ball.vy = -Math.abs(ball.vy) * 0.62;
+      ball.vx *= 0.88;
+      if (Math.abs(ball.vy) < 1.5) ball.vy = -5 - Math.random()*2;
+    }
+
+    // ── Net collision ──
+    const nearNet = Math.abs(ball.x - n.x) < BALL_R + 3;
+    if (nearNet && ball.y > n.top - BALL_R && ball.y < n.bot) {
+      ball.vx = -ball.vx * NET_BOUNCE_DAMP;
+      ball.vy -= 2;
+      ball.x  += ball.vx * 2;
+      spawnSparks(ball.x, ball.y);
+    }
+
+    // ── Wall bounce ──
+    if (ball.x - BALL_R <= 5) {
+      ball.x  = 5 + BALL_R;
+      ball.vx = Math.abs(ball.vx) * 0.85;
+    }
+    if (ball.x + BALL_R >= canvas.width - 5) {
+      ball.x  = canvas.width - 5 - BALL_R;
+      ball.vx = -Math.abs(ball.vx) * 0.85;
+    }
+
+    // ── Player hit detection ──────────────────────────────
+    // P1 (left side): hits when ball is near and low enough
+    const hitRange = 28;
+    const hitHeight = 30;
+
+    function tryHit(p, side) {
+      const dist = Math.abs(ball.x - p.x);
+      const inY  = ball.y > GROUND() - hitHeight;
+      const onSide = side === 'left' ? ball.x < n.x : ball.x > n.x;
+      if (dist < hitRange && inY && onSide && lastHitter !== side) {
+        const targetX = side === 'left'
+          ? n.x + 40 + Math.random() * (canvas.width * 0.3)
+          : n.x - 40 - Math.random() * (canvas.width * 0.3);
+        const dx = targetX - ball.x;
+        ball.vx = dx * 0.045 + (Math.random() - 0.5) * 1.5;
+        ball.vy = -(6.5 + Math.random() * 3);
+        p.jumping = true;
+        p.jumpT   = 0;
+        p.armUp   = true;
+        setTimeout(()=>{ p.armUp = false; }, 400);
+        spawnSparks(ball.x, ball.y);
+        hits++;
+        hitFlash = 12;
+        lastHitter = side;
+        return true;
+      }
+      return false;
+    }
+
+    tryHit(p1, 'left');
+    tryHit(p2, 'right');
+
+    // ── Player jump update ─────────────────────────────
+    if (p1.jumping) { p1.jumpT += 0.08; if (p1.jumpT >= 1) { p1.jumping = false; p1.jumpT = 0; } }
+    if (p2.jumping) { p2.jumpT += 0.08; if (p2.jumpT >= 1) { p2.jumping = false; p2.jumpT = 0; } }
+
+    // ── Move players toward ball (on their side) ───────
+    const followSpeed = 1.4;
+    if (ball.x < n.x) {
+      p1.x += (ball.x - p1.x) * 0.04;
+      p1.x  = Math.max(20, Math.min(n.x - 20, p1.x));
+    } else {
+      p1.x += (canvas.width * 0.22 - p1.x) * 0.04;
+    }
+    if (ball.x > n.x) {
+      p2.x += (ball.x - p2.x) * 0.04;
+      p2.x  = Math.max(n.x + 20, Math.min(canvas.width - 20, p2.x));
+    } else {
+      p2.x += (canvas.width * 0.78 - p2.x) * 0.04;
+    }
+
+    // ── Sparks update ──────────────────────────────────
+    ball.sparks = ball.sparks.filter(s => s.life > 0.05);
+    ball.sparks.forEach(s => {
+      s.x    += s.vx;
+      s.y    += s.vy;
+      s.vy   += 0.15;
+      s.life -= 0.06;
+    });
+
+    if (hitFlash > 0) hitFlash--;
+  }
+
+  // ── Draw ──────────────────────────────────────────────
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Trail
+    ball.trail.forEach((t, i) => {
+      const alpha = (1 - i / ball.trail.length) * 0.35;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, BALL_R * (1 - i * 0.08), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,204,68,${alpha})`;
+      ctx.fill();
+    });
+
+    // Sparks
+    ball.sparks.forEach(s => {
+      ctx.beginPath();
+      ctx.rect(s.x, s.y, s.size, s.size);
+      ctx.fillStyle = s.color;
+      ctx.globalAlpha = s.life;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+
+    // Ball (pixel circle + rotation stripes)
+    ctx.save();
+    ctx.translate(ball.x, ball.y);
+    ctx.rotate(ball.rot * Math.PI / 180);
+
+    // Main ball
+    ctx.beginPath();
+    ctx.arc(0, 0, BALL_R, 0, Math.PI * 2);
+    ctx.fillStyle = hitFlash > 0 ? '#ffffff' : C.ball;
+    ctx.shadowColor = C.ball;
+    ctx.shadowBlur  = hitFlash > 0 ? 16 : 8;
+    ctx.fill();
+
+    // Pixel stripes
+    ctx.strokeStyle = C.ballSh;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath(); ctx.moveTo(-BALL_R, 0); ctx.lineTo(BALL_R, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -BALL_R); ctx.lineTo(0,  BALL_R); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Players
+    drawPlayer(p1, '#ffcc44', '#ff9900', p1.armUp, p1.jumping);
+    drawPlayer(p2, '#ff3388', '#ff88cc', p2.armUp, p2.jumping);
+
+    // Hit counter (pixel style)
+    if (hits > 0) {
+      ctx.fillStyle   = 'rgba(0,255,238,0.7)';
+      ctx.font        = "6px 'Press Start 2P', monospace";
+      ctx.textAlign   = 'center';
+      ctx.fillText(`RALLY: ${hits}`, canvas.width / 2, 16);
+      ctx.textAlign   = 'left';
+    }
+  }
+
+  function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+
+// ══════════════════════════════════════════════════════════
+//  ♪ 8-BIT SUMMER CHIPTUNE
+// ══════════════════════════════════════════════════════════
+(function() {
+  const btn = document.getElementById('sound-btn');
+  let ctx = null, masterGain = null;
+  let muted = false, playing = false, stopReq = false;
+
+  const NOTE = {
+    C4:261.6,D4:293.7,E4:329.6,G4:392.0,A4:440.0,B4:493.9,
+    C5:523.3,D5:587.3,E5:659.3,G5:784.0,A5:880.0, R:0
+  };
+  const BPM = 148, BEAT = 60 / BPM;
+
+  const melody = [
+    [NOTE.E5,.5],[NOTE.G5,.5],[NOTE.A5,1],
+    [NOTE.G5,.5],[NOTE.E5,.5],[NOTE.C5,1],
+    [NOTE.D5,.5],[NOTE.E5,.5],[NOTE.G5,.5],[NOTE.E5,.5],
+    [NOTE.D5,1.5],[NOTE.R,.5],
+    [NOTE.C5,.5],[NOTE.E5,.5],[NOTE.G5,1],
+    [NOTE.A5,.5],[NOTE.G5,.5],[NOTE.E5,1],
+    [NOTE.D5,.5],[NOTE.C5,.5],[NOTE.D5,.5],[NOTE.E5,.5],
+    [NOTE.C5,2],
+    [NOTE.G4,.5],[NOTE.A4,.5],[NOTE.C5,.5],[NOTE.A4,.5],
+    [NOTE.G4,1.5],[NOTE.R,.5],
+    [NOTE.A4,.5],[NOTE.C5,.5],[NOTE.D5,.5],[NOTE.C5,.5],
+    [NOTE.A4,2],
+    [NOTE.E5,.5],[NOTE.D5,.5],[NOTE.C5,.5],[NOTE.D5,.5],
+    [NOTE.E5,.5],[NOTE.G5,.5],[NOTE.A5,.5],[NOTE.G5,.5],
+    [NOTE.E5,1],[NOTE.C5,.5],[NOTE.D5,.5],
+    [NOTE.C5,2],[NOTE.R,.5],
+  ];
+  const bass = [
+    [NOTE.C4,2],[NOTE.C4,2],[NOTE.G4,2],[NOTE.G4,2],
+    [NOTE.A4,2],[NOTE.A4,2],[NOTE.G4,2],[NOTE.G4,2],
+    [NOTE.C4,2],[NOTE.C4,2],[NOTE.A4,2],[NOTE.A4,2],
+    [NOTE.D4,2],[NOTE.G4,2],[NOTE.C4,4],
+  ];
+
+  function initCtx() {
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = ctx.createGain();
+      masterGain.gain.value = 0.18;
+      masterGain.connect(ctx.destination);
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+  }
+
+  function playNote(type, freq, t, dur, vol) {
+    if (!freq) return;
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = type; osc.frequency.value = freq;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.9);
+    osc.connect(g); g.connect(masterGain);
+    osc.start(t); osc.stop(t + dur);
+  }
+
+  function scheduleLoop() {
+    if (stopReq || muted) { playing = false; return; }
+    let t = ctx.currentTime + 0.05;
+    let mt = t;
+    melody.forEach(([f,b]) => { playNote('square',  f,    mt, b*BEAT*0.85, 0.25); mt += b*BEAT; });
+    let bt = t;
+    bass.forEach(([f,b])   => { playNote('triangle',f*.5, bt, b*BEAT*0.9,  0.20); bt += b*BEAT; });
+    const totalB = melody.reduce((s,[,b])=>s+b,0);
+    for (let i = 0; i < totalB*2; i++) {
+      const ns = t + i*BEAT*.5, buf = ctx.createBuffer(1, ctx.sampleRate*.04, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let j=0;j<d.length;j++) d[j]=(Math.random()*2-1)*(i%4===0?.12:.04);
+      const s2=ctx.createBufferSource(), hg=ctx.createGain();
+      s2.buffer=buf; hg.gain.setValueAtTime(1,ns); hg.gain.exponentialRampToValueAtTime(0.001,ns+.04);
+      s2.connect(hg); hg.connect(masterGain); s2.start(ns);
+    }
+    setTimeout(scheduleLoop, (totalB*BEAT - 0.3)*1000);
+  }
+
+  function startMusic() {
+    if (playing) return;
+    initCtx(); playing=true; stopReq=false; scheduleLoop();
+    btn.textContent='♪'; btn.classList.remove('muted');
+  }
+  function stopMusic() {
+    stopReq=true; playing=false;
+    if (masterGain) {
+      masterGain.gain.setTargetAtTime(0,ctx.currentTime,.3);
+      setTimeout(()=>{ masterGain.gain.value=0.18; },600);
+    }
+    btn.textContent='♪'; btn.classList.add('muted');
+  }
+
+  btn.addEventListener('click', ()=>{ muted=!muted; muted ? stopMusic() : startMusic(); });
+  const go = ()=>{ if(!playing&&!muted) startMusic(); document.removeEventListener('click',go); document.removeEventListener('keydown',go); };
+  document.addEventListener('click', go);
+  document.addEventListener('keydown', go);
+})();
+</script>
+</body>
+</html>
