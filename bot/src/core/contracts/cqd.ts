@@ -3,7 +3,7 @@ import { CQDSnapshotV1 } from "../../packages/core-trading/src/contracts/cqd.js"
 
 export const CQDSnapshotV1Schema = z.object({
   schema_version: z.literal("cqd.snapshot.v1"),
-  chain: z.enum(["SOLANA", "ETHEREUM", "BASE"]),
+  chain: z.enum(["solana"]),
   token: z.string(),
   ts_bucket: z.number(),
   features: z.record(z.number().optional()),
@@ -21,3 +21,4 @@ export const CQDSnapshotV1Schema = z.object({
 });
 
 export interface CQDSnapshotV1Extended extends CQDSnapshotV1 {}
+export type { CQDSnapshotV1 };

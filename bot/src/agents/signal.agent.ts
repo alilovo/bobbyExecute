@@ -13,8 +13,8 @@ export async function createSignalHandler(): Promise<
     // Generate CQD Snapshot for the signal
     const cqd: CQDSnapshotV1 = {
       schema_version: "cqd.snapshot.v1",
-      chain: "SOLANA", // Defaulting for now
-      token: market.symbol,
+      chain: "solana", // Use correct lowercase chain from core-trading
+      token: market.baseToken,
       ts_bucket: Math.floor(Date.now() / 60000),
       features: {
         price_return_1m: 0,

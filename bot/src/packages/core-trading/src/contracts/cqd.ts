@@ -1,4 +1,4 @@
-import type { Chain } from "./market";
+import type { Chain } from "./market.js";
 
 export interface CQDFeaturesV1 {
   price_return_1m?: number; volume_1m?: number; liquidity_depth?: number;
