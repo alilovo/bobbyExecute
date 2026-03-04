@@ -15,7 +15,8 @@
     "test:golden": "vitest run tests/golden-tasks tests/harness",
     "lint": "tsc --noEmit",
     "test:chaos": "vitest run tests/chaos",
-    "premerge": "npm run lint && npm run test:golden && npm run test:chaos"
+    "premerge": "npm run lint && npm run test:golden && npm run test:chaos",
+    "validate:openapi": "swagger-cli validate docs/architecture/openapi.yaml"
   },
   "dependencies": {
     "pino": "^9.5.0",
