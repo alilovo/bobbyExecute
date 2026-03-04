@@ -21,34 +21,42 @@ export function recognizePatterns(
 
   if (velocityLiquidityDivergence(scoreCard, signalPack)) {
     patterns.push("velocity_liquidity_divergence");
+    flags.push("risk_velocity_liquidity_divergence");
     addEvidence(evidence, "vld", { scoreCard: scoreCard.hybrid, signals: signalPack.signals.length });
   }
   if (bundleSybilCluster(signalPack)) {
     patterns.push("bundle_sybil_cluster");
+    flags.push("risk_bundle_sybil_cluster");
     addEvidence(evidence, "bsc", { signals: signalPack.signals.length });
   }
   if (narrativeShift(signalPack)) {
     patterns.push("narrative_shift");
+    flags.push("risk_narrative_shift");
     addEvidence(evidence, "ns", { sources: signalPack.sources.length });
   }
   if (smartMoneyFakeout(scoreCard)) {
     patterns.push("smart_money_fakeout");
+    flags.push("risk_smart_money_fakeout");
     addEvidence(evidence, "smf", { mci: scoreCard.mci, bci: scoreCard.bci });
   }
   if (earlyPumpRisk(scoreCard, signalPack)) {
     patterns.push("early_pump_risk");
+    flags.push("risk_early_pump");
     addEvidence(evidence, "epr", { hybrid: scoreCard.hybrid });
   }
   if (sentimentStructuralMismatch(scoreCard)) {
     patterns.push("sentiment_structural_mismatch");
+    flags.push("risk_sentiment_structural_mismatch");
     addEvidence(evidence, "ssm", { bci: scoreCard.bci, mci: scoreCard.mci });
   }
   if (crossSourceAnomaly(signalPack)) {
     patterns.push("cross_source_anomaly");
+    flags.push("risk_cross_source_anomaly");
     addEvidence(evidence, "csa", { dataQuality: signalPack.dataQuality });
   }
   if (fragileExpansion(signalPack)) {
     patterns.push("fragile_expansion");
+    flags.push("risk_fragile_expansion");
     addEvidence(evidence, "fe", { signals: signalPack.signals });
   }
 
@@ -68,7 +76,7 @@ export function recognizePatterns(
 
 function addEvidence(evidence: PatternEvidence[], id: string, payload: unknown): void {
   const hash = sha256(canonicalize(payload));
-  evidence.push({ id: `ev-${id}-${Date.now()}`, hash });
+  evidence.push({ id: `ev-${id}-${hash.slice(0, 12)}`, hash });
 }
 
 function velocityLiquidityDivergence(scoreCard: ScoreCard, signalPack: SignalPack): boolean {

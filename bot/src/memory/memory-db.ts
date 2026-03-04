@@ -2,14 +2,10 @@
  * Memory-DB - Iterative Renewed, Compressed, Hybrid.
  * Version: 1.0.0 | Owner: Kimi Swarm | Layer: memory | Last Updated: 2026-03-04
  */
-import zlib from "node:zlib";
-import { promisify } from "node:util";
+import { compress as snappyCompress, uncompress as snappyUncompress } from "snappyjs";
 import { canonicalize } from "../core/determinism/canonicalize.js";
 import { sha256 } from "../core/determinism/hash.js";
 import { DATA_QUALITY_MIN_COMPLETENESS } from "../core/contracts/dataquality.js";
-
-const gzip = promisify(zlib.gzip);
-const gunzip = promisify(zlib.gunzip);
 
 export interface MemorySnapshot {
   traceId: string;
@@ -73,11 +69,11 @@ export class MemoryDB {
     return this.snapshot;
   }
 
-  /** Snappy-kompatibel: Nutzt gzip (Snappy kann ersetzt werden) */
+  /** Snappy + SHA-256 Hash-Chain */
   async compress(snapshot: MemorySnapshot): Promise<CompressedJournalEntry> {
     const canonical = canonicalize(snapshot);
     const hash = sha256(canonical);
-    const compressed = await gzip(Buffer.from(canonical, "utf8"));
+    const compressed = Buffer.from(snappyCompress(Buffer.from(canonical, "utf8")));
 
     const entry: CompressedJournalEntry = {
       traceId: snapshot.traceId,
@@ -103,7 +99,7 @@ export class MemoryDB {
   async recoverLast(): Promise<MemorySnapshot | null> {
     if (this.journal.length === 0) return null;
     const last = this.journal[this.journal.length - 1];
-    const decompressed = await gunzip(last.compressed);
+    const decompressed = Buffer.from(snappyUncompress(last.compressed));
     const data = JSON.parse(decompressed.toString("utf8")) as MemorySnapshot;
     return data;
   }

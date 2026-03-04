@@ -14,6 +14,7 @@ export const EvidenceSchema = z.object({
 export const DecisionResultSchema = z.object({
   traceId: z.string(),
   timestamp: z.string().datetime(),
+  decision: z.enum(["allow", "deny"]),
   direction: z.enum(["buy", "sell", "hold"]),
   confidence: z.number().min(0).max(1),
   evidence: z.array(EvidenceSchema),
