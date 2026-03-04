@@ -10,6 +10,7 @@ import { recognizePatterns } from "../patterns/pattern-engine.js";
 import { MemoryDB } from "../memory/memory-db.js";
 import { MemoryLog } from "../memory/log-append.js";
 import { runChaosGate } from "../governance/chaos-gate.js";
+import { lookupActionHandbook } from "../governance/action-handbook-lookup.js";
 import type { IntentSpec } from "./contracts/intent.js";
 import type { SignalPack } from "./contracts/signalpack.js";
 import type { ScoreCard } from "./contracts/scorecard.js";
@@ -35,6 +36,10 @@ export interface OrchestratorState {
   patternResult?: PatternResult;
   decisionResult?: DecisionResult;
   chaosPassed?: boolean;
+  chaosReportHash?: string;
+  reviewGateApproved?: boolean;
+  focusedTxExecuted?: boolean;
+  nextAction?: string;
   error?: string;
 }
 
@@ -46,8 +51,19 @@ export interface SecretsVaultHandler {
   (): Promise<unknown>;
 }
 
+export interface SecretLease {
+  ttlSeconds: number;
+  expiresAt?: string;
+  leaseId?: string;
+  renewable?: boolean;
+}
+
 export interface FocusedTxHandler {
-  (decision: DecisionResult, secretLease: unknown): Promise<unknown>;
+  (decision: DecisionResult, secretLease: SecretLease): Promise<unknown>;
+}
+
+export interface ReviewGateHandler {
+  (decision: DecisionResult): Promise<boolean>;
 }
 
 export interface OrchestratorConfig {
@@ -72,7 +88,8 @@ export class Orchestrator {
     intentSpec: IntentSpec,
     research: ResearchHandler,
     secretsVault?: SecretsVaultHandler,
-    focusedTx?: FocusedTxHandler
+    focusedTx?: FocusedTxHandler,
+    reviewGate?: ReviewGateHandler
   ): Promise<OrchestratorState> {
     const traceId = `orch-${this.clock.now().toISOString().replace(/[:.]/g, "-")}-${Math.random().toString(36).slice(2, 9)}`;
     const state: OrchestratorState = {
@@ -115,8 +132,9 @@ export class Orchestrator {
 
       state.phase = "chaos_gate";
 
-      const { passed } = await runChaosGate(traceId);
+      const { passed, report } = await runChaosGate(traceId);
       state.chaosPassed = passed;
+      state.chaosReportHash = report.auditHashChain;
 
       state.phase = "memory_log";
 
@@ -132,10 +150,28 @@ export class Orchestrator {
 
       state.phase = "focused_tx";
 
-      if (!this.dryRun && focusedTx && secretsVault) {
-        const secretLease = await secretsVault();
+      const reviewGateApproved = reviewGate ? await reviewGate(decisionResult) : true;
+      state.reviewGateApproved = reviewGateApproved;
+
+      const shouldExecuteTx =
+        !this.dryRun &&
+        decisionResult.decision === "allow" &&
+        reviewGateApproved &&
+        focusedTx &&
+        secretsVault;
+      state.focusedTxExecuted = Boolean(shouldExecuteTx);
+
+      if (shouldExecuteTx) {
+        const secretLease = ensureValidVaultLease(await secretsVault());
         await focusedTx(decisionResult, secretLease);
       }
+
+      state.nextAction = lookupActionHandbook({
+        phase: state.phase,
+        decision: decisionResult.decision,
+        dryRun: this.dryRun,
+        focusedTxExecuted: state.focusedTxExecuted,
+      });
 
       return state;
     } catch (err) {
@@ -163,15 +199,51 @@ function toDecisionResult(
   if (scoreCard.hybrid > 0.6) direction = "buy";
   else if (scoreCard.hybrid < -0.4) direction = "sell";
 
+  const hasReliableConfidence = scoreCard.crossSourceConfidenceScore >= 0.85;
+  const decision: "allow" | "deny" =
+    direction !== "hold" && hasReliableConfidence ? "allow" : "deny";
+
   const decisionHash = hashDecision({ scoreCard, patternResult });
 
   return {
     traceId,
     timestamp,
+    decision,
     direction,
     confidence: Math.min(0.95, patternResult.confidence + Math.abs(scoreCard.hybrid) / 2),
     evidence: patternResult.evidence.map((e) => ({ id: e.id, hash: e.hash, type: "pattern", value: undefined })),
     decisionHash,
-    rationale: `hybrid=${scoreCard.hybrid} patterns=${patternResult.patterns.join(",")}`,
+    rationale: `decision=${decision} hybrid=${scoreCard.hybrid} patterns=${patternResult.patterns.join(",")}`,
+  };
+}
+
+function ensureValidVaultLease(rawLease: unknown): SecretLease {
+  if (!rawLease || typeof rawLease !== "object") {
+    throw new Error("Invalid Vault lease: expected object");
+  }
+
+  const lease = rawLease as Partial<SecretLease>;
+  if (typeof lease.ttlSeconds !== "number" || !Number.isFinite(lease.ttlSeconds)) {
+    throw new Error("Invalid Vault lease: ttlSeconds is required");
+  }
+  if (lease.ttlSeconds <= 0 || lease.ttlSeconds > 3600) {
+    throw new Error(`Invalid Vault lease: ttlSeconds ${lease.ttlSeconds} out of bounds (1..3600)`);
+  }
+
+  if (lease.expiresAt) {
+    const expires = Date.parse(lease.expiresAt);
+    if (Number.isNaN(expires)) {
+      throw new Error("Invalid Vault lease: expiresAt is not a valid timestamp");
+    }
+    if (expires <= Date.now()) {
+      throw new Error("Invalid Vault lease: lease already expired");
+    }
+  }
+
+  return {
+    ttlSeconds: lease.ttlSeconds,
+    expiresAt: lease.expiresAt,
+    leaseId: lease.leaseId,
+    renewable: lease.renewable,
   };
 }

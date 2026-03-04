@@ -17,8 +17,9 @@ export function computeMciAgeAdjusted(
   maxAgeSeconds: number,
   signalAgeSeconds: number
 ): number {
+  if (maxAgeSeconds <= 0) return clamp(baseMci, -1, 1);
   const decay = Math.exp(-AGE_DECAY_FACTOR * (signalAgeSeconds / maxAgeSeconds));
-  return baseMci * decay;
+  return clamp(baseMci * decay, -1, 1);
 }
 
 /**
@@ -30,9 +31,9 @@ export function applyDoublePenalty(
 ): { score: number; applied: boolean } {
   if (crossSourceVariance > DOUBLE_PENALTY_THRESHOLD) {
     const penalty = 1 - Math.min(crossSourceVariance, 1);
-    return { score: score * penalty, applied: true };
+    return { score: clamp(score * penalty, -1, 1), applied: true };
   }
-  return { score, applied: false };
+  return { score: clamp(score, -1, 1), applied: false };
 }
 
 /**
@@ -44,7 +45,7 @@ export function computeHybrid(
   mciWeight = 0.6,
   bciWeight = 0.4
 ): number {
-  return mci * mciWeight + bci * bciWeight;
+  return clamp(mci * mciWeight + bci * bciWeight, -1, 1);
 }
 
 /**
@@ -54,10 +55,13 @@ export function computeCrossSourceConfidence(signalPack: SignalPack): number {
   const n = signalPack.signals.length;
   if (n === 0) return 0;
   const q = signalPack.dataQuality;
+  if (typeof q.crossSourceConfidence === "number") {
+    return clamp(q.crossSourceConfidence, 0, 1);
+  }
   const completeness = q.completeness;
   const freshness = q.freshness;
   const reliability = q.sourceReliability ?? 1;
-  return (completeness + freshness + reliability) / 3;
+  return clamp((completeness + freshness + reliability) / 3, 0, 1);
 }
 
 /**
@@ -69,9 +73,7 @@ export function computeScoreCard(
   signalPack: SignalPack
 ): ScoreCard {
   const n = signalPack.signals.length;
-  const baseMci = n > 0
-    ? signalPack.signals.reduce((s, sig) => s + (sig.priceUsd > 0 ? 0.5 : -0.5), 0) / n
-    : 0;
+  const baseMci = computeBaseMci(signalPack);
 
   const maxAge = 3600;
   const avgAge = n > 0
@@ -81,12 +83,17 @@ export function computeScoreCard(
       }, 0) / n
     : 0;
 
+  const crossSourceVariance = computeCrossSourceVariance(signalPack);
   const { score: mci, applied } = applyDoublePenalty(
     computeMciAgeAdjusted(baseMci, maxAge, avgAge),
-    0.1
+    crossSourceVariance
   );
 
-  const bci = signalPack.dataQuality.completeness * 0.5 + signalPack.dataQuality.freshness * 0.5;
+  const bci = clamp(
+    signalPack.dataQuality.completeness * 0.5 + signalPack.dataQuality.freshness * 0.5,
+    -1,
+    1
+  );
   const hybrid = computeHybrid(mci, bci);
   const crossSource = computeCrossSourceConfidence(signalPack);
 
@@ -100,4 +107,34 @@ export function computeScoreCard(
     ageAdjusted: true,
     doublePenaltyApplied: applied,
   };
+}
+
+function computeBaseMci(signalPack: SignalPack): number {
+  if (signalPack.signals.length < 2) {
+    return signalPack.signals.length === 1 && signalPack.signals[0].priceUsd > 0 ? 0.5 : 0;
+  }
+
+  const sorted = [...signalPack.signals].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
+  const first = sorted[0].priceUsd;
+  const last = sorted[sorted.length - 1].priceUsd;
+  if (first <= 0) return 0;
+  const momentum = (last - first) / first;
+  return clamp(momentum, -1, 1);
+}
+
+function computeCrossSourceVariance(signalPack: SignalPack): number {
+  const prices = signalPack.signals.map((s) => s.priceUsd).filter((p) => p > 0);
+  if (prices.length < 2) return 0;
+  const mean = prices.reduce((sum, p) => sum + p, 0) / prices.length;
+  if (mean <= 0) return 0;
+  const variance =
+    prices.reduce((sum, p) => sum + (p - mean) * (p - mean), 0) / prices.length;
+  const stdDev = Math.sqrt(variance);
+  return clamp(stdDev / mean, 0, 1);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }

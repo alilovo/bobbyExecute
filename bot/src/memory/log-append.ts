@@ -18,21 +18,26 @@ export interface LogEntry {
 export interface LogAck {
   seqId: number;
   hash: string;
+  prevHash?: string;
   timestamp: string;
 }
 
 export class MemoryLog {
   private entries: LogEntry[] = [];
   private seqId = 0;
+  private lastHash: string | null = null;
 
   append(entry: LogEntry): LogAck {
-    const canonical = canonicalize(entry);
+    const prevHash = this.lastHash ?? undefined;
+    const canonical = canonicalize({ prevHash, entry });
     const hash = sha256(canonical);
     this.entries.push(entry);
     this.seqId += 1;
+    this.lastHash = hash;
     return {
       seqId: this.seqId,
       hash,
+      prevHash,
       timestamp: entry.timestamp,
     };
   }
@@ -42,8 +47,6 @@ export class MemoryLog {
   }
 
   getChainHash(): string | null {
-    if (this.entries.length === 0) return null;
-    const last = this.entries[this.entries.length - 1];
-    return sha256(canonicalize(last));
+    return this.lastHash;
   }
 }

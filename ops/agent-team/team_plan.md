@@ -1,22 +1,22 @@
 <!--
-  Version: 1.1.0
+  Version: 1.2.0
   Owner: Kimi Swarm
   Layer: operations
-  Last Updated: 2026-03-04T17:00:00Z
-  DoD: Workstream definiert, Milestones Phase 0-5 + GT-018, alle Schemas validiert
+  Last Updated: 2026-03-04T07:41:04Z
+  DoD: Workstream Kimi-Swarm-Final-Impl aktiv, Phase 0-5 umgesetzt, Review Ready erreicht
 -->
 
 # team_plan.md
 
-## Workstream: Kimi-Swarm-Full-Implementation
+## Workstream: Kimi-Swarm-Final-Impl
 
 | Feld | Wert |
 |------|------|
 | **Owner** | Kimi Swarm |
-| **Status** | In Progress |
-| **Blocker** | none |
+| **Status** | Review Ready (Approval Pending) |
+| **Blocker** | Claude Approval für Trigger-Änderungen ausstehend |
 | **Start** | 2026-03-04 |
-| **Target** | Review Ready nach Phase 5 + GT-018 |
+| **Target** | Claude Approval + Merge |
 
 ---
 
@@ -51,3 +51,13 @@
 - Master-Spec: `docs/architecture/master-trading-bot-intelligence-spec.md`
 - Autonomy Policy: `ops/agent-team/autonomy_policy.md`
 - Policy Rules: `ops/agent-team/policy_approval_rules.yaml`
+
+---
+
+## Open Approval Gates
+
+| Trigger | Status | Grund |
+|---------|--------|-------|
+| blueprint_or_golden_task_change | Pending Reviewer_Claude | Blueprint-Dateien ergänzt |
+| ci_or_build | Pending Reviewer_Claude | CI-Workflow `chaos-premerge-gate.yml` ergänzt |
+| large_change | Pending Reviewer_Claude | Multi-File End-to-End Anpassung Phase 0-5 |
