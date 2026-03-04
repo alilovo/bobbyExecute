@@ -1,0 +1,6 @@
+{
+  "expect": {
+    "afterFiveFailures": "unhealthy",
+    "healthyCountBefore": 6
+  }
+}

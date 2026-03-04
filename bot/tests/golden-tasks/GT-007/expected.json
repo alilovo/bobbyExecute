@@ -1,0 +1,6 @@
+{
+  "expect": {
+    "decisionHashStable": true,
+    "resultHashStable": true
+  }
+}

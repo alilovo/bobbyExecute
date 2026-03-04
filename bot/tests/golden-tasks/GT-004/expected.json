@@ -1,0 +1,6 @@
+{
+  "expect": {
+    "allowed": false,
+    "reasonContains": "Slippage"
+  }
+}

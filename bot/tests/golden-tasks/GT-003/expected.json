@@ -1,0 +1,7 @@
+{
+  "expect": {
+    "confidenceMin": 0,
+    "confidenceMax": 1,
+    "directionOneOf": ["buy", "sell", "hold"]
+  }
+}

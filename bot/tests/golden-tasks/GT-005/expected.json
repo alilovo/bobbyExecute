@@ -1,0 +1,7 @@
+{
+  "expect": {
+    "success": true,
+    "dryRun": true,
+    "noRealTxSignature": true
+  }
+}

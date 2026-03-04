@@ -14,3 +14,6 @@ export * from "./governance/guardrails.js";
 export * from "./governance/circuit-breaker.js";
 export * from "./governance/review-gates.js";
 export * from "./observability/action-log.js";
+export * from "./eventbus/index.js";
+export * from "./journal-writer/index.js";
+export * from "./config-loader/index.js";

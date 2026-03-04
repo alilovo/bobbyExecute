@@ -1,0 +1,11 @@
+{
+  "profile": {
+    "id": "test-agent",
+    "permissions": ["read", "analyze"]
+  },
+  "context": {
+    "hasSideEffects": true,
+    "reviewPolicyMode": "none",
+    "requiredPermissions": ["execute"]
+  }
+}
