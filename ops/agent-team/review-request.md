@@ -4,9 +4,9 @@
 
 ## PR Referenz
 
-- Branch: `kimi-swarm-implementation`
+- Branch: `cursor/kimi-swarm-endzustand-3b0e`
 - Base: `main`
-- Title: Kimi Swarm Master-Spec Implementation (Phase 0–6)
+- Title: Kimi Swarm Final Implementation (Phase 0–5, Final Prompt)
 
 ## Reviewer Checkliste
 
@@ -24,10 +24,10 @@
 |---------|--------|
 | blueprint_or_golden_task_change | Pending Reviewer_Claude |
 | destructive_ops | N/A |
-| ci_or_build | N/A |
-| secret_rotation | N/A |
-| chaos_gate_bypass | N/A |
-| memory_db_schema | N/A |
+| ci_or_build | Pending Reviewer_Claude |
+| prompt_or_agent_core | N/A |
+| prod_config | N/A |
+| large_change | Pending Reviewer_Claude |
 
 ## Nächste Schritte nach Approval
 
