@@ -1,7 +1,16 @@
 /**
  * Trace/correlation for audit trails.
- * MAPPED from OrchestrAI_Labs telemetry/tracer.ts - minimal span pattern.
+ * M1: Delegates to trace-id.createTraceId (deterministic when seed provided).
+ */
+import { createTraceId as createTraceIdImpl } from "./trace-id.js";
+
+/**
+ * Create a trace ID. For replay/determinism, use trace-id.createTraceId with seed.
  */
 export function createTraceId(): string {
-  return `trace-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  return createTraceIdImpl({
+    timestamp: new Date().toISOString(),
+  });
 }
+
+export { createTraceId as createTraceIdDeterministic, createMemoryTraceId } from "./trace-id.js";

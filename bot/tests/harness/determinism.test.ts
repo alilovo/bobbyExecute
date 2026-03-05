@@ -1,6 +1,6 @@
 /**
  * Determinism test - same input yields same decisionHash/resultHash.
- * PROPOSED for replay mode.
+ * M1: Replay mode - same input -> same traceId when seed provided (see trace-id.test.ts).
  */
 import { describe, it, expect } from "vitest";
 import { hashDecision, hashResult } from "@bot/core/determinism/hash.js";

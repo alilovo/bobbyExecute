@@ -8,6 +8,10 @@
  * API Documentation: https://docs.dexscreener.com/api/reference
  */
 import { sha256 } from "../../core/determinism/hash.js";
+import {
+  resilientFetch,
+  type ResilientFetchOptions,
+} from "../http-resilience.js";
 import type {
   DexScreenerTokenResponse,
   DexScreenerPairInfo,
@@ -20,13 +24,23 @@ const BASE_URL = "https://api.dexscreener.com/latest";
 export interface DexScreenerClientConfig {
   baseUrl?: string;
   apiKey?: string; // For future use if API requires auth
+  resilience?: ResilientFetchOptions;
 }
 
 export class DexScreenerClient {
   private readonly baseUrl: string;
+  private readonly resilience: ResilientFetchOptions | undefined;
 
   constructor(config: DexScreenerClientConfig = {}) {
     this.baseUrl = config.baseUrl ?? BASE_URL;
+    this.resilience = config.resilience;
+  }
+
+  private async _fetch(url: string): Promise<Response> {
+    return resilientFetch(url, undefined, {
+      ...this.resilience,
+      adapterId: this.resilience?.adapterId ?? "dexscreener",
+    });
   }
 
   /**
@@ -37,7 +51,7 @@ export class DexScreenerClient {
    */
   async getTokenPairs(tokenAddress: string): Promise<DexScreenerTokenResponse> {
     const url = `${this.baseUrl}/dex/tokens/${tokenAddress}`;
-    const res = await fetch(url);
+    const res = await this._fetch(url);
     if (!res.ok) {
       throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
     }
@@ -52,7 +66,7 @@ export class DexScreenerClient {
    */
   async getPair(chainId: string, pairId: string): Promise<{ pair: DexScreenerPairInfo | null }> {
     const url = `${this.baseUrl}/dex/pairs/${chainId}/${pairId}`;
-    const res = await fetch(url);
+    const res = await this._fetch(url);
     if (!res.ok) {
       throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
     }
@@ -67,7 +81,7 @@ export class DexScreenerClient {
    */
   async search(query: string): Promise<DexScreenerTokenResponse> {
     const url = `${this.baseUrl}/dex/search?q=${encodeURIComponent(query)}`;
-    const res = await fetch(url);
+    const res = await this._fetch(url);
     if (!res.ok) {
       throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
     }
@@ -82,7 +96,7 @@ export class DexScreenerClient {
    */
   async getLatestBoosted(): Promise<DexScreenerLatestBoostedResponse> {
     const url = `${this.baseUrl}/token-boosts/latest/v1`;
-    const res = await fetch(url);
+    const res = await this._fetch(url);
     if (!res.ok) {
       throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
     }
@@ -97,7 +111,7 @@ export class DexScreenerClient {
    */
   async getTopBoosted(): Promise<DexScreenerTopBoostedResponse> {
     const url = `${this.baseUrl}/token-boosts/top/v1`;
-    const res = await fetch(url);
+    const res = await this._fetch(url);
     if (!res.ok) {
       throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
     }

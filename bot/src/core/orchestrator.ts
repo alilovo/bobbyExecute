@@ -12,6 +12,7 @@ import { MemoryLog } from "../memory/log-append.js";
 import { runChaosGate } from "../governance/chaos-gate.js";
 import { lookupActionHandbook } from "../governance/action-handbook-lookup.js";
 import type { IntentSpec } from "./contracts/intent.js";
+import { createTraceId } from "../observability/trace-id.js";
 import type { SignalPack } from "./contracts/signalpack.js";
 import type { ScoreCard } from "./contracts/scorecard.js";
 import type { DecisionResult } from "./contracts/decisionresult.js";
@@ -91,17 +92,16 @@ export class Orchestrator {
     focusedTx?: FocusedTxHandler,
     reviewGate?: ReviewGateHandler
   ): Promise<OrchestratorState> {
-    const traceId = `orch-${this.clock.now().toISOString().replace(/[:.]/g, "-")}-${Math.random().toString(36).slice(2, 9)}`;
+    const timestamp = this.clock.now().toISOString();
+    const traceId = createTraceId({ timestamp, seed: intentSpec, prefix: "orch" });
     const state: OrchestratorState = {
       phase: "research",
       traceId,
-      timestamp: this.clock.now().toISOString(),
+      timestamp,
       intentSpec,
     };
 
     try {
-      const timestamp = this.clock.now().toISOString();
-
       const signalPack = await research(intentSpec);
       state.signalPack = signalPack;
       state.phase = "analyse";
@@ -125,7 +125,8 @@ export class Orchestrator {
       if (this.memoryDb.shouldRenew(dataQuality)) {
         const snapshot = this.memoryDb.renew(
           { signalPack, scoreCard, patternResult, decisionResult },
-          dataQuality
+          dataQuality,
+          traceId
         );
         await this.memoryDb.compress(snapshot);
       }

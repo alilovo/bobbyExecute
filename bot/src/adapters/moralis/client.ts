@@ -3,6 +3,10 @@
  * PROPOSED - fetches wallet balances, token transfers.
  */
 import { sha256 } from "../../core/determinism/hash.js";
+import {
+  resilientFetch,
+  type ResilientFetchOptions,
+} from "../http-resilience.js";
 
 const BASE_URL = "https://deep-index.moralis.io/api/v2.2";
 
@@ -10,17 +14,20 @@ export interface MoralisClientConfig {
   baseUrl?: string;
   apiKey?: string;
   chain?: string;
+  resilience?: ResilientFetchOptions;
 }
 
 export class MoralisClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly chain: string;
+  private readonly resilience: ResilientFetchOptions | undefined;
 
   constructor(config: MoralisClientConfig = {}) {
     this.baseUrl = config.baseUrl ?? BASE_URL;
     this.apiKey = config.apiKey ?? "";
     this.chain = config.chain ?? "solana";
+    this.resilience = config.resilience;
   }
 
   private headers(): Record<string, string> {
@@ -31,10 +38,17 @@ export class MoralisClient {
     return h;
   }
 
+  private async _fetch(url: string): Promise<Response> {
+    return resilientFetch(url, { headers: this.headers() }, {
+      ...this.resilience,
+      adapterId: this.resilience?.adapterId ?? "moralis",
+    });
+  }
+
   /** EVM: GET /wallets/{address}/tokens */
   async getTokenBalances(address: string): Promise<unknown> {
     const url = `${this.baseUrl}/wallets/${address}/tokens?chain=${this.chain}`;
-    const res = await fetch(url, { headers: this.headers() });
+    const res = await this._fetch(url);
     if (!res.ok) throw new Error(`Moralis error: ${res.status} ${res.statusText}`);
     return res.json();
   }

@@ -13,6 +13,7 @@ import type { ExecutionReport } from "./contracts/trade.js";
 import type { JournalEntry } from "./contracts/journal.js";
 import { SystemClock } from "./clock.js";
 import { hashDecision, hashResult } from "./determinism/hash.js";
+import { createTraceId } from "../observability/trace-id.js";
 
 export type EngineStage =
   | "ingest"
@@ -91,11 +92,12 @@ export class Engine {
     executeFn: ExecuteHandler,
     verifyFn: VerifyHandler
   ): Promise<EngineState> {
-    const traceId = `trace-${this.clock.now().toISOString().replace(/[:.]/g, "-")}-${Math.random().toString(36).slice(2, 9)}`;
+    const timestamp = this.clock.now().toISOString();
+    const traceId = createTraceId({ timestamp, prefix: "trace" });
     const state: EngineState = {
       stage: "ingest",
       traceId,
-      timestamp: this.clock.now().toISOString(),
+      timestamp,
     };
 
     try {

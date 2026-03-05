@@ -139,7 +139,10 @@ describe("DexScreener Client", () => {
     const client = new DexScreenerClient();
     const result = await client.getTokenPairs("mint123");
     expect(result).toEqual(mockJson);
-    expect(fetch).toHaveBeenCalledWith("https://api.dexscreener.com/latest/dex/tokens/mint123");
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.dexscreener.com/latest/dex/tokens/mint123",
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
   });
 
   it("getTokenPairs throws on non-ok response", async () => {
@@ -170,6 +173,9 @@ describe("DexScreener Client", () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ schemaVersion: "1.0", pairs: null }) });
     const client = new DexScreenerClient({ baseUrl: "https://custom.api/v1" });
     await client.getTokenPairs("mint");
-    expect(fetch).toHaveBeenCalledWith("https://custom.api/v1/dex/tokens/mint");
+    expect(fetch).toHaveBeenCalledWith(
+      "https://custom.api/v1/dex/tokens/mint",
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
   });
 });
