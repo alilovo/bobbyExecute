@@ -1,1 +1,10 @@
+{
+  "expect": {
+    "stageReached": "monitor",
+    "blocked": false,
+    "hasDecisionHash": true,
+    "hasResultHash": true,
+    "hashStableAcrossRuns": true
+  }
+}
 { "expect": { "passRate": 1, "category5Passed": true } }
