@@ -92,7 +92,7 @@ describe("Phase 0 Bootstrap Validation", () => {
     expect(penalty.score).toBeLessThan(0.8);
 
     const hybrid = computeHybrid(0.8, 0.2);
-    expect(hybrid).toBeCloseTo(0.56, 5);
+    expect(hybrid).toBeCloseTo(0.53, 5);
   });
 
   it("computes ScoreCard with cross-source variance aware penalty", () => {

@@ -55,7 +55,7 @@ export class DexScreenerClient {
     if (!res.ok) {
       throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
     }
-    return res.json();
+    return res.json() as Promise<DexScreenerTokenResponse>;
   }
 
   /**
@@ -70,7 +70,7 @@ export class DexScreenerClient {
     if (!res.ok) {
       throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
     }
-    return res.json();
+    return res.json() as Promise<{ pair: DexScreenerPairInfo | null }>;
   }
 
   /**
@@ -85,7 +85,7 @@ export class DexScreenerClient {
     if (!res.ok) {
       throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
     }
-    return res.json();
+    return res.json() as Promise<DexScreenerTokenResponse>;
   }
 
   /**
@@ -100,7 +100,7 @@ export class DexScreenerClient {
     if (!res.ok) {
       throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
     }
-    return res.json();
+    return res.json() as Promise<DexScreenerLatestBoostedResponse>;
   }
 
   /**
@@ -115,7 +115,7 @@ export class DexScreenerClient {
     if (!res.ok) {
       throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
     }
-    return res.json();
+    return res.json() as Promise<DexScreenerTopBoostedResponse>;
   }
 
   /**

@@ -22,8 +22,9 @@ export async function verifyBeforeTrade(
     checks.decimals = tokenIn.decimals > 0;
 
     const balance = await client.getBalance(walletAddress, intent.tokenIn);
-    checks.balance = BigInt(balance.balance) >= BigInt(intent.amountIn);
-    checks.quoteInputs = BigInt(intent.minAmountOut) > 0n;
+    const amountInLamports = BigInt(Math.floor(parseFloat(intent.amountIn) * 1e9));
+    checks.balance = BigInt(balance.balance) >= amountInLamports;
+    checks.quoteInputs = parseFloat(intent.minAmountOut) > 0;
 
     const passed =
       checks.tokenMint &&

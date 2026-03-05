@@ -11,6 +11,14 @@ export { hashDecision, hashResult } from "./core/determinism/hash.js";
 export { canonicalize } from "./core/determinism/canonicalize.js";
 
 export * from "./core/contracts/index.js";
+export { RiskBreakdownSchema } from "./core/contracts/riskbreakdown.js";
+export { buildTokenUniverse, type UniverseBuilderConfig, type RawTokenInput } from "./core/universe/token-universe-builder.js";
+export { normalizeToTokenV1 } from "./core/normalize/normalizer.js";
+export {
+  validateCrossSource,
+  hasDiscrepancy,
+  type ValidationResult,
+} from "./core/validate/cross-source-validator.js";
 export * from "./core/intelligence/mci-bci-formulas.js";
 export * from "./governance/policy-engine.js";
 export * from "./governance/tool-permissions.js";
@@ -19,10 +27,28 @@ export * from "./governance/circuit-breaker.js";
 export * from "./governance/review-gates.js";
 export * from "./governance/chaos-gate.js";
 export * from "./observability/action-log.js";
-export { createTraceId, createMemoryTraceId } from "./observability/trace-id.js";
-export { isLiveTradingEnabled } from "./config/safety.js";
+export { createTraceId, createMemoryTraceId, type CreateTraceIdOptions } from "./observability/trace-id.js";
+export { isLiveTradingEnabled, assertLiveTradingRequiresRealRpc } from "./config/safety.js";
+export { getRpcMode, getRpcUrl } from "./core/config/rpc.js";
+export {
+  createRpcClient,
+  StubRpcClient,
+  type RpcClient,
+  type RpcClientConfig,
+} from "./adapters/rpc-verify/client.js";
 export { resilientFetch, type ResilientFetchOptions } from "./adapters/http-resilience.js";
+export {
+  createAdaptersWithCircuitBreaker,
+  ADAPTER_IDS,
+  type AdaptersWithCbConfig,
+  type AdaptersWithCbResult,
+} from "./adapters/adapters-with-cb.js";
+export * from "./storage/idempotency-store.js";
+export { InMemoryIdempotencyStore } from "./storage/inmemory-kv.js";
 export * from "./memory/index.js";
+export { checkHealth, type HealthReport } from "./observability/health.js";
+export { recordLatency, getP95 } from "./observability/metrics.js";
+export { incrementIncident, getIncidentCount } from "./observability/incidents.js";
 export * from "./chaos/index.js";
 export * from "./patterns/pattern-engine.js";
 

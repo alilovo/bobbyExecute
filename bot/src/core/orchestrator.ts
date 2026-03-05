@@ -13,10 +13,20 @@ import { runChaosGate } from "../governance/chaos-gate.js";
 import { lookupActionHandbook } from "../governance/action-handbook-lookup.js";
 import type { IntentSpec } from "./contracts/intent.js";
 import { createTraceId } from "../observability/trace-id.js";
+import {
+  type IdempotencyStore,
+  IDEMPOTENCY_REPLAY_BLOCK,
+} from "../storage/idempotency-store.js";
 import type { SignalPack } from "./contracts/signalpack.js";
 import type { ScoreCard } from "./contracts/scorecard.js";
 import type { DecisionResult } from "./contracts/decisionresult.js";
 import type { PatternResult } from "./contracts/pattern.js";
+import { aggregateRisk } from "./risk/global-risk.js";
+import { computeLiquidityRisk } from "./risk/liquidity-risk.js";
+import { computeSocialManipRisk } from "./risk/social-manip-risk.js";
+import { computeMomentumExhaustRisk } from "./risk/momentum-exhaust-risk.js";
+import { computeStructuralWeaknessRisk } from "./risk/structural-weakness-risk.js";
+import type { RiskBreakdown } from "./contracts/riskbreakdown.js";
 
 export type OrchestratorPhase =
   | "research"
@@ -35,6 +45,7 @@ export interface OrchestratorState {
   signalPack?: SignalPack;
   scoreCard?: ScoreCard;
   patternResult?: PatternResult;
+  riskBreakdown?: RiskBreakdown;
   decisionResult?: DecisionResult;
   chaosPassed?: boolean;
   chaosReportHash?: string;
@@ -70,6 +81,7 @@ export interface ReviewGateHandler {
 export interface OrchestratorConfig {
   clock?: Clock;
   dryRun?: boolean;
+  idempotencyStore?: IdempotencyStore;
 }
 
 export class Orchestrator {
@@ -77,12 +89,14 @@ export class Orchestrator {
   private readonly dryRun: boolean;
   private readonly memoryDb: MemoryDB;
   private readonly memoryLog: MemoryLog;
+  private readonly idempotencyStore?: IdempotencyStore;
 
   constructor(config: OrchestratorConfig = {}) {
     this.clock = config.clock ?? new SystemClock();
     this.dryRun = config.dryRun ?? true;
     this.memoryDb = new MemoryDB();
     this.memoryLog = new MemoryLog();
+    this.idempotencyStore = config.idempotencyStore;
   }
 
   async run(
@@ -93,7 +107,13 @@ export class Orchestrator {
     reviewGate?: ReviewGateHandler
   ): Promise<OrchestratorState> {
     const timestamp = this.clock.now().toISOString();
-    const traceId = createTraceId({ timestamp, seed: intentSpec, prefix: "orch" });
+    const replayMode = process.env.REPLAY_MODE === "true";
+    const traceId = createTraceId({
+      timestamp,
+      seed: replayMode ? intentSpec : undefined,
+      prefix: "orch",
+      mode: replayMode ? "replay" : "live",
+    });
     const state: OrchestratorState = {
       phase: "research",
       traceId,
@@ -113,7 +133,10 @@ export class Orchestrator {
       const patternResult = recognizePatterns(traceId, timestamp, scoreCard, signalPack);
       state.patternResult = patternResult;
 
-      const decisionResult = toDecisionResult(traceId, timestamp, scoreCard, patternResult);
+      const riskBreakdown = computeRiskBreakdown(traceId, timestamp, signalPack, scoreCard);
+      state.riskBreakdown = riskBreakdown;
+
+      const decisionResult = toDecisionResult(traceId, timestamp, scoreCard, patternResult, riskBreakdown);
       state.decisionResult = decisionResult;
       state.phase = "compress_db";
 
@@ -163,8 +186,18 @@ export class Orchestrator {
       state.focusedTxExecuted = Boolean(shouldExecuteTx);
 
       if (shouldExecuteTx) {
-        const secretLease = ensureValidVaultLease(await secretsVault());
+        const idemKey = intentSpec.idempotencyKey ?? traceId;
+        if (this.idempotencyStore) {
+          const exists = await this.idempotencyStore.has(idemKey);
+          if (exists) {
+            throw new Error(`${IDEMPOTENCY_REPLAY_BLOCK}: ${idemKey}`);
+          }
+        }
+        const secretLease = ensureValidVaultLease(await secretsVault!());
         await focusedTx(decisionResult, secretLease);
+        if (this.idempotencyStore) {
+          await this.idempotencyStore.put(idemKey, { executed: true }, 86_400_000);
+        }
       }
 
       state.nextAction = lookupActionHandbook({
@@ -190,19 +223,46 @@ export class Orchestrator {
   }
 }
 
+function computeRiskBreakdown(
+  traceId: string,
+  timestamp: string,
+  signalPack: SignalPack,
+  scoreCard: ScoreCard
+): RiskBreakdown {
+  const liq = signalPack.signals.reduce((s, x) => s + (x.liquidity ?? 0), 0) || 10000;
+  const vol = signalPack.signals.reduce((s, x) => s + (x.volume24h ?? 0), 0) || 1000;
+  const liquidity = computeLiquidityRisk(liq, vol);
+  const socialManip = computeSocialManipRisk(0, vol / 1000);
+  const momentumExhaust = computeMomentumExhaustRisk(scoreCard.hybrid, -0.1);
+  const structuralWeakness = computeStructuralWeaknessRisk(
+    signalPack.sources.length,
+    scoreCard.doublePenaltyApplied ? 0.5 : 0.1
+  );
+  return aggregateRisk({
+    traceId,
+    timestamp,
+    liquidity,
+    socialManip,
+    momentumExhaust,
+    structuralWeakness,
+  });
+}
+
 function toDecisionResult(
   traceId: string,
   timestamp: string,
   scoreCard: ScoreCard,
-  patternResult: PatternResult
+  patternResult: PatternResult,
+  riskBreakdown?: RiskBreakdown
 ): DecisionResult {
   let direction: "buy" | "sell" | "hold" = "hold";
   if (scoreCard.hybrid > 0.6) direction = "buy";
   else if (scoreCard.hybrid < -0.4) direction = "sell";
 
   const hasReliableConfidence = scoreCard.crossSourceConfidenceScore >= 0.85;
+  const riskDeny = riskBreakdown && riskBreakdown.aggregate >= 0.8;
   const decision: "allow" | "deny" =
-    direction !== "hold" && hasReliableConfidence ? "allow" : "deny";
+    direction !== "hold" && hasReliableConfidence && !riskDeny ? "allow" : "deny";
 
   const decisionHash = hashDecision({ scoreCard, patternResult });
 

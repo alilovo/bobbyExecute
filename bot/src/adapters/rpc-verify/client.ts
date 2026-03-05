@@ -2,6 +2,9 @@
  * RPC client - generic interface for Solana/EVM.
  * PROPOSED - truth layer for balance/token verification.
  */
+import { getRpcMode, getRpcUrl } from "../../core/config/rpc.js";
+import { SolanaWeb3RpcClient } from "./solana-web3-client.js";
+
 export interface RpcClientConfig {
   rpcUrl: string;
   chain?: "solana" | "evm";
@@ -24,6 +27,21 @@ export interface RpcClient {
   getTokenInfo(mint: string): Promise<TokenInfo>;
   getBalance(address: string, mint?: string): Promise<BalanceResult>;
   getTransactionReceipt(signature: string): Promise<unknown>;
+}
+
+/**
+ * Create RPC client based on RPC_MODE env.
+ * stub: StubRpcClient (tests/paper).
+ * real: SolanaWeb3RpcClient (live).
+ */
+export function createRpcClient(config?: Partial<RpcClientConfig>): RpcClient {
+  const mode = getRpcMode();
+  const rpcUrl = config?.rpcUrl ?? getRpcUrl();
+
+  if (mode === "real") {
+    return new SolanaWeb3RpcClient({ rpcUrl, ...config });
+  }
+  return new StubRpcClient({ rpcUrl, ...config });
 }
 
 /**

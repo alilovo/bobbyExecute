@@ -202,7 +202,7 @@ describe("TokenUniverse Contracts", () => {
 
   describe("calculateTokenConfidence", () => {
     it("returns 0 for no sources", () => {
-      const confidence = calculateTokenConfidence({}, {});
+      const confidence = calculateTokenConfidence([], {});
       expect(confidence).toBe(0);
     });
 

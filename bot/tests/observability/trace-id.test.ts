@@ -46,4 +46,27 @@ describe("Trace ID Determinism (M1)", () => {
     const b = createMemoryTraceId(parent, { completeness: 0.8, freshness: 0.9 });
     expect(a).not.toBe(b);
   });
+
+  it("mode=replay with runInputsHash+timestampBucket produces deterministic hex", () => {
+    const a = createTraceId({
+      mode: "replay",
+      runInputsHash: "abc",
+      timestampBucket: "2026-03-05T12",
+      seed: "x",
+    });
+    const b = createTraceId({
+      mode: "replay",
+      runInputsHash: "abc",
+      timestampBucket: "2026-03-05T12",
+      seed: "x",
+    });
+    expect(a).toBe(b);
+    expect(a).toMatch(/^trace-2026-03-05T12-[a-f0-9]{32}$/);
+  });
+
+  it("mode=live produces non-empty UUID-like string", () => {
+    const id = createTraceId({ mode: "live", prefix: "live" });
+    expect(id).toMatch(/^live-.+-[a-f0-9]{9}$/);
+    expect(id.length).toBeGreaterThan(20);
+  });
 });

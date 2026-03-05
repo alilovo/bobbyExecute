@@ -7,7 +7,7 @@ import { z } from "zod";
 export const MarketSnapshotSchema = z.object({
   traceId: z.string(),
   timestamp: z.string().datetime(),
-  source: z.literal("dexpaprika"),
+  source: z.enum(["dexpaprika", "dexscreener"]),
   decisionHash: z.string().optional(),
   resultHash: z.string().optional(),
   poolId: z.string(),

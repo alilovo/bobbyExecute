@@ -2,27 +2,52 @@
  * Deterministic Trace ID - Production Readiness M1.
  * Replaces Math.random-based IDs for replay compatibility.
  * Same (timestamp, seed) → same traceId when seed provided.
+ * Spec API: mode + runInputsHash + timestampBucket for explicit replay/live.
  */
 import { sha256 } from "../core/determinism/hash.js";
 import { canonicalize } from "../core/determinism/canonicalize.js";
 import crypto from "node:crypto";
 
-/**
- * Create a trace ID. Deterministic when seed is provided (replay mode).
- * @param opts.timestamp - ISO timestamp (e.g. from clock)
- * @param opts.seed - Optional. When provided, same (timestamp, seed) → same traceId
- * @param opts.prefix - Optional. Default "trace"
- */
-export function createTraceId(opts: {
-  timestamp: string;
+export interface CreateTraceIdOptions {
+  /** ISO timestamp (e.g. from clock). Used for bucket when runInputsHash not provided. */
+  timestamp?: string;
+  /** Seed for deterministic replay. Same (timestamp, seed) → same traceId. */
   seed?: unknown;
+  /** Prefix. Default "trace" */
   prefix?: string;
-}): string {
-  const { timestamp, seed, prefix = "trace" } = opts;
-  const bucket = timestamp.slice(0, 16).replace(/[:.]/g, "-");
+  /** Spec: replay | live. replay = deterministic, live = UUID */
+  mode?: "replay" | "live";
+  /** Spec: hash of run inputs for replay formula */
+  runInputsHash?: string;
+  /** Spec: timestamp bucket (e.g. ISO slice). Used with runInputsHash. */
+  timestampBucket?: string;
+}
+
+/**
+ * Create a trace ID. Deterministic when seed or (mode=replay + runInputsHash) provided.
+ * @param opts - timestamp, seed, prefix (legacy) or mode, runInputsHash, timestampBucket (spec)
+ */
+export function createTraceId(opts: CreateTraceIdOptions): string {
+  const {
+    timestamp = new Date().toISOString(),
+    seed,
+    prefix = "trace",
+    mode,
+    runInputsHash,
+    timestampBucket,
+  } = opts;
+
+  const bucket = timestampBucket ?? timestamp.slice(0, 16).replace(/[:.]/g, "-");
+
+  const useReplay =
+    mode === "replay" ||
+    (mode !== "live" && (seed !== undefined || (runInputsHash !== undefined && timestampBucket !== undefined)));
 
   let suffix: string;
-  if (seed !== undefined) {
+  if (useReplay && runInputsHash !== undefined && timestampBucket !== undefined) {
+    const raw = `${runInputsHash}${timestampBucket}${seed !== undefined ? canonicalize(seed) : ""}`;
+    suffix = sha256(raw).slice(0, 32);
+  } else if (useReplay && seed !== undefined) {
     const raw = canonicalize({ bucket, seed });
     suffix = sha256(raw).slice(0, 9);
   } else {

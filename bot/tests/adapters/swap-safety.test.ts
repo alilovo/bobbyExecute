@@ -56,9 +56,11 @@ describe("Swap Safety (M0)", () => {
     expect(result.success).toBe(true);
   });
 
-  it("throws when LIVE_TRADING=true and dryRun=false (real path not implemented)", async () => {
+  it("throws when LIVE_TRADING=true and dryRun=false (real path not implemented or RPC_MODE=stub)", async () => {
     process.env.LIVE_TRADING = "true";
-    await expect(executeSwap(baseIntent)).rejects.toThrow(/not implemented|paper-trade/);
+    await expect(executeSwap(baseIntent)).rejects.toThrow(
+      /not implemented|paper-trade|RPC_MODE=real|LIVE_TRADING.*requires/
+    );
   });
 
   it("interprets LIVE_TRADING=true case-insensitively", async () => {

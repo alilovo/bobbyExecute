@@ -95,15 +95,75 @@ def run_bot():
 
 app = FastAPI(title="BOOBY BOT v30")
 
+# KPI Dashboard V1
+def metrics_tick():
+    """Compute and store metrics snapshot every 15s. Proxies from memory.json."""
+    try:
+        from datetime import datetime
+        from metrics.metrics_store import write_metrics_snapshot
+        mem = read_json("memory.json", {})
+        s = mem.get("stats", {})
+        wr = float(s.get("win_rate", 0.5) or 0.5)
+        th = float(mem.get("threshold", 62) or 62)
+        # Proxies: mci ~ (win_rate-0.5)*2, bci ~ 0.8, hybrid ~ weighted
+        mci = max(-1, min(1, (wr - 0.5) * 2))
+        bci = 0.8
+        hybrid = 0.55 * mci + 0.45 * bci
+        hybrid = max(-1, min(1, hybrid))
+        data_quality = 0.9
+        chaos_pass_rate = 1.0
+        ts = datetime.utcnow().isoformat() + "Z"
+        write_metrics_snapshot(ts, mci, bci, hybrid, data_quality, chaos_pass_rate)
+    except Exception as e:
+        log.warning(f"metrics_tick: {e}")
+
+def run_metrics_loop():
+    while True:
+        time.sleep(15)
+        metrics_tick()
+
+_metrics_thread = None
+
 @app.on_event("startup")
 def auto_start():
+    global _metrics_thread
+    app.state.server_start = time.time()
+    app.state.bot_state = state
     if BOT_AVAILABLE and not state.running:
         state.running = True
         state.thread = threading.Thread(target=run_bot, daemon=True)
         state.thread.start()
         append_log("Bot automatisch gestartet", "INFO")
+    # KPI metrics background loop
+    try:
+        from metrics.metrics_store import write_metrics_snapshot
+        from datetime import datetime
+        ts = datetime.utcnow().isoformat() + "Z"
+        write_metrics_snapshot(ts, 0, 0.8, 0.4, 0.9, 1.0)  # bootstrap
+        _metrics_thread = threading.Thread(target=run_metrics_loop, daemon=True)
+        _metrics_thread.start()
+    except Exception as e:
+        log.warning(f"KPI metrics loop: {e}")
+    # KPI router
+    try:
+        from api.kpi_router import router as kpi_router
+        app.include_router(kpi_router)
+    except Exception as e:
+        log.warning(f"KPI router: {e}")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+@app.get("/health")
+def health():
+    """KPI Dashboard V1 - Health check."""
+    uptime_s = time.time() - getattr(app.state, "server_start", time.time())
+    return {"status": "ok", "timestamp": datetime.utcnow().isoformat() + "Z", "uptime_s": round(uptime_s)}
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard():
+    p = Path("dashboard.html")
+    if p.exists(): return p.read_text(encoding="utf-8")
+    return "<h1>dashboard.html nicht gefunden</h1>"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -336,6 +396,10 @@ async def api_sell(data: dict):
         with open(cfg.get("positions_file", "positions.json"), "w") as f:
             json.dump(pos, f, indent=2)
         append_log(f"Manuell verkauft: {mint[:8]} TX:{sig[:12]}", "WARN")
+        try:
+            from metrics.decision_store import store_decision
+            store_decision(datetime.utcnow().isoformat() + "Z", "", "sell", "sell", 1.0, {"mint": mint[:8]}, [])
+        except Exception: pass
         return {"ok": True, "tx": sig, "solscan": f"https://solscan.io/tx/{sig}"}
     except Exception as e:
         return {"ok": False, "msg": str(e)[:200]}

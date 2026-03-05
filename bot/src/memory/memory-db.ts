@@ -6,7 +6,7 @@ import { compress as snappyCompress, uncompress as snappyUncompress } from "snap
 import { canonicalize } from "../core/determinism/canonicalize.js";
 import { sha256 } from "../core/determinism/hash.js";
 import { DATA_QUALITY_MIN_COMPLETENESS } from "../core/contracts/dataquality.js";
-import { createMemoryTraceId } from "../observability/trace-id.js";
+import { createMemoryTraceId, createTraceId } from "../observability/trace-id.js";
 
 export interface MemorySnapshot {
   traceId: string;
@@ -48,7 +48,7 @@ export class MemoryDB {
     return completenessDelta > DATA_QUALITY_CHANGE_THRESHOLD || freshnessDelta > DATA_QUALITY_CHANGE_THRESHOLD;
   }
 
-  /** Fail-Closed bei <70% completeness. M1: Uses createMemoryTraceId when parentTraceId provided. */
+  /** Fail-Closed bei <70% completeness. M1: Deterministic traceId, no Math.random. */
   renew(
     data: unknown,
     dataQuality: { completeness: number; freshness: number },
@@ -58,10 +58,10 @@ export class MemoryDB {
       throw new Error(`Fail-Closed: completeness ${dataQuality.completeness} < ${DATA_QUALITY_MIN_COMPLETENESS}`);
     }
 
+    const timestamp = new Date().toISOString();
     const traceId = parentTraceId
       ? createMemoryTraceId(parentTraceId, dataQuality)
-      : `mem-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    const timestamp = new Date().toISOString();
+      : createTraceId({ timestamp, seed: dataQuality, prefix: "mem" });
     const prevHash = this.journal.length > 0 ? this.journal[this.journal.length - 1].hash : undefined;
 
     this.snapshot = {

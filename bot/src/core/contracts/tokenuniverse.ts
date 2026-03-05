@@ -46,10 +46,10 @@ export type NormalizedTokenV1 = z.infer<typeof NormalizedTokenV1Schema>;
 export type TokenUniverseV1 = z.infer<typeof TokenUniverseV1Schema>;
 
 /**
- * Generate canonical ID from chain and mint address
+ * Generate canonical ID from chain and mint address (both lowercased)
  */
 export function generateCanonicalId(chain: string, mint: string): string {
-  return `${chain}:${mint.toLowerCase()}`;
+  return `${chain.toLowerCase()}:${mint.toLowerCase()}`;
 }
 
 /**
@@ -59,7 +59,7 @@ export function calculateTokenConfidence(
   sources: string[],
   sourceQualities: Record<string, number>
 ): number {
-  if (sources.length === 0) return 0;
+  if (!Array.isArray(sources) || sources.length === 0) return 0;
   
   // More sources = higher confidence (up to 3)
   const sourceCountScore = Math.min(1, sources.length / 3);

@@ -5,7 +5,7 @@
  */
 import type { TradeIntent } from "../../core/contracts/trade.js";
 import type { ExecutionReport } from "../../core/contracts/trade.js";
-import { isLiveTradingEnabled } from "../../config/safety.js";
+import { isLiveTradingEnabled, assertLiveTradingRequiresRealRpc } from "../../config/safety.js";
 
 /**
  * Stub swap execution for paper-trade.
@@ -30,6 +30,8 @@ export async function executeSwap(intent: TradeIntent): Promise<ExecutionReport>
       dryRun: true,
     };
   }
+
+  assertLiveTradingRequiresRealRpc();
 
   // LIVE_TRADING=true but real swap not implemented
   throw new Error(

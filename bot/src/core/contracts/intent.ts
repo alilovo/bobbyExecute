@@ -7,6 +7,7 @@ import { z } from "zod";
 export const IntentSpecSchema = z.object({
   traceId: z.string(),
   timestamp: z.string().datetime(),
+  idempotencyKey: z.string().optional(),
   targetPairs: z.array(z.string()).min(1),
   constraints: z.object({
     maxSlippagePercent: z.number().min(0).max(100).optional(),
