@@ -1,94 +1,158 @@
 # dotBot / BobbyExecute
 
-Governance-first Trading-Bot-Repository mit deterministischer Ausführung, Memory-Hash-Chains und Chaos-Gates.
+Governance-first Solana trading bot with deterministic execution, memory hash-chains, and chaos gates.
 
-## Kontext
+---
 
-Dieses Repo bündelt zwei Welten:
+## Engineering Navigation
 
-- **`bot/`**: aktive TypeScript-Implementierung (Core Runtime, Governance, Tests).
-- **`dor-bot/`**: ältere Python-Referenz/Legacy-Komponenten.
+| Purpose | Document |
+|---|---|
+| **Governance / Source of Truth** | [`governance/SoT.md`](governance/SoT.md) |
+| **Agent / Cursor Rules** | [`governance/cursor_rule.md`](governance/cursor_rule.md) |
+| **Repo Path Rules** | [`governance/file_path.md`](governance/file_path.md) |
+| **BobbyExecution Navigation Index** | [`docs/bobbyexecution/README.md`](docs/bobbyexecution/README.md) |
+| **Trading Chaos Reference** | [`docs/trading/trading-edge_chaos-scenarios.md`](docs/trading/trading-edge_chaos-scenarios.md) |
 
-Die kanonischen Architektur- und Governance-Vorgaben liegen in:
+### Which document to read first
 
-- `docs/architecture/master-trading-bot-intelligence-spec.md`
-- `docs/architecture/pattern-recognition-chaos-memory-blueprint.md`
-- `docs/architecture/extended-intelligence-execution-pipeline.md`
-- `docs/operations/secrets-management-blueprint.md`
-- `ops/agent-team/*` (Plan, Findings, Progress, Decisions, Policy)
+| Role | Start here |
+|---|---|
+| **Contributor** | `README.md` → [`governance/SoT.md`](governance/SoT.md) → [`docs/bobbyexecution/README.md`](docs/bobbyexecution/README.md) |
+| **Auditor** | [`governance/SoT.md`](governance/SoT.md) → [`docs/bobbyexecution/production_readiness_audit_report.md`](docs/bobbyexecution/production_readiness_audit_report.md) |
+| **Implementer** | [`governance/SoT.md`](governance/SoT.md) → [`docs/bobbyexecution/navigation_protocol.md`](docs/bobbyexecution/navigation_protocol.md) → [`docs/bobbyexecution/spec_generation_protocol.md`](docs/bobbyexecution/spec_generation_protocol.md) |
+| **Incident responder** | [`docs/bobbyexecution/incident_and_killswitch_runbook.md`](docs/bobbyexecution/incident_and_killswitch_runbook.md) |
 
-## Architektur-Überblick
+---
 
-### 1) Klassische Runtime-Pipeline (`Engine`)
+## How to use this docs layer
+
+1. **Governance first.** [`governance/SoT.md`](governance/SoT.md) is the highest written authority. If any document contradicts it, the SoT wins.
+2. **Operational guidance is in `docs/bobbyexecution/`.** These documents cover execution safety, market data reliability, chaos governance, observability, and incident response. They are subordinate to the SoT.
+3. **Chaos scenario deep reference is in `docs/trading/`.** Use it for detailed manipulation pattern analysis. It does not override the SoT.
+4. **The dashboard is a monitoring interface, not a decision authority.** Live trading requires real RPC verification and explicit safety gates — see [`governance/SoT.md §11`](governance/SoT.md).
+5. **Chat context is ephemeral.** Repository artifacts are the truth.
+
+---
+
+## Repository Context
+
+This repo bundles two runtimes:
+
+- **`bot/`** — active TypeScript implementation (Core Runtime, Governance, Tests)
+- **`dor-bot/`** — legacy Python reference components
+
+---
+
+## Architecture Overview
+
+### Classic Runtime Pipeline (`Engine`)
 
 ```text
 Ingest → Signal → Risk → Execute → Verify → Journal → Monitor
 ```
 
-Ziel: deterministische Trade-Verarbeitung mit Fail-Closed bei Risk-/Verify-Fehlern.
+Goal: deterministic trade processing with fail-closed on risk / verify failures.
 
-### 2) Erweiterte Intelligence-/Execution-Pipeline (`Orchestrator`)
+### Extended Intelligence / Execution Pipeline (`Orchestrator`)
 
 ```text
 Research → Analyse (MCI/BCI/Hybrid) → Reasoning + Pattern
-→ Compress DB (Snappy + SHA-256) → Chaos Gate (19 Szenarien)
+→ Compress DB (Snappy + SHA-256) → Chaos Gate (19 scenarios)
 → Memory Log (Hash-Chain) → Focused TX Execute
 → Loop via Action Handbook Lookup
 ```
 
-Wichtige Leitplanken:
+Key guardrails:
 
 - `DecisionResult.decision = allow|deny`
-- TX nur bei `allow` + gültigem Vault-Lease (TTL <= 1h)
-- Fail-Closed bei DataQuality < 70 %, Chaos-Fail oder Vault-Problemen
+- TX only on `allow` + valid vault lease (TTL ≤ 1h)
+- Fail-closed on DataQuality < 70%, chaos fail, or vault problems
 
-## Zentrale Komponenten
+---
+
+## Core Components
 
 - **Governance:** Review Gates, Policy Engine, Guardrails, Circuit Breaker
-- **Determinismus:** Canonicalize + SHA-256 für Decision/Result/Journal
-- **Memory:** iterative Renewal, Snappy-Kompression, Crash-Recovery
-- **Chaos:** 19 Szenarien in 5 Kategorien (Kategorie 5 = Trading-Edge kritisch)
-- **Tests:** Golden Tasks GT-001 bis GT-018 + Chaos Pre-Merge Gate
+- **Determinism:** Canonicalize + SHA-256 for Decision / Result / Journal
+- **Memory:** iterative renewal, Snappy compression, crash recovery
+- **Chaos:** 19 scenarios in 5 categories (Category 5 = trading-edge critical)
+- **Tests:** Golden Tasks GT-001 to GT-018 + Chaos Pre-Merge Gate
 
-## Repository-Struktur
+---
 
-- `bot/` – produktive TS-Codebasis inkl. `npm run premerge`
-- `docs/` – Architektur-/Operations-Blueprints
-- `ops/agent-team/` – Governance- und Team-Artefakte
-- `packages/skills/` – Skill-Manifeste + Instructions
-- `dor-bot/` – Python-Legacy
+## Repository Structure
 
-## Cloud-Agent Umgebung (Cursor)
-
-Die Cloud-Umgebung ist repo-seitig vorbereitet über:
-
-- `.cursor/environment.json`
-- `.cursor/setup.sh`
-- `.nvmrc` (Root + `bot/.nvmrc`)
-
-Setup-Verhalten:
-
-1. Node **22** prüfen (nvm-Fallback, falls verfügbar)
-2. `bot`-Dependencies installieren (`npm install`)
-3. `snappyjs` + `@types/snappyjs` validieren
-
-Dadurch läuft im Agent standardmäßig ohne manuelle Vorarbeit:
-
-```bash
-cd bot
-npm run premerge
+```text
+/
+├─ governance/              ← canonical governance layer
+│  ├─ SoT.md                  highest written authority
+│  ├─ cursor_rule.md           agent / cursor working rules
+│  └─ file_path.md             repo path and file rules
+│
+├─ docs/
+│  ├─ bobbyexecution/       ← BobbyExecution operational docs
+│  │  ├─ README.md             domain navigation index
+│  │  ├─ navigation_protocol.md
+│  │  ├─ trading_execution_protocol.md
+│  │  ├─ risk_and_chaos_governance.md
+│  │  ├─ production_readiness_checklist.md
+│  │  ├─ production_readiness_audit_report.md
+│  │  ├─ incident_and_killswitch_runbook.md
+│  │  └─ ...                   (full index in docs/bobbyexecution/README.md)
+│  │
+│  ├─ trading/              ← chaos scenario deep reference
+│  │  └─ trading-edge_chaos-scenarios.md
+│  │
+│  ├─ architecture/         ← architecture blueprints
+│  └─ operations/           ← operations guides
+│
+├─ bot/                     ← TypeScript production codebase
+├─ ops/agent-team/          ← governance and team artifacts
+├─ packages/skills/         ← skill manifests and instructions
+└─ dor-bot/                 ← Python legacy
 ```
 
-## Lokale Entwicklung
+---
+
+## Current Production Readiness
+
+**Overall readiness: `4.2 / 10` — Not ready for live test.**
+
+See [`docs/bobbyexecution/production_readiness_audit_report.md`](docs/bobbyexecution/production_readiness_audit_report.md) for the full audit and remediation plan.
+
+---
+
+## Development Commands (run from `bot/`)
 
 ```bash
-cd bot
 npm install
 npm run lint
 npm test
 npm run premerge
 ```
 
-## Lizenz
+The `premerge` script is the canonical quality gate: lint → golden tasks → chaos gate.
 
-Siehe `LICENSE`.
+---
+
+## Cloud Agent Environment (Cursor)
+
+The cloud environment is configured via:
+
+- `.cursor/environment.json`
+- `.cursor/setup.sh`
+- `.nvmrc` (root + `bot/.nvmrc`)
+
+Node **22** is required. After setup, run:
+
+```bash
+cd bot
+npm run premerge
+```
+
+---
+
+## License
+
+See [`LICENSE`](LICENSE).

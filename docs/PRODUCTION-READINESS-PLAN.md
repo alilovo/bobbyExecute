@@ -1,3 +1,7 @@
+> **Governance authority:** [`governance/SoT.md`](../governance/SoT.md)
+> **Current live-readiness audit:** [`docs/bobbyexecution/production_readiness_audit_report.md`](bobbyexecution/production_readiness_audit_report.md)
+> **Readiness checklist:** [`docs/bobbyexecution/production_readiness_checklist.md`](bobbyexecution/production_readiness_checklist.md)
+
 # Production Readiness Plan
 
 **Repository:** dotBot / BobbyExecute  
