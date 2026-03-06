@@ -1,3 +1,7 @@
+> **Scope note:** This is the M1–M10 milestone implementation audit (2026-03-05), assessing milestone completion against the Production Readiness Plan.
+> For the current live-readiness audit (overall system score 4.2/10), see [`docs/bobbyexecution/production_readiness_audit_report.md`](docs/bobbyexecution/production_readiness_audit_report.md).
+> Governance authority: [`governance/SoT.md`](governance/SoT.md).
+
 # Production Readiness Audit – Vollständiger Bericht
 
 **Datum:** 2026-03-05  
