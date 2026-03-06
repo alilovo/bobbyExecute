@@ -7,24 +7,29 @@ import {
   resilientFetch,
   type ResilientFetchOptions,
 } from "../http-resilience.js";
+import { validateFreshness } from "../freshness.js";
 
 const BASE_URL = "https://api.dexpaprika.com";
+const DEFAULT_MAX_STALENESS_MS = 30_000;
 
 export interface DexPaprikaClientConfig {
   baseUrl?: string;
   network?: string;
   resilience?: ResilientFetchOptions;
+  maxStalenessMs?: number;
 }
 
 export class DexPaprikaClient {
   private readonly baseUrl: string;
   private readonly network: string;
   private readonly resilience: ResilientFetchOptions | undefined;
+  private readonly maxStalenessMs: number;
 
   constructor(config: DexPaprikaClientConfig = {}) {
     this.baseUrl = config.baseUrl ?? BASE_URL;
     this.network = config.network ?? "solana";
     this.resilience = config.resilience;
+    this.maxStalenessMs = config.maxStalenessMs ?? DEFAULT_MAX_STALENESS_MS;
   }
 
   private async _fetch(url: string): Promise<Response> {
@@ -38,21 +43,35 @@ export class DexPaprikaClient {
     const url = `${this.baseUrl}/networks/${this.network}/tokens/${tokenId}`;
     const res = await this._fetch(url);
     if (!res.ok) throw new Error(`DexPaprika error: ${res.status} ${res.statusText}`);
-    return res.json();
+    const raw = await res.json();
+    validateFreshness(raw, this.maxStalenessMs);
+    return raw;
   }
 
   async getTokenPools(tokenId: string): Promise<unknown> {
     const url = `${this.baseUrl}/networks/${this.network}/tokens/${tokenId}/pools`;
     const res = await this._fetch(url);
     if (!res.ok) throw new Error(`DexPaprika error: ${res.status} ${res.statusText}`);
-    return res.json();
+    const raw = await res.json();
+    if (Array.isArray(raw)) {
+      raw.forEach((item: unknown) => validateFreshness(item, this.maxStalenessMs));
+    } else {
+      validateFreshness(raw, this.maxStalenessMs);
+    }
+    return raw;
   }
 
   async getPools(limit = 10): Promise<unknown> {
     const url = `${this.baseUrl}/networks/${this.network}/pools?limit=${limit}`;
     const res = await this._fetch(url);
     if (!res.ok) throw new Error(`DexPaprika error: ${res.status} ${res.statusText}`);
-    return res.json();
+    const raw = await res.json();
+    if (Array.isArray(raw)) {
+      raw.forEach((item: unknown) => validateFreshness(item, this.maxStalenessMs));
+    } else {
+      validateFreshness(raw, this.maxStalenessMs);
+    }
+    return raw;
   }
 
   /** Returns raw response + hash for audit. */

@@ -36,6 +36,18 @@ describe("validateCrossSource", () => {
     const results = validateCrossSource(tokens);
     expect(results[0].validated).toBeDefined();
   });
+
+  it("adds freshness penalty when freshnessMs > 30s", () => {
+    const tokens = [makeToken(["dexscreener", "paprika"])];
+    const results = validateCrossSource(tokens, { freshnessMs: 35_000 });
+    expect(results[0].confidencePenalty).toBeGreaterThanOrEqual(0.25);
+  });
+
+  it("adds degraded penalty when 15s < freshnessMs <= 30s", () => {
+    const tokens = [makeToken(["dexscreener", "paprika"])];
+    const results = validateCrossSource(tokens, { freshnessMs: 20_000 });
+    expect(results[0].confidencePenalty).toBeGreaterThanOrEqual(0.1);
+  });
 });
 
 describe("hasDiscrepancy", () => {

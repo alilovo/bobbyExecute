@@ -12,6 +12,7 @@ import {
   resilientFetch,
   type ResilientFetchOptions,
 } from "../http-resilience.js";
+import { validateFreshness } from "../freshness.js";
 import type {
   DexScreenerTokenResponse,
   DexScreenerPairInfo,
@@ -20,20 +21,24 @@ import type {
 } from "./types.js";
 
 const BASE_URL = "https://api.dexscreener.com/latest";
+const DEFAULT_MAX_STALENESS_MS = 30_000;
 
 export interface DexScreenerClientConfig {
   baseUrl?: string;
   apiKey?: string; // For future use if API requires auth
   resilience?: ResilientFetchOptions;
+  maxStalenessMs?: number;
 }
 
 export class DexScreenerClient {
   private readonly baseUrl: string;
   private readonly resilience: ResilientFetchOptions | undefined;
+  private readonly maxStalenessMs: number;
 
   constructor(config: DexScreenerClientConfig = {}) {
     this.baseUrl = config.baseUrl ?? BASE_URL;
     this.resilience = config.resilience;
+    this.maxStalenessMs = config.maxStalenessMs ?? DEFAULT_MAX_STALENESS_MS;
   }
 
   private async _fetch(url: string): Promise<Response> {
@@ -41,6 +46,13 @@ export class DexScreenerClient {
       ...this.resilience,
       adapterId: this.resilience?.adapterId ?? "dexscreener",
     });
+  }
+
+  private validateResponseFreshness(raw: DexScreenerTokenResponse): void {
+    const pairs = raw?.pairs;
+    if (Array.isArray(pairs)) {
+      pairs.forEach((p) => validateFreshness(p, this.maxStalenessMs));
+    }
   }
 
   /**
@@ -55,7 +67,9 @@ export class DexScreenerClient {
     if (!res.ok) {
       throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
     }
-    return res.json() as Promise<DexScreenerTokenResponse>;
+    const raw = (await res.json()) as DexScreenerTokenResponse;
+    this.validateResponseFreshness(raw);
+    return raw;
   }
 
   /**
@@ -70,7 +84,9 @@ export class DexScreenerClient {
     if (!res.ok) {
       throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
     }
-    return res.json() as Promise<{ pair: DexScreenerPairInfo | null }>;
+    const raw = (await res.json()) as { pair: DexScreenerPairInfo | null };
+    if (raw.pair) validateFreshness(raw.pair, this.maxStalenessMs);
+    return raw;
   }
 
   /**
@@ -85,7 +101,9 @@ export class DexScreenerClient {
     if (!res.ok) {
       throw new Error(`DexScreener error: ${res.status} ${res.statusText}`);
     }
-    return res.json() as Promise<DexScreenerTokenResponse>;
+    const raw = (await res.json()) as DexScreenerTokenResponse;
+    this.validateResponseFreshness(raw);
+    return raw;
   }
 
   /**

@@ -31,15 +31,27 @@ function smape(a: number, b: number, epsilon = 1e-10): number {
   return (2 * Math.abs(a - b)) / denom;
 }
 
+/** Freshness penalty: degraded when >15s, strong when >30s. */
+const FRESHNESS_DEGRADED_MS = 15_000;
+const FRESHNESS_STALE_MS = 30_000;
+const PENALTY_DEGRADED = 0.1;
+const PENALTY_STALE = 0.25;
+
 /**
  * Validate token across sources; flag discrepancy; reduce confidence for missing metrics.
+ * freshnessMs > 15s adds degraded penalty; > 30s adds strong penalty.
  */
 export function validateCrossSource(
   tokens: NormalizedTokenV1[],
-  options?: { threshold?: number; sourceQualities?: Record<string, number> }
+  options?: {
+    threshold?: number;
+    sourceQualities?: Record<string, number>;
+    freshnessMs?: number;
+  }
 ): ValidationResult[] {
   const threshold = options?.threshold ?? DEFAULT_THRESHOLD;
   const sourceQualities = options?.sourceQualities ?? {};
+  const freshnessMs = options?.freshnessMs ?? 0;
 
   return tokens.map((token) => {
     let discrepancy = false;
@@ -48,7 +60,13 @@ export function validateCrossSource(
 
     const sources = Array.isArray(token.sources) ? token.sources : [];
     if (sources.length < 2) {
-      confidencePenalty = 0.1;
+      confidencePenalty += 0.1;
+    }
+
+    if (freshnessMs > FRESHNESS_STALE_MS) {
+      confidencePenalty += PENALTY_STALE;
+    } else if (freshnessMs > FRESHNESS_DEGRADED_MS) {
+      confidencePenalty += PENALTY_DEGRADED;
     }
 
     const confidence = calculateTokenConfidence(sources, sourceQualities);

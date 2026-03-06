@@ -68,4 +68,23 @@ describe("Circuit Breaker Integration (M3)", () => {
   it("exports ADAPTER_IDS", () => {
     expect(ADAPTER_IDS).toEqual(["dexpaprika", "moralis", "dexscreener"]);
   });
+
+  it("returns cached data on adapter failure when useFallbackCache=true", async () => {
+    const fetchFn = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const cached = { id: "cached", price: 100 };
+    fetchFn
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(cached) })
+      .mockResolvedValue({ ok: false, status: 500, headers: { get: () => null } } as unknown as Response);
+
+    const { dexpaprika } = createAdaptersWithCircuitBreaker({
+      useFallbackCache: true,
+      resilience: { maxRetries: 0 },
+    });
+
+    const first = await dexpaprika.getToken("tok");
+    expect(first).toEqual(cached);
+
+    const second = await dexpaprika.getToken("tok");
+    expect(second).toEqual(cached);
+  });
 });

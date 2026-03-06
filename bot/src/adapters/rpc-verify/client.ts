@@ -8,6 +8,7 @@ import { SolanaWeb3RpcClient } from "./solana-web3-client.js";
 
 export interface RpcClientConfig {
   rpcUrl: string;
+  rpcUrlSecondary?: string;
   chain?: "solana" | "evm";
 }
 

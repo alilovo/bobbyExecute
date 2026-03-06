@@ -7,6 +7,7 @@ import { canonicalize } from "../core/determinism/canonicalize.js";
 import { detectLiquidityDrain } from "./signals/liquidity-delta.js";
 import { detectCrossDexDivergence } from "./signals/cross-dex-divergence.js";
 import { detectPumpVelocityNoHolders } from "./signals/pump-velocity.js";
+import { detectStaleData } from "./signals/stale-data.js";
 
 export type ChaosCategory = 1 | 2 | 3 | 4 | 5;
 
@@ -17,6 +18,7 @@ export interface ChaosContext {
   priceChange24h?: number;
   holderGrowth?: number;
   volumeSpike?: number;
+  freshnessMs?: number;
 }
 
 export interface ChaosScenario {
@@ -53,7 +55,10 @@ const cat1: ChaosScenario[] = [
 /** Kategorie 2: Data Integrity */
 const cat2: ChaosScenario[] = [
   scenario(4, 2, "Corruption", async () => true),
-  scenario(5, 2, "Stale Data", async () => true),
+  scenario(5, 2, "Stale Data", async (ctx) => {
+    const r = detectStaleData({ freshnessMs: ctx?.freshnessMs, maxAgeMs: 30_000 });
+    return !r.hit;
+  }),
   scenario(6, 2, "Source Manipulation", async () => true),
 ];
 

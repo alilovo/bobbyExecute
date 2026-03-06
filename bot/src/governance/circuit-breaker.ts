@@ -9,13 +9,21 @@ export interface AdapterHealth {
   adapterId: string;
   healthy: boolean;
   lastCheckedAt: number;
+  /** Age in ms since last successful request. 0 when last report was success. */
+  freshnessAgeMs?: number;
   consecutiveFailures: number;
   averageLatencyMs: number;
+}
+
+interface AdapterHealthInternal extends AdapterHealth {
+  lastSuccessAt?: number;
 }
 
 export interface CircuitBreakerConfig {
   failureThreshold: number;
   recoveryTimeMs: number;
+  /** Called after each reportHealth with updated health. */
+  onHealthChange?: (adapterId: string, health: AdapterHealth) => void;
 }
 
 const DEFAULT_CONFIG: CircuitBreakerConfig = {
@@ -24,7 +32,7 @@ const DEFAULT_CONFIG: CircuitBreakerConfig = {
 };
 
 export class CircuitBreaker {
-  private health: Map<string, AdapterHealth> = new Map();
+  private health: Map<string, AdapterHealthInternal> = new Map();
   private readonly clock: Clock;
   private readonly config: CircuitBreakerConfig;
 
@@ -41,6 +49,7 @@ export class CircuitBreaker {
         adapterId: id,
         healthy: true,
         lastCheckedAt: 0,
+        freshnessAgeMs: 0,
         consecutiveFailures: 0,
         averageLatencyMs: 0,
       });
@@ -51,14 +60,15 @@ export class CircuitBreaker {
     const current = this.health.get(adapterId);
     if (!current) return;
 
+    const now = this.clock.now().getTime();
+
     if (success) {
       current.consecutiveFailures = 0;
       current.healthy = true;
+      current.lastSuccessAt = now;
     } else {
       current.consecutiveFailures++;
-      if (
-        current.consecutiveFailures >= this.config.failureThreshold
-      ) {
+      if (current.consecutiveFailures >= this.config.failureThreshold) {
         current.healthy = false;
       }
     }
@@ -66,9 +76,12 @@ export class CircuitBreaker {
     const alpha = 0.3;
     current.averageLatencyMs =
       alpha * latencyMs + (1 - alpha) * current.averageLatencyMs;
-    current.lastCheckedAt = this.clock.now().getTime();
+    current.lastCheckedAt = now;
+    current.freshnessAgeMs = (current.lastSuccessAt ?? 0) > 0 ? now - (current.lastSuccessAt ?? 0) : 0;
 
     this.health.set(adapterId, current);
+    const { lastSuccessAt: _, ...publicHealth } = current;
+    this.config.onHealthChange?.(adapterId, { ...publicHealth });
   }
 
   isHealthy(adapterId: string): boolean {
@@ -77,7 +90,12 @@ export class CircuitBreaker {
   }
 
   getHealth(): AdapterHealth[] {
-    return Array.from(this.health.values());
+    const now = this.clock.now().getTime();
+    return Array.from(this.health.values()).map((h) => {
+      const freshnessAgeMs = (h.lastSuccessAt ?? 0) > 0 ? now - h.lastSuccessAt! : 0;
+      const { lastSuccessAt: _, ...rest } = h;
+      return { ...rest, freshnessAgeMs };
+    });
   }
 
   hasAnyHealthy(adapterIds: string[]): boolean {

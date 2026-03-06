@@ -17,6 +17,8 @@ export const MarketSnapshotSchema = z.object({
   volume24h: z.number().nonnegative(),
   liquidity: z.number().nonnegative(),
   rawPayloadHash: z.string().optional(),
+  /** Age of data in ms at mapping time. 0 = just fetched. */
+  freshnessMs: z.number().nonnegative().optional(),
 });
 
 export type MarketSnapshot = z.infer<typeof MarketSnapshotSchema>;
