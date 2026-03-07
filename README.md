@@ -71,6 +71,87 @@ Key guardrails:
 
 ---
 
+## Boot & Pipeline Specification
+
+### Bootstrap Flow
+
+```text
+1. loadConfig()                        → Zod-validated config from env
+2. assertLiveTradingRequiresRealRpc()  → Fail-closed: LIVE_TRADING=true requires RPC_MODE=real
+3. createServer()                      → Fastify HTTP API (GET /health, GET /kpi/*, POST /emergency-stop)
+4. (Engine loop)                       → Ingest → Signal → Risk → Execute → Verify → Journal → Monitor
+```
+
+**Entry point:** `bot/src/server/run.ts` → `bootstrap()` from `bot/src/bootstrap.ts`
+
+**Config validation:** Invalid combinations (e.g. LIVE_TRADING=true with RPC_MODE=stub) reject startup.
+
+---
+
+### Trade Pipeline (Ingest → Completed Trade)
+
+```text
+┌─────────┐    ┌─────────┐    ┌───────┐    ┌─────────┐    ┌────────┐    ┌────────┐    ┌─────────┐
+│ Ingest  │───▶│ Signal  │───▶│ Risk  │───▶│ Execute │───▶│ Verify │───▶│ Journal│───▶│ Monitor │
+└─────────┘    └─────────┘    └───┬───┘    └─────────┘    └───┬────┘    └────────┘    └─────────┘
+     │               │              │               │               │
+     ▼               ▼              ▼               ▼               ▼
+ MarketSnapshot   direction,     TradeIntent    ExecutionReport  RpcVerificationReport
+ WalletSnapshot   confidence     (SOL→USDC)     (success/txSig)   (passed/checks)
+```
+
+| Stage | Input | Output | Block Condition |
+|-------|-------|--------|-----------------|
+| **Ingest** | - | `MarketSnapshot`, `WalletSnapshot` | Adapter failure |
+| **Signal** | market, wallet | direction, confidence | - |
+| **Risk** | intent, market, wallet | allowed / denied | `!risk.allowed` → return, no execute |
+| **Execute** | intent | `ExecutionReport` | Daily loss limit → block before execute |
+| **Verify** | intent, execReport | `RpcVerificationReport` | `!rpcVerify.passed` → no journal |
+| **Journal** | decisionHash, resultHash, input, output | `JournalEntry` appended | Mandatory write; failure blocks |
+| **Monitor** | state | - | - |
+
+---
+
+### Completed Trade Definition
+
+A trade is **completed** when:
+
+1. Risk gate passed (`risk.allowed === true`)
+2. Daily loss limit not reached
+3. Execute produced `ExecutionReport`
+4. RPC verification passed (`rpcVerify.passed === true`)
+5. Journal entry written with `stage: "complete"`, `blocked: false`
+
+**Artifacts at completion:**
+
+- `state.stage === "monitor"`
+- `state.journalEntry` with `decisionHash`, `resultHash`, `input`, `output`
+- `state.blocked === false`
+- `state.executionReport.success === true` (for live/paper)
+
+---
+
+### Block Points (Fail-Closed)
+
+| Point | Condition | Result |
+|-------|-----------|--------|
+| Risk | `!risk.allowed` | `state.blocked = true`, return before execute |
+| Daily loss | `dailyLossTracker.isLimitReached()` | `state.blocked = true`, return before execute |
+| Verify | `!rpcVerify.passed` | `state.blocked = true`, no journal write |
+| Chaos / critical error | `ChaosGateError` or adapter/emergency | `triggerKillSwitch()`, throw |
+
+---
+
+### Execution Modes
+
+| Mode | `dryRun` | `executionMode` | Swap behavior |
+|------|----------|-----------------|---------------|
+| Dry | true | dry | Paper result, no real swap |
+| Paper | false (config) | paper | Simulated execution |
+| Live | false | live | Real swap; requires `LIVE_TRADING=true`, `RPC_MODE=real` |
+
+---
+
 ## Core Components
 
 - **Governance:** Review Gates, Policy Engine, Guardrails, Circuit Breaker
