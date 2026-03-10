@@ -50,7 +50,9 @@ export async function fetchMarketData(
   }
 
   return {
-    error: lastError ?? "All adapters failed or stale",
+    error: lastError
+      ? `All adapters failed: ${lastError}`
+      : "All adapters failed or stale",
   };
 }
 
