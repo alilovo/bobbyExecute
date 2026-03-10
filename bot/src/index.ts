@@ -71,3 +71,12 @@ export { createServer, type ServerConfig } from "./server/index.js";
 export * from "./adapters/dexscreener/client.js";
 export * from "./adapters/dexscreener/types.js";
 export * from "./adapters/dexscreener/mapper.js";
+
+// LLM Client - use generateResponse for all LLM calls (x.ai / OpenAI via LAUNCH_MODE)
+export {
+  client,
+  isXaiMode,
+  currentProvider,
+  currentModel,
+  generateResponse,
+} from "./clients/index.js";
