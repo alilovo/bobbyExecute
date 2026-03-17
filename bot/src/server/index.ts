@@ -6,11 +6,12 @@ import Fastify from "fastify";
 import { healthRoutes } from "./routes/health.js";
 import { kpiRoutes } from "./routes/kpi.js";
 import { controlRoutes } from "./routes/control.js";
+import { operatorRoutes } from "./routes/operator.js";
 import type { CircuitBreaker } from "../governance/circuit-breaker.js";
 import type { ActionLogger } from "../observability/action-log.js";
 import type { KpiRouteDeps } from "./routes/kpi.js";
 import type { HealthRouteDeps } from "./routes/health.js";
-import type { RuntimeSnapshot } from "../runtime/dry-run-runtime.js";
+import type { DryRunRuntime, RuntimeSnapshot } from "../runtime/dry-run-runtime.js";
 
 export interface ServerConfig {
   port?: number;
@@ -23,6 +24,7 @@ export interface ServerConfig {
   chaosPassRate?: number;
   riskScore?: number;
   getRuntimeSnapshot?: () => RuntimeSnapshot;
+  runtime?: DryRunRuntime;
 }
 
 const DEFAULT_PORT = 3333;
@@ -57,7 +59,8 @@ export async function createServer(config: ServerConfig = {}) {
     getRuntimeSnapshot: config.getRuntimeSnapshot,
   };
   await fastify.register(kpiRoutes(kpiDeps));
-  await fastify.register(controlRoutes);
+  await fastify.register(controlRoutes({ runtime: config.runtime }));
+  await fastify.register(operatorRoutes({ runtime: config.runtime, getRuntimeSnapshot: config.getRuntimeSnapshot }));
 
   await fastify.listen({ port, host });
   return fastify;

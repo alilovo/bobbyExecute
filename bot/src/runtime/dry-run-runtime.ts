@@ -17,6 +17,8 @@ import {
   type RuntimeCycleSummary,
   type RuntimeCycleSummaryWriter,
 } from "../persistence/runtime-cycle-summary-repository.js";
+import { FileSystemIncidentRepository, type IncidentRecord } from "../persistence/incident-repository.js";
+import { RepositoryIncidentRecorder, type IncidentRecorder } from "../observability/incidents.js";
 
 export type RuntimeStatus = "idle" | "running" | "paused" | "stopped" | "error";
 
@@ -50,6 +52,13 @@ export interface DryRunRuntimeDeps {
   maxPaperMarketStalenessMs?: number;
   fetchPaperWalletSnapshot?: () => Promise<WalletSnapshot>;
   cycleSummaryWriter?: RuntimeCycleSummaryWriter;
+  incidentRecorder?: IncidentRecorder;
+}
+
+export interface RuntimeControlResult {
+  success: boolean;
+  status: RuntimeStatus;
+  message: string;
 }
 
 /**
@@ -66,6 +75,7 @@ export class DryRunRuntime {
   private readonly paperAdapterCircuitBreaker: AdapterOrchestratorConfig["circuitBreaker"];
   private readonly fetchPaperWalletSnapshot: () => Promise<WalletSnapshot>;
   private readonly cycleSummaryWriter: RuntimeCycleSummaryWriter;
+  private readonly incidentRecorder: IncidentRecorder;
   private intervalRef: NodeJS.Timeout | null = null;
   private status: RuntimeStatus = "idle";
   private lastState: EngineState | null = null;
@@ -114,6 +124,11 @@ export class DryRunRuntime {
     this.cycleSummaryWriter =
       deps.cycleSummaryWriter ??
       new FileSystemRuntimeCycleSummaryWriter(config.journalPath.replace(/\.jsonl$/i, "") + ".runtime-cycles.jsonl");
+    this.incidentRecorder =
+      deps.incidentRecorder ??
+      new RepositoryIncidentRecorder(
+        new FileSystemIncidentRepository(config.journalPath.replace(/\.jsonl$/i, "") + ".incidents.jsonl")
+      );
   }
 
   async start(): Promise<void> {
@@ -131,6 +146,88 @@ export class DryRunRuntime {
       this.intervalRef = null;
     }
     this.status = "stopped";
+  }
+
+  async emergencyStop(reason = "operator_emergency_stop"): Promise<RuntimeControlResult> {
+    this.status = "paused";
+    await this.recordIncident({
+      severity: "critical",
+      type: "emergency_stop",
+      message: "Emergency stop activated",
+      details: { reason },
+    });
+    return {
+      success: true,
+      status: this.status,
+      message: "Emergency stop activated; runtime paused.",
+    };
+  }
+
+  async pause(reason = "operator_pause"): Promise<RuntimeControlResult> {
+    if (this.status === "stopped" || this.status === "error") {
+      return {
+        success: false,
+        status: this.status,
+        message: `Pause unsupported while runtime status=${this.status}`,
+      };
+    }
+    if (this.status === "paused") {
+      return { success: true, status: this.status, message: "Runtime already paused." };
+    }
+    this.status = "paused";
+    await this.recordIncident({
+      severity: "warning",
+      type: "runtime_paused",
+      message: "Runtime paused by control plane",
+      details: { reason },
+    });
+    return { success: true, status: this.status, message: "Runtime paused." };
+  }
+
+  async resume(reason = "operator_resume"): Promise<RuntimeControlResult> {
+    if (isKillSwitchHalted()) {
+      return {
+        success: false,
+        status: this.status,
+        message: "Resume blocked: kill switch is active.",
+      };
+    }
+    if (this.status !== "paused") {
+      return {
+        success: false,
+        status: this.status,
+        message: `Resume unsupported while runtime status=${this.status}`,
+      };
+    }
+    this.status = "running";
+    if (!this.intervalRef) {
+      this.intervalRef = setInterval(() => {
+        void this.runCycle();
+      }, this.loopIntervalMs);
+    }
+    await this.recordIncident({
+      severity: "info",
+      type: "runtime_resumed",
+      message: "Runtime resumed by control plane",
+      details: { reason },
+    });
+    await this.runCycle();
+    return { success: true, status: this.status, message: "Runtime resumed." };
+  }
+
+  async halt(reason = "operator_halt"): Promise<RuntimeControlResult> {
+    if (this.intervalRef) {
+      clearInterval(this.intervalRef);
+      this.intervalRef = null;
+    }
+    this.status = "stopped";
+    await this.recordIncident({
+      severity: "critical",
+      type: "runtime_halted",
+      message: "Runtime halted by control plane",
+      details: { reason },
+    });
+    return { success: true, status: this.status, message: "Runtime halted." };
   }
 
   getStatus(): RuntimeStatus {
@@ -155,6 +252,14 @@ export class DryRunRuntime {
     };
   }
 
+  async listRecentCycleSummaries(limit = 50): Promise<RuntimeCycleSummary[]> {
+    return this.cycleSummaryWriter.list(limit);
+  }
+
+  async listRecentIncidents(limit = 50): Promise<IncidentRecord[]> {
+    return this.incidentRecorder.list(limit);
+  }
+
   private async runCycle(options: { propagateError?: boolean } = {}): Promise<void> {
     if (this.cycleInFlight || this.status !== "running") {
       return;
@@ -172,6 +277,12 @@ export class DryRunRuntime {
       };
       this.lastCycleAt = now;
       this.counters.blockedCount += 1;
+      await this.recordIncident({
+        severity: "critical",
+        type: "runtime_paused",
+        message: "Runtime paused because kill switch is active",
+        details: { reason: "kill_switch_halted" },
+      });
       await this.persistCycleSummary({
         cycleTimestamp: now,
         mode: this.mode,
@@ -201,6 +312,12 @@ export class DryRunRuntime {
 
       const paperIntake = await this.preparePaperIntake(now);
       if (paperIntake?.kind === "blocked") {
+        await this.recordIncident({
+          severity: "warning",
+          type: "paper_ingest_blocked",
+          message: "Paper ingest blocked",
+          details: { blockedReason: paperIntake.summary.blockedReason ?? "unknown" },
+        });
         this.lastState = {
           stage: "ingest",
           traceId: `runtime-${now}`,
@@ -317,6 +434,12 @@ export class DryRunRuntime {
       this.status = "error";
       this.counters.errorCount += 1;
       this.logger.error("Dry-run runtime cycle failed", error);
+      await this.recordIncident({
+        severity: "critical",
+        type: "runtime_cycle_error",
+        message: "Runtime cycle failed",
+        details: { error: error instanceof Error ? error.message : String(error) },
+      });
       await this.persistCycleSummary({
         cycleTimestamp: this.lastCycleAt ?? new Date().toISOString(),
         mode: this.mode,
@@ -456,6 +579,15 @@ export class DryRunRuntime {
   private async persistCycleSummary(summary: RuntimeCycleSummary): Promise<void> {
     this.lastCycleSummary = summary;
     await this.cycleSummaryWriter.append(summary);
+  }
+
+  private async recordIncident(input: {
+    severity: IncidentRecord["severity"];
+    type: IncidentRecord["type"];
+    message: string;
+    details?: IncidentRecord["details"];
+  }): Promise<void> {
+    await this.incidentRecorder.record(input);
   }
 }
 

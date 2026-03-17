@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DryRunRuntime } from "../../src/runtime/dry-run-runtime.js";
 import { resetKillSwitch, triggerKillSwitch } from "../../src/governance/kill-switch.js";
 import { InMemoryRuntimeCycleSummaryWriter } from "../../src/persistence/runtime-cycle-summary-repository.js";
+import { InMemoryIncidentRepository } from "../../src/persistence/incident-repository.js";
+import { RepositoryIncidentRecorder } from "../../src/observability/incidents.js";
 import type { Config } from "../../src/config/config-schema.js";
 
 const TEST_CONFIG: Config = {
@@ -223,6 +225,69 @@ describe("DryRunRuntime (phase-2)", () => {
     expect(summaries[0].intakeOutcome).toBe("stale");
     expect(summaries[0].advanced).toBe(false);
     expect(summaries[0].executionOccurred).toBe(false);
+
+    await runtime.stop();
+  });
+
+
+  it("supports explicit pause/resume/halt transitions truthfully", async () => {
+    const runtime = new DryRunRuntime(TEST_CONFIG, {
+      loopIntervalMs: 10,
+      incidentRecorder: new RepositoryIncidentRecorder(new InMemoryIncidentRepository()),
+    });
+
+    await runtime.start();
+    expect(runtime.getStatus()).toBe("running");
+
+    const paused = await runtime.pause("test_pause");
+    expect(paused.success).toBe(true);
+    expect(runtime.getStatus()).toBe("paused");
+
+    const resumed = await runtime.resume("test_resume");
+    expect(resumed.success).toBe(true);
+    expect(runtime.getStatus()).toBe("running");
+
+    const halted = await runtime.halt("test_halt");
+    expect(halted.success).toBe(true);
+    expect(runtime.getStatus()).toBe("stopped");
+
+    const pauseAfterHalt = await runtime.pause("unsupported_after_stop");
+    expect(pauseAfterHalt.success).toBe(false);
+
+    await runtime.stop();
+  });
+
+  it("records incidents for emergency-stop and runtime errors", async () => {
+    const incidentRepo = new InMemoryIncidentRepository();
+    const runtime = new DryRunRuntime(TEST_CONFIG, {
+      engine: { run: vi.fn().mockRejectedValue(new Error("boom")) } as never,
+      loopIntervalMs: 10,
+      incidentRecorder: new RepositoryIncidentRecorder(incidentRepo),
+    });
+
+    await expect(runtime.start()).rejects.toThrow("boom");
+    await runtime.emergencyStop("test_emergency");
+
+    const incidents = await runtime.listRecentIncidents(10);
+    expect(incidents.some((i) => i.type === "runtime_cycle_error")).toBe(true);
+    expect(incidents.some((i) => i.type === "emergency_stop")).toBe(true);
+
+    await runtime.stop();
+  });
+
+
+  it("paused runtime does not continue cycle progression", async () => {
+    const runtime = new DryRunRuntime(TEST_CONFIG, {
+      loopIntervalMs: 5,
+      incidentRecorder: new RepositoryIncidentRecorder(new InMemoryIncidentRepository()),
+    });
+
+    await runtime.start();
+    const before = runtime.getSnapshot().counters.cycleCount;
+    await runtime.pause("freeze");
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const after = runtime.getSnapshot().counters.cycleCount;
+    expect(after).toBe(before);
 
     await runtime.stop();
   });

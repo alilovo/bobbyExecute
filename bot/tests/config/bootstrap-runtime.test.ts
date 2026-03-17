@@ -49,7 +49,8 @@ describe("bootstrap runtime closure (phase-1)", () => {
       expect(stopRes.status).toBe(200);
       const stopBody = await stopRes.json();
       expect(stopBody.success).toBe(true);
-      expect(stopBody.state?.halted).toBe(true);
+      expect(stopBody.killSwitch?.halted).toBe(true);
+      expect(stopBody.runtimeStatus).toBe("paused");
 
       const healthAfterStop = await fetch("http://127.0.0.1:3351/health");
       expect(healthAfterStop.status).toBe(200);

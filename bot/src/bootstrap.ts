@@ -53,6 +53,7 @@ export async function bootstrap(options?: {
       host,
       getBotStatus,
       getRuntimeSnapshot,
+      runtime,
     });
   } catch (error) {
     await runtime.stop();
