@@ -30,13 +30,16 @@ export interface HealthResponse {
       active: boolean;
       consecutiveCycles: number;
       lastDegradedAt?: string;
+      lastRecoveredAt?: string;
       lastReason?: string;
+      recoveryCount: number;
     };
     adapterHealth?: {
       total: number;
       healthy: number;
       unhealthy: number;
       degraded: boolean;
+      degradedAdapterIds: string[];
       unhealthyAdapterIds: string[];
     };
   };
@@ -64,13 +67,16 @@ export interface KpiSummaryResponse {
       active: boolean;
       consecutiveCycles: number;
       lastDegradedAt?: string;
+      lastRecoveredAt?: string;
       lastReason?: string;
+      recoveryCount: number;
     };
     adapterHealth?: {
       total: number;
       healthy: number;
       unhealthy: number;
       degraded: boolean;
+      degradedAdapterIds: string[];
       unhealthyAdapterIds: string[];
     };
   };

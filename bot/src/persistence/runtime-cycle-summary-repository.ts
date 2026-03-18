@@ -20,6 +20,25 @@ export interface RuntimeCycleVerificationEvidence {
   reason?: string;
 }
 
+export interface RuntimeCycleDegradedState {
+  active: boolean;
+  consecutiveCycles: number;
+  lastDegradedAt?: string;
+  lastRecoveredAt?: string;
+  lastReason?: string;
+  recoveryCount: number;
+  recoveredThisCycle: boolean;
+}
+
+export interface RuntimeCycleAdapterHealthSnapshot {
+  total: number;
+  healthy: number;
+  unhealthy: number;
+  degraded: boolean;
+  degradedAdapterIds: string[];
+  unhealthyAdapterIds: string[];
+}
+
 export interface RuntimeCycleSummary {
   cycleTimestamp: string;
   traceId: string;
@@ -43,6 +62,8 @@ export interface RuntimeCycleSummary {
   tradeIntentId?: string;
   execution?: RuntimeCycleExecutionEvidence;
   verification?: RuntimeCycleVerificationEvidence;
+  degradedState?: RuntimeCycleDegradedState;
+  adapterHealth?: RuntimeCycleAdapterHealthSnapshot;
   incidentIds: string[];
 }
 

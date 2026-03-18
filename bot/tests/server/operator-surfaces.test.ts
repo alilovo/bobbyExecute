@@ -26,6 +26,34 @@ const config = {
   reviewPolicyMode: "required" as const,
 };
 
+function createMarketSnapshot(traceId: string, freshnessMs = 0) {
+  return {
+    schema_version: "market.v1" as const,
+    traceId,
+    timestamp: new Date().toISOString(),
+    source: "dexpaprika" as const,
+    poolId: `${traceId}-pool`,
+    baseToken: "SOL",
+    quoteToken: "USD",
+    priceUsd: 100,
+    volume24h: 1_000,
+    liquidity: 50_000,
+    freshnessMs,
+    status: "ok" as const,
+  };
+}
+
+async function waitForCondition(check: () => boolean | Promise<boolean>, timeoutMs = 2_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (!(await check())) {
+    if (Date.now() > deadline) {
+      throw new Error("Timed out waiting for server test condition");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 describe("Operator read-only surfaces", () => {
   const servers: Array<Awaited<ReturnType<typeof createServer>>> = [];
   const runtimes: ReturnType<typeof createDryRunRuntime>[] = [];
@@ -257,6 +285,167 @@ describe("Operator read-only surfaces", () => {
     expect(body.replay.journal.some((entry: { stage: string }) => entry.stage === "execution_result")).toBe(true);
     expect(body.replay.journal.some((entry: { stage: string }) => entry.stage === "verification_result")).toBe(true);
     expect(body.replay.incidents).toEqual([]);
+  });
+
+  it("repeated paper cycles keep health, KPI, operator, and persistence surfaces aligned through degradation and recovery", async () => {
+    const cycleSummaryWriter = new InMemoryRuntimeCycleSummaryWriter();
+    const incidentRepository = new InMemoryIncidentRepository();
+    let adapterCalls = 0;
+
+    const runtime = createDryRunRuntime(
+      { ...config, executionMode: "paper", dryRun: false },
+      {
+        loopIntervalMs: 50,
+        paperMarketAdapters: [
+          {
+            id: "primary",
+            fetch: async () => {
+              adapterCalls += 1;
+              return createMarketSnapshot(
+                `operator-cycle-${adapterCalls}`,
+                adapterCalls === 2 ? 45_000 : 0
+              );
+            },
+          },
+        ],
+        fetchPaperWalletSnapshot: async () => ({
+          traceId: "operator-wallet-trace",
+          timestamp: new Date().toISOString(),
+          source: "moralis",
+          walletAddress: config.walletAddress,
+          balances: [],
+          totalUsd: 0,
+        }),
+        cycleSummaryWriter,
+        incidentRecorder: new RepositoryIncidentRecorder(incidentRepository),
+      }
+    );
+    runtimes.push(runtime);
+    await runtime.start();
+    await waitForCondition(async () => {
+      const degradedState = runtime.getSnapshot().degradedState;
+      const persistedCycles = await cycleSummaryWriter.list(10);
+      return (
+        persistedCycles.length >= 3 &&
+        degradedState?.active === false &&
+        degradedState?.recoveryCount === 1
+      );
+    });
+    await runtime.pause("operator_parity_pause");
+
+    const server = await createServer({
+      port: 3354,
+      host: "127.0.0.1",
+      runtime,
+      getRuntimeSnapshot: () => runtime.getSnapshot(),
+      getBotStatus: () => {
+        const status = runtime.getStatus();
+        return status === "running" ? "running" : status === "paused" ? "paused" : "stopped";
+      },
+    });
+    servers.push(server);
+
+    const [healthRes, kpiRes, statusRes, cyclesRes, incidentsRes] = await Promise.all([
+      fetch("http://127.0.0.1:3354/health"),
+      fetch("http://127.0.0.1:3354/kpi/summary"),
+      fetch("http://127.0.0.1:3354/runtime/status"),
+      fetch("http://127.0.0.1:3354/runtime/cycles?limit=10"),
+      fetch("http://127.0.0.1:3354/incidents?limit=10"),
+    ]);
+
+    const healthBody = await healthRes.json();
+    const kpiBody = await kpiRes.json();
+    const statusBody = await statusRes.json();
+    const cyclesBody = await cyclesRes.json();
+    const incidentsBody = await incidentsRes.json();
+    const snapshot = runtime.getSnapshot();
+    const persistedCycles = await cycleSummaryWriter.list(10);
+    const persistedIncidents = await incidentRepository.list(10);
+
+    expect(healthRes.status).toBe(200);
+    expect(kpiRes.status).toBe(200);
+    expect(statusRes.status).toBe(200);
+    expect(cyclesRes.status).toBe(200);
+    expect(incidentsRes.status).toBe(200);
+
+    expect(statusBody.success).toBe(true);
+    expect(statusBody.runtime).toEqual(snapshot);
+    expect(snapshot.status).toBe("paused");
+    expect(snapshot.degradedState).toMatchObject({
+      active: false,
+      consecutiveCycles: 0,
+      recoveryCount: 1,
+    });
+    expect(snapshot.degradedState?.lastRecoveredAt).toBeDefined();
+    expect(snapshot.degradedState?.lastReason).toContain("stale");
+    expect(snapshot.adapterHealth).toMatchObject({
+      degraded: false,
+      degradedAdapterIds: [],
+      unhealthyAdapterIds: [],
+    });
+
+    expect(healthBody.botStatus).toBe("paused");
+    expect(healthBody.runtime).toMatchObject({
+      status: "paused",
+      lastIntakeOutcome: snapshot.lastCycleSummary?.intakeOutcome,
+      degraded: {
+        active: false,
+        recoveryCount: 1,
+      },
+      adapterHealth: {
+        degraded: false,
+        degradedAdapterIds: [],
+      },
+    });
+
+    expect(kpiBody.botStatus).toBe("paused");
+    expect(kpiBody.runtime).toMatchObject({
+      status: "paused",
+      cycleCount: snapshot.counters.cycleCount,
+      blockedCount: snapshot.counters.blockedCount,
+      degraded: {
+        active: false,
+        recoveryCount: 1,
+      },
+      adapterHealth: {
+        degraded: false,
+        degradedAdapterIds: [],
+      },
+    });
+
+    expect(cyclesBody.success).toBe(true);
+    expect(cyclesBody.cycles).toEqual(persistedCycles);
+    expect(cyclesBody.cycles.length).toBeGreaterThanOrEqual(3);
+    expect(cyclesBody.cycles[1]).toMatchObject({
+      outcome: "blocked",
+      intakeOutcome: "stale",
+      degradedState: {
+        active: true,
+        recoveryCount: 0,
+        recoveredThisCycle: false,
+      },
+      adapterHealth: {
+        degraded: true,
+        degradedAdapterIds: ["primary"],
+        unhealthyAdapterIds: [],
+      },
+    });
+    expect(cyclesBody.cycles[2]).toMatchObject({
+      outcome: "success",
+      degradedState: {
+        active: false,
+        recoveryCount: 1,
+        recoveredThisCycle: true,
+      },
+      adapterHealth: {
+        degraded: false,
+        degradedAdapterIds: [],
+      },
+    });
+
+    expect(incidentsBody.success).toBe(true);
+    expect(incidentsBody.incidents).toEqual(persistedIncidents);
+    expect(incidentsBody.incidents.some((incident: IncidentRecord) => incident.type === "paper_ingest_blocked")).toBe(true);
   });
 
   it("GET /incidents respects bounded limits", async () => {

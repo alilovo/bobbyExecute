@@ -24,6 +24,34 @@ const TEST_CONFIG: Config = {
   reviewPolicyMode: "required",
 };
 
+function createMarketSnapshot(traceId: string, freshnessMs = 0) {
+  return {
+    schema_version: "market.v1" as const,
+    traceId,
+    timestamp: new Date().toISOString(),
+    source: "dexpaprika" as const,
+    poolId: `${traceId}-pool`,
+    baseToken: "SOL",
+    quoteToken: "USD",
+    priceUsd: 100,
+    volume24h: 1_000,
+    liquidity: 50_000,
+    freshnessMs,
+    status: "ok" as const,
+  };
+}
+
+async function waitForCondition(check: () => boolean, timeoutMs = 2_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (!check()) {
+    if (Date.now() > deadline) {
+      throw new Error("Timed out waiting for runtime condition");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 describe("DryRunRuntime (phase-2)", () => {
   afterEach(() => {
     resetKillSwitch();
@@ -366,6 +394,126 @@ describe("DryRunRuntime (phase-2)", () => {
     await runtime.stop();
   });
 
+  it("keeps repeated paper cycles reviewable across success, blocked, recovery, and error outcomes", async () => {
+    const paperConfig: Config = { ...TEST_CONFIG, executionMode: "paper", dryRun: false };
+    const cycleSummaryWriter = new InMemoryRuntimeCycleSummaryWriter();
+    const incidentRepo = new InMemoryIncidentRepository();
+    let adapterCalls = 0;
+    let engineCalls = 0;
+
+    const runtime = new DryRunRuntime(paperConfig, {
+      engine: {
+        run: vi.fn().mockImplementation(async () => {
+          engineCalls += 1;
+          if (engineCalls === 3) {
+            throw new Error("paper-runtime-burst-failure");
+          }
+
+          return {
+            stage: "monitor",
+            traceId: `engine-cycle-${engineCalls}`,
+            timestamp: new Date().toISOString(),
+          };
+        }),
+      } as never,
+      loopIntervalMs: 5,
+      paperMarketAdapters: [
+        {
+          id: "primary",
+          fetch: vi.fn().mockImplementation(async () => {
+            adapterCalls += 1;
+            return createMarketSnapshot(
+              `paper-cycle-${adapterCalls}`,
+              adapterCalls === 2 ? 45_000 : 0
+            );
+          }),
+        },
+      ],
+      fetchPaperWalletSnapshot: async () => ({
+        traceId: "paper-wallet",
+        timestamp: new Date().toISOString(),
+        source: "moralis",
+        walletAddress: TEST_CONFIG.walletAddress,
+        balances: [],
+        totalUsd: 0,
+      }),
+      cycleSummaryWriter,
+      incidentRecorder: new RepositoryIncidentRecorder(incidentRepo),
+    });
+
+    await runtime.start();
+    await waitForCondition(() => runtime.getSnapshot().status === "error");
+
+    const snapshot = runtime.getSnapshot();
+    const summaries = await cycleSummaryWriter.list(10);
+    const incidents = await runtime.listRecentIncidents(10);
+
+    expect(snapshot.status).toBe("error");
+    expect(snapshot.counters.cycleCount).toBe(4);
+    expect(snapshot.counters.blockedCount).toBe(1);
+    expect(snapshot.counters.errorCount).toBe(1);
+    expect(summaries.map((summary) => summary.outcome)).toEqual([
+      "success",
+      "blocked",
+      "success",
+      "error",
+    ]);
+    expect(new Set(summaries.map((summary) => summary.traceId)).size).toBe(4);
+
+    expect(summaries[1]).toMatchObject({
+      intakeOutcome: "stale",
+      blocked: true,
+      degradedState: {
+        active: true,
+        consecutiveCycles: 1,
+        recoveryCount: 0,
+        recoveredThisCycle: false,
+      },
+      adapterHealth: {
+        degraded: true,
+        degradedAdapterIds: ["primary"],
+        unhealthyAdapterIds: [],
+      },
+    });
+    expect(summaries[1].degradedState?.lastReason).toContain("stale");
+
+    expect(summaries[2]).toMatchObject({
+      outcome: "success",
+      intakeOutcome: "ok",
+      degradedState: {
+        active: false,
+        consecutiveCycles: 0,
+        recoveryCount: 1,
+        recoveredThisCycle: true,
+      },
+      adapterHealth: {
+        degraded: false,
+        degradedAdapterIds: [],
+      },
+    });
+    expect(summaries[2].degradedState?.lastRecoveredAt).toBeDefined();
+    expect(summaries[2].degradedState?.lastReason).toContain("stale");
+
+    expect(summaries[3]).toMatchObject({
+      outcome: "error",
+      intakeOutcome: "ok",
+      blockedReason: "RUNTIME_CYCLE_ERROR",
+      errorOccurred: true,
+      error: "paper-runtime-burst-failure",
+      degradedState: {
+        active: false,
+        recoveryCount: 1,
+        recoveredThisCycle: false,
+      },
+    });
+    expect(incidents.map((incident) => incident.type)).toEqual([
+      "paper_ingest_blocked",
+      "runtime_cycle_error",
+    ]);
+
+    await runtime.stop();
+  });
+
 
   it("supports explicit pause/resume/halt transitions truthfully", async () => {
     const runtime = new DryRunRuntime(TEST_CONFIG, {
@@ -392,6 +540,57 @@ describe("DryRunRuntime (phase-2)", () => {
     expect(pauseAfterHalt.success).toBe(false);
 
     await runtime.stop();
+  });
+
+  it("keeps pause, resume, and halt truthful across repeated paper cycles", async () => {
+    const paperConfig: Config = { ...TEST_CONFIG, executionMode: "paper", dryRun: false };
+    const incidentRepo = new InMemoryIncidentRepository();
+    const runtime = new DryRunRuntime(paperConfig, {
+      loopIntervalMs: 5,
+      paperMarketAdapters: [
+        {
+          id: "primary",
+          fetch: async () => createMarketSnapshot(`pause-cycle-${Date.now()}`),
+        },
+      ],
+      fetchPaperWalletSnapshot: async () => ({
+        traceId: "paper-wallet-pause",
+        timestamp: new Date().toISOString(),
+        source: "moralis",
+        walletAddress: TEST_CONFIG.walletAddress,
+        balances: [],
+        totalUsd: 0,
+      }),
+      incidentRecorder: new RepositoryIncidentRecorder(incidentRepo),
+    });
+
+    await runtime.start();
+    await waitForCondition(() => runtime.getSnapshot().counters.cycleCount >= 2);
+
+    const cycleCountBeforePause = runtime.getSnapshot().counters.cycleCount;
+    const paused = await runtime.pause("phase9_pause");
+    expect(paused.success).toBe(true);
+    expect(runtime.getSnapshot().status).toBe("paused");
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(runtime.getSnapshot().counters.cycleCount).toBe(cycleCountBeforePause);
+
+    const resumed = await runtime.resume("phase9_resume");
+    expect(resumed.success).toBe(true);
+    await waitForCondition(() => runtime.getSnapshot().counters.cycleCount > cycleCountBeforePause);
+
+    const cycleCountBeforeHalt = runtime.getSnapshot().counters.cycleCount;
+    const halted = await runtime.halt("phase9_halt");
+    expect(halted.success).toBe(true);
+    expect(runtime.getSnapshot().status).toBe("stopped");
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(runtime.getSnapshot().counters.cycleCount).toBe(cycleCountBeforeHalt);
+
+    const incidents = await runtime.listRecentIncidents(10);
+    expect(incidents.map((incident) => incident.type)).toContain("runtime_paused");
+    expect(incidents.map((incident) => incident.type)).toContain("runtime_resumed");
+    expect(incidents.map((incident) => incident.type)).toContain("runtime_halted");
   });
 
   it("records incidents for emergency-stop and runtime errors", async () => {

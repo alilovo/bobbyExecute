@@ -50,6 +50,7 @@ export function healthRoutes(deps: HealthRouteDeps): FastifyPluginAsync {
                   healthy: runtime.adapterHealth.healthy,
                   unhealthy: runtime.adapterHealth.unhealthy,
                   degraded: runtime.adapterHealth.degraded,
+                  degradedAdapterIds: runtime.adapterHealth.degradedAdapterIds,
                   unhealthyAdapterIds: runtime.adapterHealth.unhealthyAdapterIds,
                 }
               : undefined,
