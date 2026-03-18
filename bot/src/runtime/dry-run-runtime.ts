@@ -27,6 +27,7 @@ import {
   assertCanonicalPaperMarketAdapters,
   getPaperWalletProviderViolation,
 } from "../adapters/provider-roles.js";
+import type { ActionLogger } from "../observability/action-log.js";
 
 export type RuntimeStatus = "idle" | "running" | "paused" | "stopped" | "error";
 
@@ -80,6 +81,7 @@ export interface RuntimeCycleReplay {
 
 export interface DryRunRuntimeDeps {
   engine?: Engine;
+  actionLogger?: ActionLogger;
   loopIntervalMs?: number;
   logger?: Pick<Console, "info" | "error">;
   fetchMarketDataFn?: typeof fetchMarketData;
@@ -145,6 +147,7 @@ export class DryRunRuntime {
       deps.engine ??
       new Engine({
         dryRun: config.executionMode !== "live",
+        actionLogger: deps.actionLogger,
         journalWriter: this.journalWriter,
         journalPolicy: "mandatory",
       });

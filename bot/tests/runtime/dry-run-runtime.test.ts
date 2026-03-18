@@ -5,6 +5,7 @@ import { CircuitBreaker } from "../../src/governance/circuit-breaker.js";
 import { InMemoryRuntimeCycleSummaryWriter } from "../../src/persistence/runtime-cycle-summary-repository.js";
 import { InMemoryIncidentRepository } from "../../src/persistence/incident-repository.js";
 import { RepositoryIncidentRecorder } from "../../src/observability/incidents.js";
+import { InMemoryActionLogger } from "../../src/observability/action-log.js";
 import type { Config } from "../../src/config/config-schema.js";
 
 const TEST_CONFIG: Config = {
@@ -254,6 +255,37 @@ describe("DryRunRuntime (phase-2)", () => {
       mode: "paper-simulated",
       reason: "PAPER_MODE_SIMULATED_VERIFICATION",
     });
+
+    await runtime.stop();
+  });
+
+  it("records paper decision activity to the action logger when wired", async () => {
+    const paperConfig: Config = { ...TEST_CONFIG, executionMode: "paper", dryRun: false };
+    const actionLogger = new InMemoryActionLogger();
+    const runtime = new DryRunRuntime(paperConfig, {
+      loopIntervalMs: 50,
+      actionLogger,
+      paperMarketAdapters: [{ id: "dexpaprika", fetch: async () => createMarketSnapshot("paper-log") }],
+      fetchPaperWalletSnapshot: async () => ({
+        traceId: "wallet-paper-log",
+        timestamp: new Date().toISOString(),
+        source: "moralis",
+        walletAddress: TEST_CONFIG.walletAddress,
+        balances: [],
+        totalUsd: 0,
+      }),
+    });
+
+    await runtime.start();
+
+    const entries = actionLogger.list();
+    expect(entries.length).toBeGreaterThanOrEqual(1);
+    expect(entries[0]).toMatchObject({
+      agentId: "engine",
+      action: "complete",
+      blocked: false,
+    });
+    expect(entries[0].traceId).toBe(runtime.getSnapshot().lastState?.traceId);
 
     await runtime.stop();
   });

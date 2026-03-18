@@ -4,6 +4,7 @@ import { resetConfigCache } from "../../src/config/load-config.js";
 import { resetKillSwitch } from "../../src/governance/kill-switch.js";
 import type { MarketSnapshot } from "../../src/core/contracts/market.js";
 import type { WalletSnapshot } from "../../src/core/contracts/wallet.js";
+import { InMemoryActionLogger } from "../../src/observability/action-log.js";
 
 const ORIG_ENV = process.env;
 
@@ -167,6 +168,83 @@ describe("bootstrap runtime closure (phase-1)", () => {
         port: 3352,
       })
     ).rejects.toThrow(/LIVE_TRADING=true.*requires RPC_MODE=real/);
+  });
+
+  it("wires runtime action logging into KPI decision and summary surfaces", async () => {
+    process.env.DRY_RUN = "false";
+    process.env.WALLET_ADDRESS = "11111111111111111111111111111111";
+    process.env.CONTROL_TOKEN = "phase10-paper-actionlog-token";
+    delete process.env.LIVE_TRADING;
+
+    const actionLogger = new InMemoryActionLogger();
+    const marketSnapshot: MarketSnapshot = {
+      schema_version: "market.v1",
+      traceId: "paper-market-kpi",
+      timestamp: "2026-03-18T00:00:00.000Z",
+      source: "dexpaprika",
+      poolId: "paper-pool-kpi",
+      baseToken: "SOL",
+      quoteToken: "USD",
+      priceUsd: 130,
+      volume24h: 250000,
+      liquidity: 950000,
+      freshnessMs: 0,
+      status: "ok",
+    };
+    const walletSnapshot: WalletSnapshot = {
+      traceId: "paper-wallet-kpi",
+      timestamp: "2026-03-18T00:00:00.000Z",
+      source: "moralis",
+      walletAddress: process.env.WALLET_ADDRESS,
+      balances: [],
+      totalUsd: 0,
+    };
+
+    const { server, runtime } = await bootstrap({
+      host: "127.0.0.1",
+      port: 3356,
+      runtimeDeps: {
+        actionLogger,
+        paperMarketAdapters: [
+          {
+            id: "dexpaprika",
+            fetch: async () => marketSnapshot,
+          },
+        ],
+        fetchPaperWalletSnapshot: async () => walletSnapshot,
+      },
+    });
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      const [summaryRes, decisionsRes] = await Promise.all([
+        fetch("http://127.0.0.1:3356/kpi/summary"),
+        fetch("http://127.0.0.1:3356/kpi/decisions"),
+      ]);
+      expect(summaryRes.status).toBe(200);
+      expect(decisionsRes.status).toBe(200);
+
+      const summary = await summaryRes.json();
+      const decisions = await decisionsRes.json();
+      const runtimeSnapshot = runtime.getSnapshot();
+      const actionEntries = actionLogger.list();
+      const latestEntry = actionEntries[actionEntries.length - 1];
+
+      expect(runtimeSnapshot.counters.decisionCount).toBeGreaterThanOrEqual(1);
+      expect(actionEntries.length).toBeGreaterThanOrEqual(1);
+      expect(summary.lastDecisionAt).toBeTruthy();
+      expect(summary.tradesToday).toBeGreaterThanOrEqual(1);
+      expect(summary.lastDecisionAt).toBe(latestEntry.ts);
+      expect(decisions.decisions.length).toBeGreaterThanOrEqual(1);
+      expect(decisions.decisions[0]).toMatchObject({
+        action: "allow",
+        token: "USDC",
+        confidence: 0.8,
+      });
+    } finally {
+      await runtime.stop();
+      await server.close();
+    }
   });
 
   it("fails fast when live startup prerequisites are incomplete", async () => {

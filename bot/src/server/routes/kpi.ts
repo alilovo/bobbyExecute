@@ -38,10 +38,16 @@ function mapHealthToStatus(h: AdapterHealth): KpiAdapter["status"] {
 function actionToKpiDecision(entry: ActionLogEntry, index: number): KpiDecision {
   const action =
     entry.blocked === true ? "block" : entry.skillBlockReason ? "abort" : "allow";
-  const token = (entry.input as { token?: string })?.token ?? "unknown";
+  const inputPayload = entry.input as {
+    token?: string;
+    signal?: { confidence?: number };
+    tradeIntent?: { tokenOut?: string; tokenIn?: string };
+    executionReport?: { success?: boolean; paperExecution?: boolean };
+  };
+  const token = inputPayload.token ?? inputPayload.tradeIntent?.tokenOut ?? inputPayload.tradeIntent?.tokenIn ?? "unknown";
   const confidence = typeof entry.output === "object" && entry.output !== null && "confidence" in entry.output
     ? (entry.output as { confidence?: number }).confidence ?? 0
-    : 0;
+    : inputPayload.signal?.confidence ?? 0;
   const reasons: string[] = [];
   if (entry.reason) reasons.push(entry.reason);
   if (entry.skillBlockReason) reasons.push(entry.skillBlockReason);
@@ -53,6 +59,14 @@ function actionToKpiDecision(entry: ActionLogEntry, index: number): KpiDecision 
     confidence,
     reasons,
   };
+}
+
+function isTradeExecutionEntry(entry: ActionLogEntry): boolean {
+  const inputPayload = entry.input as {
+    executionReport?: { success?: boolean; paperExecution?: boolean };
+  };
+  const executionReport = inputPayload.executionReport;
+  return entry.action === "complete" && entry.blocked !== true && executionReport?.success === true;
 }
 
 export function kpiRoutes(deps: KpiRouteDeps): FastifyPluginAsync {
@@ -76,9 +90,10 @@ export function kpiRoutes(deps: KpiRouteDeps): FastifyPluginAsync {
 
     fastify.get<{ Reply: KpiSummaryResponse }>("/kpi/summary", async (_request, reply) => {
     const entries = await getEntries();
+    const runtime = getRuntimeSnapshot?.();
     const lastEntry = entries[entries.length - 1];
-    const lastDecisionAt = lastEntry?.ts ?? null;
-    const tradesToday = entries.filter((e) => e.action === "execute" && !e.blocked).length;
+    const lastDecisionAt = lastEntry?.ts ?? runtime?.lastDecisionAt ?? null;
+    const tradesToday = entries.filter(isTradeExecutionEntry).length;
     const dataQuality =
       circuitBreaker != null
         ? (() => {
@@ -86,9 +101,9 @@ export function kpiRoutes(deps: KpiRouteDeps): FastifyPluginAsync {
             const healthy = health.filter((h) => h.healthy).length;
             return health.length > 0 ? healthy / health.length : 1;
           })()
-        : 1;
-
-    const runtime = getRuntimeSnapshot?.();
+        : runtime?.adapterHealth && runtime.adapterHealth.total > 0
+          ? runtime.adapterHealth.healthy / runtime.adapterHealth.total
+          : 1;
     const body: KpiSummaryResponse = {
       botStatus: getBotStatus?.() ?? botStatus,
       riskScore,
@@ -137,17 +152,33 @@ export function kpiRoutes(deps: KpiRouteDeps): FastifyPluginAsync {
   );
 
   fastify.get<{ Reply: KpiAdaptersResponse }>("/kpi/adapters", async (_request, reply) => {
+    const runtime = getRuntimeSnapshot?.();
     const health = circuitBreaker?.getHealth() ?? [];
-    const adapters: KpiAdapter[] = health.map((h) => ({
-      id: h.adapterId,
-      status: mapHealthToStatus(h),
-      latencyMs: h.averageLatencyMs,
-      lastSuccessAt:
-        h.lastCheckedAt > 0
-          ? new Date(h.lastCheckedAt).toISOString()
-          : new Date(0).toISOString(),
-      consecutiveFailures: h.consecutiveFailures,
-    }));
+    const adapters: KpiAdapter[] =
+      health.length > 0
+        ? health.map((h) => ({
+            id: h.adapterId,
+            status: mapHealthToStatus(h),
+            latencyMs: h.averageLatencyMs,
+            lastSuccessAt:
+              h.lastCheckedAt > 0
+                ? new Date(h.lastCheckedAt).toISOString()
+                : new Date(0).toISOString(),
+            consecutiveFailures: h.consecutiveFailures,
+          }))
+        : runtime?.adapterHealth
+          ? runtime.adapterHealth.adapterIds.map((id) => {
+              const unhealthy = runtime.adapterHealth?.unhealthyAdapterIds.includes(id) ?? false;
+              const degraded = runtime.adapterHealth?.degradedAdapterIds.includes(id) ?? false;
+              return {
+                id,
+                status: unhealthy ? "down" : degraded ? "degraded" : "healthy",
+                latencyMs: 0,
+                lastSuccessAt: runtime.lastCycleAt ?? new Date(0).toISOString(),
+                consecutiveFailures: 0,
+              } satisfies KpiAdapter;
+            })
+          : [];
     if (adapters.length === 0 && ADAPTER_IDS.length > 0) {
       for (const id of ADAPTER_IDS) {
         adapters.push({

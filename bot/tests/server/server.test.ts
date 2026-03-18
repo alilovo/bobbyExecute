@@ -150,6 +150,87 @@ describe("Server (Wave 3)", () => {
     }
   });
 
+  it("derives health, dataQuality, and adapter status from runtime snapshot when circuit breaker is not wired", async () => {
+    const srv = await createServer({
+      port: PORT + 5,
+      host: "127.0.0.1",
+      getRuntimeSnapshot: () => ({
+        status: "running",
+        mode: "paper",
+        paperModeActive: true,
+        cycleInFlight: false,
+        counters: {
+          cycleCount: 4,
+          decisionCount: 4,
+          executionCount: 3,
+          blockedCount: 1,
+          errorCount: 0,
+        },
+        lastCycleAt: "2026-03-18T12:00:00.000Z",
+        lastDecisionAt: "2026-03-18T12:00:00.000Z",
+        lastState: {
+          stage: "monitor",
+          traceId: "trace-paper-runtime-only",
+          timestamp: "2026-03-18T12:00:00.000Z",
+          blocked: false,
+        },
+        degradedState: {
+          active: false,
+          consecutiveCycles: 0,
+          recoveryCount: 1,
+          lastRecoveredAt: "2026-03-18T11:59:00.000Z",
+          lastReason: "paper ingest recovered",
+        },
+        adapterHealth: {
+          total: 2,
+          healthy: 1,
+          unhealthy: 1,
+          degraded: true,
+          adapterIds: ["primary", "secondary"],
+          degradedAdapterIds: ["primary"],
+          unhealthyAdapterIds: ["primary"],
+        },
+      }),
+    });
+
+    try {
+      const [healthRes, summaryRes, adaptersRes] = await Promise.all([
+        fetch(`http://127.0.0.1:${PORT + 5}/health`),
+        fetch(`http://127.0.0.1:${PORT + 5}/kpi/summary`),
+        fetch(`http://127.0.0.1:${PORT + 5}/kpi/adapters`),
+      ]);
+
+      expect(healthRes.status).toBe(200);
+      expect(summaryRes.status).toBe(200);
+      expect(adaptersRes.status).toBe(200);
+
+      const health = await healthRes.json();
+      const summary = await summaryRes.json();
+      const adapters = await adaptersRes.json();
+
+      expect(health.status).toBe("DEGRADED");
+      expect(summary.dataQuality).toBe(0.5);
+      expect(adapters.adapters).toEqual([
+        {
+          id: "primary",
+          status: "down",
+          latencyMs: 0,
+          lastSuccessAt: "2026-03-18T12:00:00.000Z",
+          consecutiveFailures: 0,
+        },
+        {
+          id: "secondary",
+          status: "healthy",
+          latencyMs: 0,
+          lastSuccessAt: "2026-03-18T12:00:00.000Z",
+          consecutiveFailures: 0,
+        },
+      ]);
+    } finally {
+      await srv.close();
+    }
+  });
+
   it("GET /kpi/summary returns bot status and metrics", async () => {
     const res = await fetch(`${baseUrl}/kpi/summary`);
     expect(res.status).toBe(200);
@@ -162,6 +243,110 @@ describe("Server (Wave 3)", () => {
       tradesToday: expect.any(Number),
     });
     expect(typeof body.lastDecisionAt === "string" || body.lastDecisionAt === null).toBe(true);
+  });
+
+  it("derives lastDecisionAt from runtime snapshot when action logger has no entries", async () => {
+    const srv = await createServer({
+      port: PORT + 6,
+      host: "127.0.0.1",
+      actionLogger: new InMemoryActionLogger(),
+      getRuntimeSnapshot: () => ({
+        status: "running",
+        mode: "paper",
+        paperModeActive: true,
+        cycleInFlight: false,
+        counters: {
+          cycleCount: 2,
+          decisionCount: 2,
+          executionCount: 1,
+          blockedCount: 1,
+          errorCount: 0,
+        },
+        lastCycleAt: "2026-03-18T12:01:00.000Z",
+        lastDecisionAt: "2026-03-18T12:01:00.000Z",
+        lastState: {
+          stage: "monitor",
+          traceId: "trace-runtime-fallback",
+          timestamp: "2026-03-18T12:01:00.000Z",
+          blocked: false,
+        },
+      }),
+    });
+
+    try {
+      const summaryRes = await fetch(`http://127.0.0.1:${PORT + 6}/kpi/summary`);
+      expect(summaryRes.status).toBe(200);
+      const summary = await summaryRes.json();
+      expect(summary.lastDecisionAt).toBe("2026-03-18T12:01:00.000Z");
+      expect(summary.tradesToday).toBe(0);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it("counts tradesToday from grounded runtime action entries", async () => {
+    const actionLogger = new InMemoryActionLogger();
+    await actionLogger.append({
+      agentId: "engine",
+      userId: "system",
+      action: "complete",
+      input: {
+        signal: { confidence: 0.8 },
+        tradeIntent: { tokenOut: "USDC" },
+        executionReport: { success: true, paperExecution: true },
+      },
+      output: {},
+      ts: "2026-03-18T12:02:00.000Z",
+      blocked: false,
+      traceId: "trace-trade-complete",
+    });
+    await actionLogger.append({
+      agentId: "engine",
+      userId: "system",
+      action: "risk_blocked",
+      input: {
+        signal: { confidence: 0.2 },
+        tradeIntent: { tokenOut: "USDC" },
+      },
+      output: {},
+      ts: "2026-03-18T12:03:00.000Z",
+      blocked: true,
+      reason: "RISK_FAIL_CLOSED",
+      traceId: "trace-trade-blocked",
+    });
+
+    const srv = await createServer({
+      port: PORT + 7,
+      host: "127.0.0.1",
+      actionLogger,
+    });
+
+    try {
+      const [summaryRes, decisionsRes] = await Promise.all([
+        fetch(`http://127.0.0.1:${PORT + 7}/kpi/summary`),
+        fetch(`http://127.0.0.1:${PORT + 7}/kpi/decisions`),
+      ]);
+      expect(summaryRes.status).toBe(200);
+      expect(decisionsRes.status).toBe(200);
+
+      const summary = await summaryRes.json();
+      const decisions = await decisionsRes.json();
+      expect(summary.tradesToday).toBe(1);
+      expect(summary.lastDecisionAt).toBe("2026-03-18T12:03:00.000Z");
+      expect(decisions.decisions[0]).toMatchObject({
+        action: "block",
+        token: "USDC",
+        confidence: 0.2,
+        reasons: ["RISK_FAIL_CLOSED"],
+      });
+      expect(decisions.decisions[1]).toMatchObject({
+        action: "allow",
+        token: "USDC",
+        confidence: 0.8,
+      });
+    } finally {
+      await srv.close();
+    }
   });
 
   it("GET /kpi/decisions returns decisions array", async () => {

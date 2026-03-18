@@ -19,6 +19,7 @@ import {
 } from "./adapters/provider-roles.js";
 import type { Config } from "./config/config-schema.js";
 import { CircuitBreaker } from "./governance/circuit-breaker.js";
+import { FileSystemActionLogger } from "./observability/action-log.js";
 
 const DEFAULT_PAPER_TOKEN_ID = "So11111111111111111111111111111111111111112";
 
@@ -37,7 +38,8 @@ export async function bootstrap(options?: {
   const config = loadConfig();
   const port = options?.port ?? parseInt(process.env.PORT ?? "3333", 10);
   const host = options?.host ?? process.env.HOST ?? "0.0.0.0";
-  const runtime = createDryRunRuntime(config, createBootstrapRuntimeDeps(config, options?.runtimeDeps));
+  const runtimeDeps = createBootstrapRuntimeDeps(config, options?.runtimeDeps);
+  const runtime = createDryRunRuntime(config, runtimeDeps);
 
   console.info(
     "[bootstrap] Starting BobbyExecution runtime",
@@ -70,6 +72,7 @@ export async function bootstrap(options?: {
       getRuntimeSnapshot,
       runtime,
       controlAuthToken: config.controlToken,
+      actionLogger: runtimeDeps.actionLogger,
     });
   } catch (error) {
     await runtime.stop();
@@ -79,9 +82,15 @@ export async function bootstrap(options?: {
   return { server, runtime };
 }
 
-function createBootstrapRuntimeDeps(config: Config, runtimeDeps?: DryRunRuntimeDeps): DryRunRuntimeDeps | undefined {
+function createBootstrapRuntimeDeps(config: Config, runtimeDeps?: DryRunRuntimeDeps): DryRunRuntimeDeps {
+  const actionLogger =
+    runtimeDeps?.actionLogger ??
+    new FileSystemActionLogger(config.journalPath.replace(/\.jsonl$/i, "") + ".actions.jsonl");
   if (config.executionMode !== "paper") {
-    return runtimeDeps;
+    return {
+      ...runtimeDeps,
+      actionLogger,
+    };
   }
 
   if (!config.walletAddress) {
@@ -112,6 +121,7 @@ function createBootstrapRuntimeDeps(config: Config, runtimeDeps?: DryRunRuntimeD
 
   return {
     ...runtimeDeps,
+    actionLogger,
     paperAdapterCircuitBreaker,
     paperMarketAdapters,
     fetchPaperWalletSnapshot:
