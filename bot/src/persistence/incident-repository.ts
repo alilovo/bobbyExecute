@@ -14,7 +14,8 @@ export interface IncidentRecord {
     | "runtime_resumed"
     | "runtime_halted"
     | "paper_ingest_blocked"
-    | "runtime_cycle_error";
+    | "runtime_cycle_error"
+    | "journal_failure";
   message: string;
   details?: Record<string, string | number | boolean | null | undefined>;
 }

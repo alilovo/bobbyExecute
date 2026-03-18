@@ -333,6 +333,26 @@ describe("DryRunRuntime (phase-2)", () => {
     await runtime.stop();
   });
 
+  it("records a dedicated incident when mandatory journal persistence fails", async () => {
+    const incidentRepo = new InMemoryIncidentRepository();
+    const runtime = new DryRunRuntime(TEST_CONFIG, {
+      engine: { run: vi.fn().mockRejectedValue(new Error("forced journal failure at chaos_decision")) } as never,
+      loopIntervalMs: 10,
+      incidentRecorder: new RepositoryIncidentRecorder(incidentRepo),
+    });
+
+    await expect(runtime.start()).rejects.toThrow("forced journal failure at chaos_decision");
+
+    const incidents = await runtime.listRecentIncidents(10);
+    const journalFailure = incidents.find((incident) => incident.type === "journal_failure");
+    expect(journalFailure).toBeDefined();
+    expect(journalFailure?.details?.stage).toBe("chaos_decision");
+    expect(journalFailure?.details?.intakeOutcome).toBe("ok");
+    expect(journalFailure?.details?.traceId).toBe(runtime.getSnapshot().lastState?.traceId);
+    expect(incidents.some((incident) => incident.type === "runtime_cycle_error")).toBe(true);
+
+    await runtime.stop();
+  });
 
   it("paused runtime does not continue cycle progression", async () => {
     const runtime = new DryRunRuntime(TEST_CONFIG, {
