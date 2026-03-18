@@ -1,11 +1,6 @@
 /**
  * Clients - canonical exports for external service integrations.
- * LLM: use llmClient (generateResponse) for all LLM calls.
+ * LLM: use generateResponse for all LLM calls.
  */
-export {
-  client,
-  isXaiMode,
-  currentProvider,
-  currentModel,
-  generateResponse,
-} from "./llmClient.js";
+export { client, isXaiMode, currentProvider, currentModel } from "./llmClient.js";
+export { generateResponse } from "./fallbackCascade.js";
