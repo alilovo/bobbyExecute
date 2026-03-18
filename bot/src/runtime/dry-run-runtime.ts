@@ -450,6 +450,20 @@ export class DryRunRuntime {
         blockedReason: "RUNTIME_CYCLE_ERROR",
         error: errorMessage,
       };
+      const journalFailure = this.extractJournalFailureDetails(errorMessage, traceId);
+      if (journalFailure) {
+        await this.recordIncident({
+          severity: "critical",
+          type: "journal_failure",
+          message: "Mandatory journal persistence failed",
+          details: {
+            error: errorMessage,
+            intakeOutcome: currentCycleIntakeOutcome,
+            traceId,
+            ...(journalFailure.stage ? { stage: journalFailure.stage } : {}),
+          },
+        });
+      }
       await this.recordIncident({
         severity: "critical",
         type: "runtime_cycle_error",
@@ -457,6 +471,7 @@ export class DryRunRuntime {
         details: {
           error: errorMessage,
           intakeOutcome: currentCycleIntakeOutcome,
+          traceId,
         },
       });
       await this.persistCycleSummary({
@@ -608,6 +623,23 @@ export class DryRunRuntime {
     details?: IncidentRecord["details"];
   }): Promise<void> {
     await this.incidentRecorder.record(input);
+  }
+
+  private extractJournalFailureDetails(
+    errorMessage: string,
+    traceId: string
+  ): { stage?: string; traceId: string } | null {
+    const missingWriterMatch = errorMessage.match(/^MANDATORY_JOURNAL_WRITER_MISSING:(.+)$/);
+    if (missingWriterMatch) {
+      return { stage: missingWriterMatch[1], traceId };
+    }
+
+    const forcedFailureMatch = errorMessage.match(/^forced journal failure at (.+)$/i);
+    if (forcedFailureMatch) {
+      return { stage: forcedFailureMatch[1], traceId };
+    }
+
+    return this.lastState?.stage === "journal" ? { stage: "journal", traceId } : null;
   }
 }
 
