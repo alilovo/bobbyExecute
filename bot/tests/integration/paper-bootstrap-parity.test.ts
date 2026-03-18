@@ -107,7 +107,7 @@ describe("paper bootstrap integration parity (phase-6)", () => {
       port: PORT,
       runtimeDeps: {
         loopIntervalMs: 60_000,
-        paperMarketAdapters: [{ id: "phase6-paper-adapter", fetch: async () => marketSnapshot }],
+        paperMarketAdapters: [{ id: "dexpaprika", fetch: async () => marketSnapshot }],
         fetchPaperWalletSnapshot: async () => walletSnapshot,
         cycleSummaryWriter,
         incidentRecorder: new RepositoryIncidentRecorder(incidentRepository),

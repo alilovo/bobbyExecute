@@ -25,9 +25,9 @@ const freshSnapshot = (overrides: Partial<MarketSnapshot> = {}): MarketSnapshot 
 });
 
 describe("Adapter orchestrator fallback (P7)", () => {
-  it("returns primary result when primary succeeds", async () => {
+  it("returns DexPaprika market truth when the primary market adapter succeeds", async () => {
     const primary: MarketAdapterFetch = {
-      id: "primary",
+      id: "dexpaprika",
       fetch: async () => freshSnapshot(),
     };
     const result = await fetchMarketWithFallback([primary], "pool-1", 30_000);
@@ -36,50 +36,50 @@ describe("Adapter orchestrator fallback (P7)", () => {
     expect((result as MarketSnapshot).priceUsd).toBe(150);
   });
 
-  it("falls back to secondary when primary fails and preserves explicit health truth", async () => {
-    const circuitBreaker = new CircuitBreaker(["primary", "secondary"], { failureThreshold: 2 });
+  it("falls back to a secondary cross-check only after DexPaprika fails and preserves explicit health truth", async () => {
+    const circuitBreaker = new CircuitBreaker(["dexpaprika", "moralis"], { failureThreshold: 2 });
     const primary: MarketAdapterFetch = {
-      id: "primary",
+      id: "dexpaprika",
       fetch: async () => {
         throw new Error("Primary failed");
       },
     };
     const secondary: MarketAdapterFetch = {
-      id: "secondary",
-      fetch: async () => freshSnapshot({ traceId: "t2", source: "dexscreener", priceUsd: 151, freshnessMs: 100 }),
+      id: "moralis",
+      fetch: async () => freshSnapshot({ traceId: "t2", source: "moralis", priceUsd: 151, freshnessMs: 100 }),
     };
     const result = await fetchMarketWithFallback([primary, secondary], "pool-1", 30_000, circuitBreaker);
     expect("error" in result).toBe(false);
-    expect((result as MarketSnapshot).source).toBe("dexscreener");
+    expect((result as MarketSnapshot).source).toBe("moralis");
     expect((result as MarketSnapshot).priceUsd).toBe(151);
 
     const health = circuitBreaker.getHealth();
-    expect(health.find((entry) => entry.adapterId === "primary")?.consecutiveFailures).toBe(1);
-    expect(health.find((entry) => entry.adapterId === "secondary")?.healthy).toBe(true);
+    expect(health.find((entry) => entry.adapterId === "dexpaprika")?.consecutiveFailures).toBe(1);
+    expect(health.find((entry) => entry.adapterId === "moralis")?.healthy).toBe(true);
   });
 
-  it("rejects stale fallback data and marks stale adapter unhealthy when failures persist", async () => {
-    const circuitBreaker = new CircuitBreaker(["primary", "fallback"], { failureThreshold: 1 });
+  it("rejects stale DexPaprika data before accepting a fresher secondary cross-check", async () => {
+    const circuitBreaker = new CircuitBreaker(["dexpaprika", "moralis"], { failureThreshold: 1 });
     const primary: MarketAdapterFetch = {
-      id: "primary",
+      id: "dexpaprika",
       fetch: async () => freshSnapshot({ freshnessMs: 45_000 }),
     };
     const fallback: MarketAdapterFetch = {
-      id: "fallback",
-      fetch: async () => freshSnapshot({ traceId: "fresh-fallback", source: "dexscreener", priceUsd: 149 }),
+      id: "moralis",
+      fetch: async () => freshSnapshot({ traceId: "fresh-fallback", source: "moralis", priceUsd: 149 }),
     };
 
     const result = await fetchMarketWithFallback([primary, fallback], "pool-1", 15_000, circuitBreaker);
     expect("error" in result).toBe(false);
     expect((result as MarketSnapshot).traceId).toBe("fresh-fallback");
-    expect(circuitBreaker.getHealth().find((entry) => entry.adapterId === "primary")?.healthy).toBe(false);
+    expect(circuitBreaker.getHealth().find((entry) => entry.adapterId === "dexpaprika")?.healthy).toBe(false);
   });
 
-  it("returns aggregated fail-closed error when all adapters fail or remain unavailable", async () => {
-    const circuitBreaker = new CircuitBreaker(["a1", "a2"], { failureThreshold: 1 });
+  it("returns aggregated fail-closed error when DexPaprika and the secondary cross-check both fail", async () => {
+    const circuitBreaker = new CircuitBreaker(["dexpaprika", "moralis"], { failureThreshold: 1 });
     const adapters: MarketAdapterFetch[] = [
-      { id: "a1", fetch: async () => { throw new Error("Fail 1"); } },
-      { id: "a2", fetch: async () => freshSnapshot({ freshnessMs: 60_000 }) },
+      { id: "dexpaprika", fetch: async () => { throw new Error("Fail 1"); } },
+      { id: "moralis", fetch: async () => freshSnapshot({ freshnessMs: 60_000, source: "moralis" }) },
     ];
     const result = await fetchMarketWithFallback(adapters, "pool-1", 15_000, circuitBreaker);
     expect("error" in result).toBe(true);

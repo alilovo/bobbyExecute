@@ -23,6 +23,10 @@ import {
 } from "../persistence/runtime-cycle-summary-repository.js";
 import { FileSystemIncidentRepository, type IncidentRecord } from "../persistence/incident-repository.js";
 import { RepositoryIncidentRecorder, type IncidentRecorder } from "../observability/incidents.js";
+import {
+  assertCanonicalPaperMarketAdapters,
+  getPaperWalletProviderViolation,
+} from "../adapters/provider-roles.js";
 
 export type RuntimeStatus = "idle" | "running" | "paused" | "stopped" | "error";
 
@@ -149,6 +153,9 @@ export class DryRunRuntime {
     this.mode = config.executionMode;
     this.fetchMarketDataFn = deps.fetchMarketDataFn ?? fetchMarketData;
     this.paperMarketAdapters = deps.paperMarketAdapters ?? [];
+    if (this.mode === "paper") {
+      assertCanonicalPaperMarketAdapters(this.paperMarketAdapters);
+    }
     this.paperAdapterCircuitBreaker =
       deps.paperAdapterCircuitBreaker ?? new CircuitBreaker(this.paperMarketAdapters.map((adapter) => adapter.id));
     this.maxPaperMarketStalenessMs = deps.maxPaperMarketStalenessMs ?? 15_000;
@@ -764,6 +771,35 @@ export class DryRunRuntime {
     this.clearAdapterDegradedState(now);
 
     const wallet = await this.fetchPaperWalletSnapshot();
+    const walletProviderViolation = getPaperWalletProviderViolation(wallet);
+    if (walletProviderViolation) {
+      return {
+        kind: "blocked",
+        summary: {
+          cycleTimestamp: now,
+          traceId,
+          mode: this.mode,
+          outcome: "blocked",
+          intakeOutcome: "invalid",
+          advanced: false,
+          stage: "ingest",
+          blocked: true,
+          blockedReason: `PAPER_INGEST_BLOCKED:${walletProviderViolation}`,
+          decisionOccurred: false,
+          signalOccurred: false,
+          riskOccurred: false,
+          chaosOccurred: false,
+          executionOccurred: false,
+          verificationOccurred: false,
+          paperExecutionProduced: false,
+          errorOccurred: false,
+          degradedState: this.getCycleDegradedStateSummary(),
+          adapterHealth: this.getCycleAdapterHealthSummary(),
+          incidentIds: [],
+        },
+      };
+    }
+
     if (!wallet.walletAddress) {
       return {
         kind: "blocked",

@@ -1,6 +1,6 @@
 /**
  * Adapter orchestrator - primary → secondary → fallback.
- * Normalized planning package P3: deterministic fallback path.
+ * Caller-owned ordering is authoritative; paper runtime must place DexPaprika first.
  * All adapters fail → returns { error }. Stale data → skip, try next.
  */
 import type { MarketSnapshot } from "../../core/contracts/market.js";

@@ -43,6 +43,8 @@ export interface AdaptersWithCbResult {
  * Creates CircuitBreaker and HTTP adapters with circuit breaker wired.
  * Consecutive failures open the breaker; requireHealthy blocks when open (fail-closed).
  * When useFallbackCache=true, adapter failures return cached data when available.
+ * Canonical paper/runtime roles are defined separately:
+ * DexPaprika = primary market, Moralis = primary wallet/holder/search, DexCheck = optional intelligence-only.
  */
 export function createAdaptersWithCircuitBreaker(
   config: AdaptersWithCbConfig = {}

@@ -161,6 +161,15 @@ describe("DryRunRuntime (phase-2)", () => {
     const runtime = new DryRunRuntime(paperConfig, {
       engine: { run } as never,
       loopIntervalMs: 10,
+      paperMarketAdapters: [{ id: "dexpaprika", fetch: vi.fn() }],
+      fetchPaperWalletSnapshot: async () => ({
+        traceId: "paper-wallet-killswitch",
+        timestamp: new Date().toISOString(),
+        source: "moralis",
+        walletAddress: TEST_CONFIG.walletAddress,
+        balances: [],
+        totalUsd: 0,
+      }),
     });
 
     triggerKillSwitch("paper-halt");
@@ -201,7 +210,7 @@ describe("DryRunRuntime (phase-2)", () => {
     const runtime = new DryRunRuntime(paperConfig, {
       loopIntervalMs: 50,
       fetchMarketDataFn,
-      paperMarketAdapters: [{ id: "primary", fetch: vi.fn() }],
+      paperMarketAdapters: [{ id: "dexpaprika", fetch: vi.fn() }],
       fetchPaperWalletSnapshot: async () => ({
         traceId: "w1",
         timestamp: new Date().toISOString(),
@@ -256,7 +265,7 @@ describe("DryRunRuntime (phase-2)", () => {
     const runtime = new DryRunRuntime(paperConfig, {
       engine: { run } as never,
       fetchMarketDataFn: vi.fn().mockResolvedValue({ error: "All adapters failed: data stale" }),
-      paperMarketAdapters: [{ id: "primary", fetch: vi.fn() }],
+      paperMarketAdapters: [{ id: "dexpaprika", fetch: vi.fn() }],
       fetchPaperWalletSnapshot: vi.fn(),
       cycleSummaryWriter,
     });
@@ -305,8 +314,8 @@ describe("DryRunRuntime (phase-2)", () => {
       } as never);
     const runtime = new DryRunRuntime(paperConfig, {
       loopIntervalMs: 5,
-      paperMarketAdapters: [{ id: "primary", fetch: adapterFetch }],
-      paperAdapterCircuitBreaker: new CircuitBreaker(['primary'], { failureThreshold: 1 }),
+      paperMarketAdapters: [{ id: "dexpaprika", fetch: adapterFetch }],
+      paperAdapterCircuitBreaker: new CircuitBreaker(["dexpaprika"], { failureThreshold: 1 }),
       fetchPaperWalletSnapshot: vi.fn(),
       cycleSummaryWriter,
       incidentRecorder: new RepositoryIncidentRecorder(incidentRepo),
@@ -324,7 +333,7 @@ describe("DryRunRuntime (phase-2)", () => {
     expect(snapshot.degradedState?.lastReason).toContain("circuit breaker open");
     expect(snapshot.lastCycleSummary?.intakeOutcome).toBe("adapter_error");
     expect(snapshot.adapterHealth?.degraded).toBe(true);
-    expect(snapshot.adapterHealth?.unhealthyAdapterIds).toEqual(["primary"]);
+    expect(snapshot.adapterHealth?.unhealthyAdapterIds).toEqual(["dexpaprika"]);
 
     const summaries = await cycleSummaryWriter.list();
     expect(summaries.some((summary) => summary.intakeOutcome === "stale")).toBe(true);
@@ -353,7 +362,7 @@ describe("DryRunRuntime (phase-2)", () => {
         freshnessMs: 0,
         status: "ok",
       }),
-      paperMarketAdapters: [{ id: "primary", fetch: vi.fn() }],
+      paperMarketAdapters: [{ id: "dexpaprika", fetch: vi.fn() }],
       fetchPaperWalletSnapshot: async () => ({
         traceId: "w-paper-ok",
         timestamp: new Date().toISOString(),
@@ -420,7 +429,7 @@ describe("DryRunRuntime (phase-2)", () => {
       loopIntervalMs: 5,
       paperMarketAdapters: [
         {
-          id: "primary",
+          id: "dexpaprika",
           fetch: vi.fn().mockImplementation(async () => {
             adapterCalls += 1;
             return createMarketSnapshot(
@@ -472,7 +481,7 @@ describe("DryRunRuntime (phase-2)", () => {
       },
       adapterHealth: {
         degraded: true,
-        degradedAdapterIds: ["primary"],
+        degradedAdapterIds: ["dexpaprika"],
         unhealthyAdapterIds: [],
       },
     });
@@ -550,7 +559,7 @@ describe("DryRunRuntime (phase-2)", () => {
       loopIntervalMs: 5,
       paperMarketAdapters: [
         {
-          id: "primary",
+          id: "dexpaprika",
           fetch: async () => createMarketSnapshot(`pause-cycle-${Date.now()}`),
         },
       ],
@@ -640,7 +649,7 @@ describe("DryRunRuntime (phase-2)", () => {
     const incidentRepo = new InMemoryIncidentRepository();
     const runtime = new DryRunRuntime(paperConfig, {
       fetchMarketDataFn: vi.fn().mockResolvedValue({ error: "All adapters failed: data stale" }),
-      paperMarketAdapters: [{ id: "primary", fetch: vi.fn() }],
+      paperMarketAdapters: [{ id: "dexpaprika", fetch: vi.fn() }],
       fetchPaperWalletSnapshot: vi.fn(),
       cycleSummaryWriter,
       incidentRecorder: new RepositoryIncidentRecorder(incidentRepo),
@@ -673,6 +682,77 @@ describe("DryRunRuntime (phase-2)", () => {
     await new Promise((resolve) => setTimeout(resolve, 25));
     const after = runtime.getSnapshot().counters.cycleCount;
     expect(after).toBe(before);
+
+    await runtime.stop();
+  });
+
+  it("fails fast when paper market adapters do not begin with DexPaprika", () => {
+    const paperConfig: Config = { ...TEST_CONFIG, executionMode: "paper", dryRun: false };
+
+    expect(
+      () =>
+        new DryRunRuntime(paperConfig, {
+          paperMarketAdapters: [{ id: "moralis", fetch: vi.fn() }],
+          fetchPaperWalletSnapshot: async () => ({
+            traceId: "wallet-miswired",
+            timestamp: new Date().toISOString(),
+            source: "moralis",
+            walletAddress: TEST_CONFIG.walletAddress,
+            balances: [],
+            totalUsd: 0,
+          }),
+        })
+    ).toThrow(/DexPaprika/);
+  });
+
+  it("fails fast when DexCheck is wired into paper market ingest", () => {
+    const paperConfig: Config = { ...TEST_CONFIG, executionMode: "paper", dryRun: false };
+
+    expect(
+      () =>
+        new DryRunRuntime(paperConfig, {
+          paperMarketAdapters: [
+            { id: "dexpaprika", fetch: vi.fn() },
+            { id: "dexcheck", fetch: vi.fn() },
+          ],
+          fetchPaperWalletSnapshot: async () => ({
+            traceId: "wallet-with-dexcheck",
+            timestamp: new Date().toISOString(),
+            source: "moralis",
+            walletAddress: TEST_CONFIG.walletAddress,
+            balances: [],
+            totalUsd: 0,
+          }),
+        })
+    ).toThrow(/DexCheck is intelligence-only/);
+  });
+
+  it("blocks paper intake when wallet snapshots are not sourced from Moralis", async () => {
+    const paperConfig: Config = { ...TEST_CONFIG, executionMode: "paper", dryRun: false };
+    const cycleSummaryWriter = new InMemoryRuntimeCycleSummaryWriter();
+    const runtime = new DryRunRuntime(paperConfig, {
+      paperMarketAdapters: [{ id: "dexpaprika", fetch: async () => createMarketSnapshot("market-ok") }],
+      fetchPaperWalletSnapshot: async () => ({
+        traceId: "wallet-wrong-provider",
+        timestamp: new Date().toISOString(),
+        source: "dexpaprika",
+        walletAddress: TEST_CONFIG.walletAddress,
+        balances: [],
+        totalUsd: 0,
+      }),
+      cycleSummaryWriter,
+    });
+
+    await runtime.start();
+
+    expect(runtime.getLastState()?.blocked).toBe(true);
+    expect(runtime.getLastState()?.blockedReason).toContain("Moralis");
+    expect(runtime.getSnapshot().counters.blockedCount).toBe(1);
+    expect(runtime.getSnapshot().lastCycleSummary?.intakeOutcome).toBe("invalid");
+
+    const summaries = await cycleSummaryWriter.list();
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0].blockedReason).toContain("Moralis");
 
     await runtime.stop();
   });

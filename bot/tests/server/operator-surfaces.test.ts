@@ -233,7 +233,7 @@ describe("Operator read-only surfaces", () => {
       { ...config, executionMode: "paper", dryRun: false },
       {
         loopIntervalMs: 60_000,
-        paperMarketAdapters: [{ id: "primary", fetch: async () => ({
+        paperMarketAdapters: [{ id: "dexpaprika", fetch: async () => ({
           schema_version: "market.v1",
           traceId: "market-trace",
           timestamp: "2026-03-18T00:00:00.000Z",
@@ -299,7 +299,7 @@ describe("Operator read-only surfaces", () => {
         loopIntervalMs: 50,
         paperMarketAdapters: [
           {
-            id: "primary",
+            id: "dexpaprika",
             fetch: async () => {
               adapterCalls += 1;
               return createMarketSnapshot(
@@ -427,7 +427,7 @@ describe("Operator read-only surfaces", () => {
       },
       adapterHealth: {
         degraded: true,
-        degradedAdapterIds: ["primary"],
+        degradedAdapterIds: ["dexpaprika"],
         unhealthyAdapterIds: [],
       },
     });

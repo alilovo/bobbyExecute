@@ -112,7 +112,7 @@ describe("bootstrap runtime closure (phase-1)", () => {
       runtimeDeps: {
         paperMarketAdapters: [
           {
-            id: "primary",
+            id: "dexpaprika",
             fetch: async () => marketSnapshot,
           },
         ],
