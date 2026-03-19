@@ -239,7 +239,17 @@ describe("paper bootstrap integration parity (phase-6)", () => {
     const persistedIncidents = await incidentRepository.list(5);
     expect(incidentsBody.success).toBe(true);
     expect(incidentsBody.incidents).toEqual(persistedIncidents);
-    expect(incidentsBody.incidents).toEqual([]);
+    expect(incidentsBody.incidents).toHaveLength(1);
+    expect(incidentsBody.incidents[0]).toMatchObject({
+      type: "rollout_posture_transition",
+      severity: "info",
+      message: "Rollout posture evaluated at runtime start",
+      details: {
+        rolloutPosture: "paper_only",
+        rolloutConfigured: false,
+        rolloutConfigValid: true,
+      },
+    });
 
     const cycleSummaryLines = (await readFile(cycleSummaryPath, "utf8"))
       .trim()

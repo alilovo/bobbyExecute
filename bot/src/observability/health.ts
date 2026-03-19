@@ -16,9 +16,19 @@ export function checkHealth(circuitBreaker?: CircuitBreaker, runtime?: RuntimeSn
   const now = new Date().toISOString();
   const runtimeAdapterDegraded =
     runtime?.adapterHealth?.degraded === true || (runtime?.adapterHealth?.unhealthy ?? 0) > 0;
+  const runtimeLiveBlocked =
+    runtime?.liveControl?.posture === "live_blocked" ||
+    runtime?.liveControl?.rolloutPosture === "paper_only" ||
+    runtime?.liveControl?.rolloutPosture === "paused_or_rolled_back";
+  const runtimeManualReviewRequired =
+    runtime?.status === "error" || runtime?.liveControl?.rolloutConfigValid === false;
   if (!circuitBreaker) {
     return {
-      status: runtime?.degradedState?.active || runtimeAdapterDegraded ? "DEGRADED" : "OK",
+      status: runtimeManualReviewRequired
+        ? "FAIL"
+        : runtime?.degradedState?.active || runtimeAdapterDegraded || runtimeLiveBlocked
+          ? "DEGRADED"
+          : "OK",
       adapters: [],
       lastChecked: now,
     };
@@ -31,9 +41,9 @@ export function checkHealth(circuitBreaker?: CircuitBreaker, runtime?: RuntimeSn
   const runtimeFailed = runtime?.status === "error";
   const runtimeDegraded = runtime?.degradedState?.active === true;
 
-  const status: HealthStatus = runtimeFailed || allUnhealthy
+  const status: HealthStatus = runtimeFailed || allUnhealthy || runtimeManualReviewRequired
     ? "FAIL"
-    : unhealthyCount > 0 || runtimeDegraded || runtimeAdapterDegraded
+    : unhealthyCount > 0 || runtimeDegraded || runtimeAdapterDegraded || runtimeLiveBlocked
       ? "DEGRADED"
       : "OK";
 

@@ -15,6 +15,7 @@ import type { ActionLogger, ActionLogEntry } from "../../observability/action-lo
 import { getP95 } from "../../observability/metrics.js";
 import { ADAPTER_IDS } from "../../adapters/adapters-with-cb.js";
 import type { RuntimeSnapshot } from "../../runtime/dry-run-runtime.js";
+import { buildRuntimeHistory, buildRuntimeReadiness } from "../runtime-truth.js";
 
 export interface KpiRouteDeps {
   circuitBreaker?: CircuitBreaker;
@@ -89,69 +90,78 @@ export function kpiRoutes(deps: KpiRouteDeps): FastifyPluginAsync {
     };
 
     fastify.get<{ Reply: KpiSummaryResponse }>("/kpi/summary", async (_request, reply) => {
-    const entries = await getEntries();
-    const runtime = getRuntimeSnapshot?.();
-    const lastEntry = entries[entries.length - 1];
-    const lastDecisionAt = lastEntry?.ts ?? runtime?.lastDecisionAt ?? null;
-    const tradesToday = entries.filter(isTradeExecutionEntry).length;
-    const dataQuality =
-      circuitBreaker != null
-        ? (() => {
-            const health = circuitBreaker.getHealth();
-            const healthy = health.filter((h) => h.healthy).length;
-            return health.length > 0 ? healthy / health.length : 1;
-          })()
-        : runtime?.adapterHealth && runtime.adapterHealth.total > 0
-          ? runtime.adapterHealth.healthy / runtime.adapterHealth.total
-          : 1;
-    const body: KpiSummaryResponse = {
-      botStatus: getBotStatus?.() ?? botStatus,
-      riskScore,
-      chaosPassRate,
-      dataQuality,
-      lastDecisionAt,
-      tradesToday,
-      runtime: runtime
-        ? {
-            mode: runtime.mode,
-            paperModeActive: runtime.paperModeActive,
-            status: runtime.status,
-            cycleCount: runtime.counters.cycleCount,
-            decisionCount: runtime.counters.decisionCount,
-            executionCount: runtime.counters.executionCount,
-            blockedCount: runtime.counters.blockedCount,
-            errorCount: runtime.counters.errorCount,
-            lastDecisionAt: runtime.lastDecisionAt,
-            lastIntakeOutcome: runtime.lastCycleSummary?.intakeOutcome,
-            liveControl: runtime.liveControl
-              ? {
-                  posture: runtime.liveControl.posture,
-                  armed: runtime.liveControl.armed,
-                  killSwitchActive: runtime.liveControl.killSwitchActive,
-                  blocked: runtime.liveControl.blocked,
-                  reasonCode: runtime.liveControl.reasonCode,
-                  reasonDetail: runtime.liveControl.reasonDetail,
-                  lastOperatorAction: runtime.liveControl.lastOperatorAction,
-                  lastOperatorActionAt: runtime.liveControl.lastOperatorActionAt,
-                  lastGuardrailRefusal: runtime.liveControl.lastGuardrailRefusal,
-                }
-              : undefined,
-            degraded: runtime.degradedState,
-            adapterHealth: runtime.adapterHealth
-              ? {
-                  total: runtime.adapterHealth.total,
-                  healthy: runtime.adapterHealth.healthy,
-                  unhealthy: runtime.adapterHealth.unhealthy,
-                  degraded: runtime.adapterHealth.degraded,
-                  degradedAdapterIds: runtime.adapterHealth.degradedAdapterIds,
-                  unhealthyAdapterIds: runtime.adapterHealth.unhealthyAdapterIds,
-                }
-              : undefined,
-          }
-        : undefined,
-    };
-    return reply.status(200).send(body);
-  });
+      const entries = await getEntries();
+      const runtime = getRuntimeSnapshot?.();
+      const lastEntry = entries[entries.length - 1];
+      const lastDecisionAt = lastEntry?.ts ?? runtime?.lastDecisionAt ?? null;
+      const tradesToday = entries.filter(isTradeExecutionEntry).length;
+      const dataQuality =
+        circuitBreaker != null
+          ? (() => {
+              const health = circuitBreaker.getHealth();
+              const healthy = health.filter((h) => h.healthy).length;
+              return health.length > 0 ? healthy / health.length : 1;
+            })()
+          : runtime?.adapterHealth && runtime.adapterHealth.total > 0
+            ? runtime.adapterHealth.healthy / runtime.adapterHealth.total
+            : 1;
+      const body: KpiSummaryResponse = {
+        botStatus: getBotStatus?.() ?? botStatus,
+        riskScore,
+        chaosPassRate,
+        dataQuality,
+        lastDecisionAt,
+        tradesToday,
+        runtime: runtime
+          ? {
+              mode: runtime.mode,
+              paperModeActive: runtime.paperModeActive,
+              status: runtime.status,
+              cycleCount: runtime.counters.cycleCount,
+              decisionCount: runtime.counters.decisionCount,
+              executionCount: runtime.counters.executionCount,
+              blockedCount: runtime.counters.blockedCount,
+              errorCount: runtime.counters.errorCount,
+              lastDecisionAt: runtime.lastDecisionAt,
+              lastIntakeOutcome: runtime.lastCycleSummary?.intakeOutcome,
+              liveControl: runtime.liveControl
+                ? {
+                    posture: runtime.liveControl.posture,
+                    rolloutPosture: runtime.liveControl.rolloutPosture,
+                    rolloutConfigured: runtime.liveControl.rolloutConfigured,
+                    rolloutConfigValid: runtime.liveControl.rolloutConfigValid,
+                    rolloutReasonCode: runtime.liveControl.rolloutReasonCode,
+                    rolloutReasonDetail: runtime.liveControl.rolloutReasonDetail,
+                    rolloutLastReasonAt: runtime.liveControl.rolloutLastReasonAt,
+                    caps: runtime.liveControl.caps,
+                    armed: runtime.liveControl.armed,
+                    killSwitchActive: runtime.liveControl.killSwitchActive,
+                    blocked: runtime.liveControl.blocked,
+                    reasonCode: runtime.liveControl.reasonCode,
+                    reasonDetail: runtime.liveControl.reasonDetail,
+                    lastOperatorAction: runtime.liveControl.lastOperatorAction,
+                    lastOperatorActionAt: runtime.liveControl.lastOperatorActionAt,
+                    lastGuardrailRefusal: runtime.liveControl.lastGuardrailRefusal,
+                  }
+                : undefined,
+              degraded: runtime.degradedState,
+              adapterHealth: runtime.adapterHealth
+                ? {
+                    total: runtime.adapterHealth.total,
+                    healthy: runtime.adapterHealth.healthy,
+                    unhealthy: runtime.adapterHealth.unhealthy,
+                    degraded: runtime.adapterHealth.degraded,
+                    degradedAdapterIds: runtime.adapterHealth.degradedAdapterIds,
+                    unhealthyAdapterIds: runtime.adapterHealth.unhealthyAdapterIds,
+                  }
+                : undefined,
+              readiness: buildRuntimeReadiness(runtime),
+              recentHistory: buildRuntimeHistory(runtime),
+            }
+          : undefined,
+      };
+      return reply.status(200).send(body);
+    });
 
   fastify.get<{ Querystring: { limit?: string }; Reply: KpiDecisionsResponse }>(
     "/kpi/decisions",
@@ -207,14 +217,14 @@ export function kpiRoutes(deps: KpiRouteDeps): FastifyPluginAsync {
   });
 
     fastify.get<{ Reply: KpiMetricsResponse }>("/kpi/metrics", async (_request, reply) => {
-    const getter = getP95Fn ?? getP95;
-    const names = ["adapter", "quote", "swap", "rpc", "chaos"];
-    const p95LatencyMs: Record<string, number> = {};
-    for (const name of names) {
-      const v = getter(name);
-      if (v !== undefined) p95LatencyMs[name] = v;
-    }
-    return reply.status(200).send({ p95LatencyMs });
-  });
+      const getter = getP95Fn ?? getP95;
+      const names = ["adapter", "quote", "swap", "rpc", "chaos"];
+      const p95LatencyMs: Record<string, number> = {};
+      for (const name of names) {
+        const v = getter(name);
+        if (v !== undefined) p95LatencyMs[name] = v;
+      }
+      return reply.status(200).send({ p95LatencyMs });
+    });
   };
 }

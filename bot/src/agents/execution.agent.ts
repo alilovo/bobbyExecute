@@ -6,6 +6,7 @@ import type { VersionedTransaction } from "@solana/web3.js";
 import type { TradeIntent } from "../core/contracts/trade.js";
 import type { ExecutionReport } from "../core/contracts/trade.js";
 import type { RpcClient } from "../adapters/rpc-verify/client.js";
+import type { IncidentRecorder } from "../observability/incidents.js";
 import { getQuote } from "../adapters/dex-execution/quotes.js";
 import type { QuoteResult } from "../adapters/dex-execution/types.js";
 import { executeSwap, type SwapDeps } from "../adapters/dex-execution/swap.js";
@@ -13,9 +14,15 @@ import { verifyBeforeTrade } from "../adapters/rpc-verify/verify.js";
 import { isLiveTradingEnabled } from "../config/safety.js";
 import {
   evaluateMicroLiveIntent,
+  getMicroLiveControlSnapshot,
   finalizeMicroLiveIntent,
   type LiveExecutionAttempt,
 } from "../runtime/live-control.js";
+import type {
+  ExecutionEvidenceRecord,
+  ExecutionEvidenceRepository,
+  ExecutionEvidenceKind,
+} from "../persistence/execution-repository.js";
 
 export interface ExecutionHandlerDeps {
   rpcClient?: RpcClient;
@@ -25,6 +32,8 @@ export interface ExecutionHandlerDeps {
   verifyTransaction?: SwapDeps["verifyTransaction"];
   quoteFetcher?: (intent: TradeIntent) => Promise<QuoteResult>;
   swapExecutor?: (intent: TradeIntent, quote?: QuoteResult, deps?: SwapDeps) => Promise<ExecutionReport>;
+  executionEvidenceRepository?: ExecutionEvidenceRepository;
+  incidentRecorder?: IncidentRecorder;
 }
 
 /**
@@ -50,8 +59,68 @@ export async function createExecutionHandler(
     const hasLiveSwapDeps = !!(sendRawTransaction && walletAddress && signTransaction);
     const hasAnyLiveDeps = !!(rpcClient || walletAddress || signTransaction);
     let microLiveAttempt: LiveExecutionAttempt | undefined;
+    let evidenceSequence = 0;
 
-    const finalize = (report: ExecutionReport): ExecutionReport => {
+    const executionEvidenceRepository = deps?.executionEvidenceRepository;
+    const incidentRecorder = deps?.incidentRecorder;
+
+    const appendEvidence = async (record: ExecutionEvidenceRecord): Promise<void> => {
+      if (!executionEvidenceRepository) {
+        return;
+      }
+      await executionEvidenceRepository.append(record);
+    };
+
+    const recordIncident = async (input: {
+      severity: "info" | "warning" | "critical";
+      type: "live_guardrail_refused" | "live_execution_refused";
+      message: string;
+      details?: Record<string, string | number | boolean | null | undefined>;
+    }): Promise<void> => {
+      if (!incidentRecorder) {
+        return;
+      }
+      await incidentRecorder.record(input);
+    };
+
+    const nextEvidenceId = (kind: ExecutionEvidenceKind): string => `${intent.traceId}:${kind}:${++evidenceSequence}`;
+    const baseEvidence = {
+      traceId: intent.traceId,
+      tradeIntentId: intent.idempotencyKey,
+      mode: intent.executionMode ?? (intent.dryRun ? "dry" : "paper"),
+    } satisfies Pick<ExecutionEvidenceRecord, "traceId" | "tradeIntentId" | "mode">;
+
+    const recordDecision = async (allowed: boolean, extras: Omit<ExecutionEvidenceRecord, "id" | "at" | "kind" | "allowed" | "traceId" | "tradeIntentId" | "mode"> & { kind: ExecutionEvidenceKind }): Promise<void> => {
+      const { kind, ...rest } = extras;
+      await appendEvidence({
+        id: nextEvidenceId(kind),
+        at: intent.timestamp,
+        kind,
+        allowed,
+        ...baseEvidence,
+        ...rest,
+      });
+    };
+
+    const recordExecution = async (report: ExecutionReport): Promise<void> => {
+      await appendEvidence({
+        id: nextEvidenceId("execution_summary"),
+        at: report.timestamp,
+        kind: "execution_summary",
+        success: report.success,
+        failureStage: report.failureStage,
+        failureCode: report.failureCode,
+        message: report.error,
+        ...baseEvidence,
+        details: {
+          txSignature: report.txSignature ?? null,
+          actualAmountOut: report.actualAmountOut ?? null,
+          failClosed: report.failClosed ?? null,
+        },
+      });
+    };
+
+    const finalize = async (report: ExecutionReport): Promise<ExecutionReport> => {
       if (liveIntent && microLiveAttempt) {
         finalizeMicroLiveIntent(microLiveAttempt, {
           success: report.success,
@@ -59,12 +128,53 @@ export async function createExecutionHandler(
         });
         microLiveAttempt = undefined;
       }
+      if (liveIntent) {
+        await recordExecution(report);
+        if (!report.success) {
+          const refusalType =
+            report.failureCode != null && /^micro_live_/.test(report.failureCode)
+              ? "live_guardrail_refused"
+              : "live_execution_refused";
+          const severity =
+            report.failureCode === "micro_live_failure_threshold_reached" ||
+            report.failureCode === "micro_live_config_invalid" ||
+            report.failureCode === "live_verification_failed" ||
+            report.failureCode === "live_verification_timeout" ||
+            report.failureCode === "live_swap_build_failed"
+              ? "critical"
+              : "warning";
+          await recordIncident({
+            severity,
+            type: refusalType,
+            message: report.error ?? "Live execution failed",
+            details: {
+              failureCode: report.failureCode ?? null,
+              failureStage: report.failureStage ?? null,
+              tradeIntentId: report.tradeIntentId,
+              executionMode: report.executionMode ?? null,
+              traceId: report.traceId,
+            },
+          });
+        }
+      }
       return report;
     };
 
     if (liveIntent) {
       const decision = evaluateMicroLiveIntent(intent);
       if (!decision.allowed) {
+        await recordDecision(false, {
+          kind: "live_refusal_summary",
+          failureStage: decision.refusal?.stage ?? "preflight",
+          failureCode: decision.refusal?.code ?? "micro_live_blocked",
+          message: decision.refusal?.detail ?? "Live intent rejected by micro-live guardrails.",
+          details: {
+            operatorActionRequired: decision.refusal?.operatorActionRequired ?? true,
+            posture: decision.refusal?.posture ?? "live_blocked",
+            refusalStage: decision.refusal?.stage ?? "preflight",
+            refusalCode: decision.refusal?.code ?? "micro_live_blocked",
+          },
+        });
         return finalize({
           traceId: intent.traceId,
           timestamp: intent.timestamp,
@@ -86,6 +196,17 @@ export async function createExecutionHandler(
         });
       }
       microLiveAttempt = decision.attempt;
+      const liveControlSnapshot = getMicroLiveControlSnapshot();
+      await recordDecision(true, {
+        kind: "decision_summary",
+        message: "Live intent accepted by micro-live guardrails.",
+        details: {
+          posture: liveControlSnapshot.posture,
+          rolloutPosture: liveControlSnapshot.rolloutPosture,
+          attemptId: decision.attempt?.attemptId ?? null,
+          notional: decision.attempt?.notional ?? null,
+        },
+      });
     }
 
     if (liveIntent && hasAnyLiveDeps && !hasLiveSwapDeps) {

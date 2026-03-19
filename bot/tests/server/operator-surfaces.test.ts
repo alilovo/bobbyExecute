@@ -385,12 +385,24 @@ describe("Operator read-only surfaces", () => {
 
     expect(statusBody.success).toBe(true);
     expect(statusBody.runtime).toEqual(snapshot);
+    expect(statusBody.readiness).toMatchObject({
+      canArmMicroLive: expect.any(Boolean),
+      canUseStagedLiveCandidate: expect.any(Boolean),
+      blockers: expect.any(Array),
+    });
     expect(snapshot.status).toBe("paused");
     expect(snapshot.degradedState).toMatchObject({
       active: false,
       consecutiveCycles: 0,
       recoveryCount: 1,
     });
+    expect(snapshot.recentHistory?.recentCycleCount).toBeGreaterThanOrEqual(3);
+    expect(snapshot.recentHistory?.cycleOutcomes).toMatchObject({
+      success: expect.any(Number),
+      blocked: expect.any(Number),
+      error: expect.any(Number),
+    });
+    expect(Object.keys(snapshot.recentHistory?.refusalCounts ?? {}).some((key) => key.includes("stale"))).toBe(true);
     expect(snapshot.degradedState?.lastRecoveredAt).toBeDefined();
     expect(snapshot.degradedState?.lastReason).toContain("stale");
     expect(snapshot.adapterHealth).toMatchObject({
@@ -411,7 +423,13 @@ describe("Operator read-only surfaces", () => {
         degraded: false,
         degradedAdapterIds: [],
       },
+      readiness: {
+        posture: expect.stringMatching(/^(healthy_for_posture|degraded_but_safe_in_paper|blocked_for_live|manual_review_required)$/),
+        canArmMicroLive: expect.any(Boolean),
+        blockers: expect.any(Array),
+      },
     });
+    expect(healthBody.runtime.recentHistory.recentCycleCount).toBeGreaterThanOrEqual(3);
 
     expect(kpiBody.botStatus).toBe("paused");
     expect(kpiBody.runtime).toMatchObject({
@@ -427,6 +445,14 @@ describe("Operator read-only surfaces", () => {
         degradedAdapterIds: [],
       },
     });
+    expect(kpiBody.runtime.readiness).toMatchObject({
+      rolloutPosture: expect.any(String),
+      rolloutConfigured: expect.any(Boolean),
+      rolloutConfigValid: expect.any(Boolean),
+      canArmMicroLive: expect.any(Boolean),
+      blockers: expect.any(Array),
+    });
+    expect(kpiBody.runtime.recentHistory.recentIncidents.some((incident: IncidentRecord) => incident.type === "paper_ingest_blocked")).toBe(true);
 
     expect(cyclesBody.success).toBe(true);
     expect(cyclesBody.cycles).toEqual(persistedCycles);
@@ -677,6 +703,60 @@ describe("Operator read-only surfaces", () => {
       armed: false,
       killSwitchActive: true,
     });
+  });
+
+  it("runtime/status and KPI surfaces summarize recent control actions and posture transitions", async () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+
+    const incidentRepository = new InMemoryIncidentRepository();
+    const runtime = createDryRunRuntime(config, {
+      cycleSummaryWriter: new InMemoryRuntimeCycleSummaryWriter(),
+      incidentRecorder: new RepositoryIncidentRecorder(incidentRepository),
+    });
+    runtimes.push(runtime);
+    await runtime.start();
+    await runtime.armLive("history_arm");
+    await runtime.disarmLive("history_disarm");
+    await runtime.pause("history_pause");
+
+    const server = await createServer({
+      port: 3358,
+      host: "127.0.0.1",
+      runtime,
+      getRuntimeSnapshot: () => runtime.getSnapshot(),
+      operatorReadAuthToken: OPERATOR_READ_TOKEN,
+    });
+    servers.push(server);
+
+    const [statusRes, kpiRes, incidentsRes] = await Promise.all([
+      fetch("http://127.0.0.1:3358/runtime/status", { headers: authHeaders() }),
+      fetch("http://127.0.0.1:3358/kpi/summary"),
+      fetch("http://127.0.0.1:3358/incidents?limit=10", { headers: authHeaders() }),
+    ]);
+
+    expect(statusRes.status).toBe(200);
+    expect(kpiRes.status).toBe(200);
+    expect(incidentsRes.status).toBe(200);
+
+    const statusBody = await statusRes.json();
+    const kpiBody = await kpiRes.json();
+    const incidentsBody = await incidentsRes.json();
+
+    expect(statusBody.runtime.recentHistory.controlActions.some((entry: { type: string }) => entry.type === "live_control_armed")).toBe(true);
+    expect(statusBody.runtime.recentHistory.controlActions.some((entry: { type: string }) => entry.type === "live_control_disarmed")).toBe(true);
+    expect(statusBody.runtime.recentHistory.controlActions.some((entry: { type: string }) => entry.type === "runtime_paused")).toBe(true);
+    expect(statusBody.runtime.recentHistory.stateTransitions.some((entry: { type: string }) => entry.type === "rollout_posture_transition")).toBe(true);
+    expect(kpiBody.runtime.recentHistory.attemptsByMode).toMatchObject({
+      dry: expect.any(Number),
+      paper: expect.any(Number),
+      live: expect.any(Number),
+    });
+    expect(kpiBody.runtime.recentHistory.verificationHealth).toMatchObject({
+      passed: expect.any(Number),
+      failed: expect.any(Number),
+    });
+    expect(incidentsBody.incidents.some((incident: IncidentRecord) => incident.type === "rollout_posture_transition")).toBe(true);
   });
 
   it("GET /runtime/cycles/:traceId/replay returns explicit 404 for missing persisted cycle evidence", async () => {

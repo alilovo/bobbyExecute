@@ -57,6 +57,7 @@ describe("Control routes", () => {
     resetMicroLiveControlForTests();
     delete process.env.LIVE_TRADING;
     delete process.env.RPC_MODE;
+    delete process.env.ROLLOUT_POSTURE;
   });
 
   it("rejects control routes when authorization is missing or invalid", async () => {
@@ -86,6 +87,10 @@ describe("Control routes", () => {
     expect(body.runtimeStatus).toBe("paused");
     expect(body.killSwitch.halted).toBe(true);
     expect(body.liveControl.posture).toBe("live_killed");
+    expect(body.readiness).toMatchObject({
+      canArmMicroLive: expect.any(Boolean),
+      blockers: expect.any(Array),
+    });
 
     const health = await fetch(`${baseUrl}/health`);
     expect((await health.json()).botStatus).toBe("paused");
@@ -108,6 +113,10 @@ describe("Control routes", () => {
     expect(body.killSwitch.halted).toBe(false);
     expect(body.runtimeStatus).toBe("paused");
     expect(body.liveControl.posture).toBe("live_disarmed");
+    expect(body.readiness).toMatchObject({
+      canArmMicroLive: expect.any(Boolean),
+      blockers: expect.any(Array),
+    });
 
     const resume = await fetch(`${baseUrl}/control/resume`, { method: "POST", headers: authHeaders() });
     expect(resume.status).toBe(200);
@@ -134,6 +143,10 @@ describe("Control routes", () => {
     expect(armBody.success).toBe(true);
     expect(armBody.liveControl.posture).toBe("live_armed");
     expect(armBody.liveControl.armed).toBe(true);
+    expect(armBody.readiness).toMatchObject({
+      canArmMicroLive: expect.any(Boolean),
+      blockers: expect.any(Array),
+    });
 
     const disarm = await fetch(`${baseUrl}/control/live/disarm`, { method: "POST", headers: authHeaders() });
     expect(disarm.status).toBe(200);
@@ -141,6 +154,10 @@ describe("Control routes", () => {
     expect(disarmBody.success).toBe(true);
     expect(disarmBody.liveControl.posture).toBe("live_disarmed");
     expect(disarmBody.liveControl.armed).toBe(false);
+    expect(disarmBody.readiness).toMatchObject({
+      canArmMicroLive: expect.any(Boolean),
+      blockers: expect.any(Array),
+    });
   });
 
   it("control actions persist canonical incident evidence", async () => {

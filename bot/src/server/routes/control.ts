@@ -5,6 +5,8 @@ import type { FastifyPluginAsync } from "fastify";
 import { triggerKillSwitch, resetKillSwitch, getKillSwitchState } from "../../governance/kill-switch.js";
 import type { DryRunRuntime, RuntimeControlResult } from "../../runtime/dry-run-runtime.js";
 import { getMicroLiveControlSnapshot } from "../../runtime/live-control.js";
+import { buildRuntimeReadiness } from "../runtime-truth.js";
+import type { RuntimeReadiness } from "../contracts/kpi.js";
 
 export interface ControlRouteDeps {
   runtime?: DryRunRuntime;
@@ -18,9 +20,14 @@ export interface ControlResponse {
   runtimeStatus?: string;
   killSwitch: { halted: boolean; reason?: string; triggeredAt?: string };
   liveControl: import("../../runtime/live-control.js").MicroLiveControlSnapshot;
+  readiness?: RuntimeReadiness;
 }
 
-function toReply(result: RuntimeControlResult | null, killSwitch = getKillSwitchState()): ControlResponse {
+function toReply(
+  result: RuntimeControlResult | null,
+  killSwitch = getKillSwitchState(),
+  readiness?: RuntimeReadiness
+): ControlResponse {
   return {
     success: result?.success ?? true,
     message: result?.message ?? "Control action executed.",
@@ -31,6 +38,7 @@ function toReply(result: RuntimeControlResult | null, killSwitch = getKillSwitch
       triggeredAt: killSwitch.triggeredAt,
     },
     liveControl: getMicroLiveControlSnapshot(),
+    readiness,
   };
 }
 
@@ -80,6 +88,7 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
 
     fastify.post<{ Reply: ControlResponse }>("/emergency-stop", async (_request, reply) => {
       triggerKillSwitch("API emergency-stop");
+      const readiness = buildRuntimeReadiness(runtime?.getSnapshot());
       if (!runtime) {
         return reply.status(503).send({
           success: false,
@@ -87,13 +96,15 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
           message: "Emergency stop triggered kill switch, but runtime control is unavailable so runtime state is unverifiable.",
           killSwitch: getKillSwitchState(),
           liveControl: getMicroLiveControlSnapshot(),
+          readiness,
         });
       }
       const runtimeResult = await runtime.emergencyStop("kill_switch_emergency_stop");
-      return reply.status(200).send(toReply(runtimeResult));
+      return reply.status(200).send(toReply(runtimeResult, getKillSwitchState(), readiness));
     });
 
     fastify.post<{ Reply: ControlResponse }>("/control/pause", async (_request, reply) => {
+      const readiness = buildRuntimeReadiness(runtime?.getSnapshot());
       if (!runtime) {
         return reply.status(501).send({
           success: false,
@@ -101,14 +112,16 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
           message: "Pause unsupported: runtime control unavailable.",
           killSwitch: getKillSwitchState(),
           liveControl: getMicroLiveControlSnapshot(),
+          readiness,
         });
       }
       const result = await runtime.pause("api_pause");
       const status = result.success ? 200 : 409;
-      return reply.status(status).send(toReply(result));
+      return reply.status(status).send(toReply(result, getKillSwitchState(), readiness));
     });
 
     fastify.post<{ Reply: ControlResponse }>("/control/resume", async (_request, reply) => {
+      const readiness = buildRuntimeReadiness(runtime?.getSnapshot());
       if (!runtime) {
         return reply.status(501).send({
           success: false,
@@ -116,14 +129,16 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
           message: "Resume unsupported: runtime control unavailable.",
           killSwitch: getKillSwitchState(),
           liveControl: getMicroLiveControlSnapshot(),
+          readiness,
         });
       }
       const result = await runtime.resume("api_resume");
       const status = result.success ? 200 : 409;
-      return reply.status(status).send(toReply(result));
+      return reply.status(status).send(toReply(result, getKillSwitchState(), readiness));
     });
 
     fastify.post<{ Reply: ControlResponse }>("/control/halt", async (_request, reply) => {
+      const readiness = buildRuntimeReadiness(runtime?.getSnapshot());
       if (!runtime) {
         return reply.status(501).send({
           success: false,
@@ -131,10 +146,11 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
           message: "Halt unsupported: runtime control unavailable.",
           killSwitch: getKillSwitchState(),
           liveControl: getMicroLiveControlSnapshot(),
+          readiness,
         });
       }
       const result = await runtime.halt("api_halt");
-      return reply.status(200).send(toReply(result));
+      return reply.status(200).send(toReply(result, getKillSwitchState(), readiness));
     });
 
     fastify.post<{ Reply: ControlResponse }>("/control/reset", async (_request, reply) => {
@@ -148,10 +164,12 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
         runtimeStatus: runtime?.getStatus(),
         killSwitch: getKillSwitchState(),
         liveControl: getMicroLiveControlSnapshot(),
+        readiness: buildRuntimeReadiness(runtime?.getSnapshot()),
       });
     });
 
     fastify.post<{ Reply: ControlResponse }>("/control/live/arm", async (_request, reply) => {
+      const readiness = buildRuntimeReadiness(runtime?.getSnapshot());
       if (!runtime) {
         return reply.status(501).send({
           success: false,
@@ -159,14 +177,16 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
           message: "Live arm unsupported: runtime control unavailable.",
           killSwitch: getKillSwitchState(),
           liveControl: getMicroLiveControlSnapshot(),
+          readiness,
         });
       }
       const result = await runtime.armLive("api_live_arm");
       const status = result.success ? 200 : 409;
-      return reply.status(status).send(toReply(result));
+      return reply.status(status).send(toReply(result, getKillSwitchState(), readiness));
     });
 
     fastify.post<{ Reply: ControlResponse }>("/control/live/disarm", async (_request, reply) => {
+      const readiness = buildRuntimeReadiness(runtime?.getSnapshot());
       if (!runtime) {
         return reply.status(501).send({
           success: false,
@@ -174,10 +194,11 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
           message: "Live disarm unsupported: runtime control unavailable.",
           killSwitch: getKillSwitchState(),
           liveControl: getMicroLiveControlSnapshot(),
+          readiness,
         });
       }
       const result = await runtime.disarmLive("api_live_disarm");
-      return reply.status(200).send(toReply(result));
+      return reply.status(200).send(toReply(result, getKillSwitchState(), readiness));
     });
   };
 }

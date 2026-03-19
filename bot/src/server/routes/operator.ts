@@ -3,6 +3,8 @@ import type { DryRunRuntime } from "../../runtime/dry-run-runtime.js";
 import type { IncidentRecord } from "../../persistence/incident-repository.js";
 import type { RuntimeCycleSummary } from "../../persistence/runtime-cycle-summary-repository.js";
 import type { JournalEntry } from "../../core/contracts/journal.js";
+import { buildRuntimeReadiness } from "../runtime-truth.js";
+import type { RuntimeReadiness } from "../contracts/kpi.js";
 
 const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 200;
@@ -37,6 +39,7 @@ export interface IncidentsResponse {
 export interface RuntimeStatusResponse {
   success: true;
   runtime: import("../../runtime/dry-run-runtime.js").RuntimeSnapshot;
+  readiness?: RuntimeReadiness;
 }
 
 export interface RuntimeCycleReplayResponse {
@@ -190,7 +193,11 @@ export function operatorRoutes(deps: OperatorRouteDeps): FastifyPluginAsync {
           message: "Runtime status unavailable: runtime snapshot wiring is missing.",
         });
       }
-      return reply.status(200).send({ success: true, runtime: runtimeSnapshot });
+      return reply.status(200).send({
+        success: true,
+        runtime: runtimeSnapshot,
+        readiness: buildRuntimeReadiness(runtimeSnapshot),
+      });
     });
   };
 }

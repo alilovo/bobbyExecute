@@ -429,9 +429,10 @@ describe("DryRunRuntime (phase-2)", () => {
     expect(summaries[0].incidentIds).toHaveLength(1);
 
     const incidents = await runtime.listRecentIncidents(10);
-    expect(incidents).toHaveLength(1);
-    expect(incidents[0].type).toBe("runtime_cycle_error");
-    expect(incidents[0].details?.intakeOutcome).toBe("ok");
+    expect(incidents).toHaveLength(2);
+    expect(incidents[0].type).toBe("rollout_posture_transition");
+    expect(incidents[1].type).toBe("runtime_cycle_error");
+    expect(incidents[1].details?.intakeOutcome).toBe("ok");
 
     await runtime.stop();
   });
@@ -549,6 +550,7 @@ describe("DryRunRuntime (phase-2)", () => {
       },
     });
     expect(incidents.map((incident) => incident.type)).toEqual([
+      "rollout_posture_transition",
       "paper_ingest_blocked",
       "runtime_cycle_error",
     ]);

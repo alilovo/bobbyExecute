@@ -59,6 +59,15 @@ export interface RuntimeCycleSummary {
   verificationMode?: "rpc" | "paper-simulated";
   errorOccurred: boolean;
   error?: string;
+  decision?: {
+    allowed: boolean;
+    direction?: string;
+    confidence?: number;
+    riskAllowed?: boolean;
+    chaosAllowed?: boolean;
+    reason?: string;
+    tradeIntentId?: string;
+  };
   tradeIntentId?: string;
   execution?: RuntimeCycleExecutionEvidence;
   verification?: RuntimeCycleVerificationEvidence;

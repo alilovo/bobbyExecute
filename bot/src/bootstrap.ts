@@ -11,6 +11,7 @@ import {
   type RuntimeSnapshot,
 } from "./runtime/dry-run-runtime.js";
 import { getKillSwitchState } from "./governance/kill-switch.js";
+import { getMicroLiveControlSnapshot } from "./runtime/live-control.js";
 import { createAdaptersWithCircuitBreaker } from "./adapters/adapters-with-cb.js";
 import {
   assertCanonicalPaperMarketAdapters,
@@ -36,6 +37,23 @@ export async function bootstrap(options?: {
   runtime: ReturnType<typeof createDryRunRuntime>;
 }> {
   const config = loadConfig();
+  const startupControl = getMicroLiveControlSnapshot();
+  if (!startupControl.rolloutConfigValid) {
+    throw new Error(
+      `Startup readiness failed: ${startupControl.rolloutReasonDetail ?? "rollout posture configuration is invalid."}`
+    );
+  }
+  if (
+    config.executionMode === "live" &&
+    (startupControl.posture === "live_blocked" ||
+      startupControl.posture === "live_killed" ||
+      startupControl.rolloutPosture === "paper_only" ||
+      startupControl.rolloutPosture === "paused_or_rolled_back")
+  ) {
+    throw new Error(
+      `Startup readiness failed: rollout posture '${startupControl.rolloutPosture}' does not permit live deployment.`
+    );
+  }
   const port = options?.port ?? parseInt(process.env.PORT ?? "3333", 10);
   const host = options?.host ?? process.env.HOST ?? "0.0.0.0";
   const runtimeDeps = createBootstrapRuntimeDeps(config, options?.runtimeDeps);
@@ -48,6 +66,9 @@ export async function bootstrap(options?: {
       rpcMode: config.rpcMode,
       tradingEnabled: config.tradingEnabled,
       safetyPosture: "fail-closed",
+      rolloutPosture: startupControl.rolloutPosture,
+      rolloutConfigValid: startupControl.rolloutConfigValid,
+      liveControlPosture: startupControl.posture,
     })
   );
 

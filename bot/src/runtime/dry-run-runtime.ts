@@ -56,6 +56,65 @@ export interface RuntimeAdapterHealthSnapshot {
   unhealthyAdapterIds: string[];
 }
 
+export interface RuntimeRecentCycleSummary {
+  traceId: string;
+  cycleTimestamp: string;
+  mode: "dry" | "paper" | "live";
+  outcome: RuntimeCycleOutcome;
+  stage: string;
+  blocked: boolean;
+  blockedReason?: string;
+  intakeOutcome: RuntimeCycleIntakeOutcome;
+  executionOccurred: boolean;
+  verificationOccurred: boolean;
+  decisionOccurred: boolean;
+  errorOccurred: boolean;
+  decision?: {
+    allowed: boolean;
+    direction?: string;
+    confidence?: number;
+    riskAllowed?: boolean;
+    chaosAllowed?: boolean;
+    reason?: string;
+    tradeIntentId?: string;
+  };
+}
+
+export interface RuntimeRecentIncidentSummary {
+  id: string;
+  at: string;
+  severity: IncidentRecord["severity"];
+  type: IncidentRecord["type"];
+  message: string;
+  details?: IncidentRecord["details"];
+}
+
+export interface RuntimeReviewSummary {
+  recentCycleCount: number;
+  cycleOutcomes: Record<RuntimeCycleOutcome, number>;
+  attemptsByMode: Record<"dry" | "paper" | "live", number>;
+  refusalCounts: Record<string, number>;
+  failureStageCounts: Record<string, number>;
+  verificationHealth: {
+    passed: number;
+    failed: number;
+    failureReasons: Record<string, number>;
+  };
+  incidentCounts: Record<string, number>;
+  controlActions: RuntimeRecentIncidentSummary[];
+  stateTransitions: Array<{
+    at: string;
+    type: IncidentRecord["type"];
+    message: string;
+    details?: IncidentRecord["details"];
+  }>;
+  recentCycles: RuntimeRecentCycleSummary[];
+  recentIncidents: RuntimeRecentIncidentSummary[];
+}
+
+const RECENT_CYCLE_LIMIT = 10;
+const RECENT_INCIDENT_LIMIT = 20;
+
 export interface RuntimeDegradedState {
   active: boolean;
   consecutiveCycles: number;
@@ -78,6 +137,7 @@ export interface RuntimeSnapshot {
   lastCycleSummary?: RuntimeCycleSummary;
   degradedState?: RuntimeDegradedState;
   adapterHealth?: RuntimeAdapterHealthSnapshot;
+  recentHistory?: RuntimeReviewSummary;
 }
 
 export interface RuntimeCycleReplay {
@@ -139,6 +199,9 @@ export class DryRunRuntime {
   private lastCycleAt?: string;
   private lastDecisionAt?: string;
   private lastCycleSummary?: RuntimeCycleSummary;
+  private readonly recentCycleSummaries: RuntimeCycleSummary[] = [];
+  private readonly recentIncidents: IncidentRecord[] = [];
+  private rolloutPostureRecorded = false;
   private consecutiveDegradedCycles = 0;
   private lastDegradedAt?: string;
   private lastDegradedReason?: string;
@@ -193,6 +256,23 @@ export class DryRunRuntime {
   async start(): Promise<void> {
     if (this.status === "running") return;
     this.status = "running";
+    if (!this.rolloutPostureRecorded) {
+      this.rolloutPostureRecorded = true;
+      const control = getMicroLiveControlSnapshot();
+      await this.recordIncident({
+        severity: control.rolloutConfigValid ? "info" : "warning",
+        type: "rollout_posture_transition",
+        message: "Rollout posture evaluated at runtime start",
+        details: {
+          rolloutPosture: control.rolloutPosture,
+          rolloutConfigured: control.rolloutConfigured,
+          rolloutConfigValid: control.rolloutConfigValid,
+          livePosture: control.posture,
+          reasonCode: control.rolloutReasonCode ?? control.reasonCode,
+          reasonDetail: control.rolloutReasonDetail ?? control.reasonDetail,
+        },
+      });
+    }
     await this.runCycle({ propagateError: true });
     this.intervalRef = setInterval(() => {
       void this.runCycle();
@@ -323,6 +403,7 @@ export class DryRunRuntime {
       lastCycleSummary: this.lastCycleSummary,
       degradedState: this.getDegradedStateSnapshot(),
       adapterHealth,
+      recentHistory: this.getReviewSummary(),
     };
   }
 
@@ -390,6 +471,143 @@ export class DryRunRuntime {
 
   async listRecentIncidents(limit = 50): Promise<IncidentRecord[]> {
     return this.incidentRecorder.list(limit);
+  }
+
+  private getReviewSummary(): RuntimeReviewSummary {
+    const recentCycles = this.recentCycleSummaries.slice(-RECENT_CYCLE_LIMIT);
+    const recentIncidents = this.recentIncidents.slice(-RECENT_INCIDENT_LIMIT);
+    const cycleOutcomes: Record<RuntimeCycleOutcome, number> = {
+      success: 0,
+      blocked: 0,
+      error: 0,
+    };
+    const attemptsByMode: Record<"dry" | "paper" | "live", number> = {
+      dry: 0,
+      paper: 0,
+      live: 0,
+    };
+    const refusalCounts: Record<string, number> = {};
+    const failureStageCounts: Record<string, number> = {};
+    const verificationHealth = {
+      passed: 0,
+      failed: 0,
+      failureReasons: {} as Record<string, number>,
+    };
+
+    for (const summary of recentCycles) {
+      cycleOutcomes[summary.outcome] += 1;
+      attemptsByMode[summary.mode] += 1;
+      if (summary.blocked && summary.blockedReason) {
+        refusalCounts[summary.blockedReason] = (refusalCounts[summary.blockedReason] ?? 0) + 1;
+      }
+      if (summary.errorOccurred) {
+        failureStageCounts[summary.stage] = (failureStageCounts[summary.stage] ?? 0) + 1;
+      }
+      if (summary.verificationOccurred) {
+        if (summary.verification?.passed === true) {
+          verificationHealth.passed += 1;
+        } else {
+          verificationHealth.failed += 1;
+          const reason = summary.verification?.reason ?? "unknown";
+          verificationHealth.failureReasons[reason] = (verificationHealth.failureReasons[reason] ?? 0) + 1;
+        }
+      }
+      if (summary.execution?.success === false) {
+        const code = summary.execution.error ?? summary.execution.mode ?? "execution_failed";
+        failureStageCounts[summary.execution.mode ?? summary.stage] =
+          (failureStageCounts[summary.execution.mode ?? summary.stage] ?? 0) + 1;
+        refusalCounts[code] = (refusalCounts[code] ?? 0) + 1;
+      }
+    }
+
+    const incidentCounts: Record<string, number> = {};
+    for (const incident of recentIncidents) {
+      incidentCounts[incident.type] = (incidentCounts[incident.type] ?? 0) + 1;
+      if (
+        incident.type === "live_guardrail_refused" ||
+        incident.type === "live_execution_refused"
+      ) {
+        const reason =
+          incident.details?.reasonCode?.toString() ??
+          incident.details?.blockedReason?.toString() ??
+          incident.details?.reason?.toString() ??
+          incident.message;
+        refusalCounts[reason] = (refusalCounts[reason] ?? 0) + 1;
+      }
+      if (incident.type === "rollout_posture_transition") {
+        failureStageCounts["rollout"] = (failureStageCounts["rollout"] ?? 0) + 1;
+      }
+    }
+
+    const controlActions = recentIncidents.filter((incident) =>
+      incident.type === "live_control_armed" ||
+      incident.type === "live_control_disarmed" ||
+      incident.type === "live_control_killed" ||
+      incident.type === "live_control_blocked" ||
+      incident.type === "runtime_paused" ||
+      incident.type === "runtime_resumed" ||
+      incident.type === "runtime_halted" ||
+      incident.type === "emergency_stop"
+    );
+
+    const stateTransitions = recentIncidents.filter((incident) =>
+      incident.type === "runtime_paused" ||
+      incident.type === "runtime_resumed" ||
+      incident.type === "runtime_halted" ||
+      incident.type === "emergency_stop" ||
+      incident.type === "rollout_posture_transition" ||
+      incident.type === "live_control_armed" ||
+      incident.type === "live_control_disarmed" ||
+      incident.type === "live_control_killed" ||
+      incident.type === "live_control_blocked"
+    ).map((incident) => ({
+      at: incident.at,
+      type: incident.type,
+      message: incident.message,
+      details: incident.details,
+    }));
+
+    return {
+      recentCycleCount: recentCycles.length,
+      cycleOutcomes,
+      attemptsByMode,
+      refusalCounts,
+      failureStageCounts,
+      verificationHealth,
+      incidentCounts,
+      controlActions: controlActions.map((incident) => ({
+        id: incident.id,
+        at: incident.at,
+        severity: incident.severity,
+        type: incident.type,
+        message: incident.message,
+        details: incident.details,
+      })),
+      stateTransitions,
+      recentCycles: recentCycles.map((summary) => ({
+        traceId: summary.traceId,
+        cycleTimestamp: summary.cycleTimestamp,
+        mode: summary.mode,
+        outcome: summary.outcome,
+        stage: summary.stage,
+        blocked: summary.blocked,
+        blockedReason: summary.blockedReason,
+        intakeOutcome: summary.intakeOutcome,
+        executionOccurred: summary.executionOccurred,
+        verificationOccurred: summary.verificationOccurred,
+        decisionOccurred: summary.decisionOccurred,
+        errorOccurred: summary.errorOccurred,
+        decision: summary.decision,
+      })),
+      recentIncidents: recentIncidents.map((incident) => ({
+        id: incident.id,
+        at: incident.at,
+        severity: incident.severity,
+        type: incident.type,
+        message: incident.message,
+        details: incident.details,
+      })),
+    };
   }
 
   async getCycleReplay(traceId: string): Promise<RuntimeCycleReplay | null> {
@@ -928,6 +1146,17 @@ export class DryRunRuntime {
       stage: state.stage,
       blocked: state.blocked === true,
       blockedReason: state.blockedReason,
+      decision: state.tradeIntent
+        ? {
+            allowed: state.blocked !== true,
+            direction: state.signal?.direction,
+            confidence: state.signal?.confidence,
+            riskAllowed: state.riskAllowed,
+            chaosAllowed: state.chaosAllowed,
+            reason: state.blockedReason ?? state.error,
+            tradeIntentId: state.tradeIntent.idempotencyKey,
+          }
+        : undefined,
       decisionOccurred: state.tradeIntent !== undefined,
       signalOccurred: state.signal !== undefined,
       riskOccurred: state.riskAllowed !== undefined,
@@ -964,6 +1193,10 @@ export class DryRunRuntime {
   private async persistCycleSummary(summary: RuntimeCycleSummary): Promise<void> {
     await this.cycleSummaryWriter.append(summary);
     this.lastCycleSummary = summary;
+    this.recentCycleSummaries.push({ ...summary, incidentIds: [...summary.incidentIds] });
+    while (this.recentCycleSummaries.length > RECENT_CYCLE_LIMIT) {
+      this.recentCycleSummaries.shift();
+    }
   }
 
   private async recordIncident(input: {
@@ -972,7 +1205,12 @@ export class DryRunRuntime {
     message: string;
     details?: IncidentRecord["details"];
   }): Promise<IncidentRecord> {
-    return this.incidentRecorder.record(input);
+    const record = await this.incidentRecorder.record(input);
+    this.recentIncidents.push({ ...record, details: record.details ? { ...record.details } : undefined });
+    while (this.recentIncidents.length > RECENT_INCIDENT_LIMIT) {
+      this.recentIncidents.shift();
+    }
+    return record;
   }
 
   private toCycleOutcome(state: EngineState): RuntimeCycleOutcome {

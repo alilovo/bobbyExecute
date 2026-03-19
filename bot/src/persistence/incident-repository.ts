@@ -18,6 +18,8 @@ export interface IncidentRecord {
     | "live_control_killed"
     | "live_control_blocked"
     | "live_guardrail_refused"
+    | "live_execution_refused"
+    | "rollout_posture_transition"
     | "paper_ingest_blocked"
     | "runtime_cycle_error"
     | "journal_failure";

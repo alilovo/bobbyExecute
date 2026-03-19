@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createExecutionHandler } from "@bot/agents/execution.agent.js";
 import { createRpcClient } from "@bot/adapters/rpc-verify/client.js";
 import type { TradeIntent } from "@bot/core/contracts/trade.js";
+import { InMemoryExecutionRepository } from "@bot/persistence/execution-repository.js";
+import { InMemoryIncidentRepository } from "@bot/persistence/incident-repository.js";
+import { RepositoryIncidentRecorder } from "@bot/observability/incidents.js";
 import {
   armMicroLive,
   disarmMicroLive,
@@ -38,6 +41,7 @@ describe("createExecutionHandler", () => {
     delete process.env.MICRO_LIVE_MAX_INFLIGHT;
     delete process.env.MICRO_LIVE_FAILURES_TO_BLOCK;
     delete process.env.MICRO_LIVE_FAILURE_WINDOW_MS;
+    delete process.env.ROLLOUT_POSTURE;
     resetMicroLiveControlForTests();
     resetKillSwitch();
   });
@@ -183,6 +187,73 @@ describe("createExecutionHandler", () => {
 
     expect(result.success).toBe(false);
     expect(result.failureCode).toBe("micro_live_killed");
+  });
+
+  it("persists live refusals through execution and incident repositories", async () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+    process.env.ROLLOUT_POSTURE = "paper_only";
+
+    const executionRepository = new InMemoryExecutionRepository();
+    const incidentRepository = new InMemoryIncidentRepository();
+    const handler = await createExecutionHandler({
+      rpcClient: createRpcClient(),
+      walletAddress: "11111111111111111111111111111111",
+      signTransaction: async (tx) => tx,
+      executionEvidenceRepository: executionRepository,
+      incidentRecorder: new RepositoryIncidentRecorder(incidentRepository),
+    });
+    const result = await handler({ ...baseIntent, executionMode: "live", idempotencyKey: "paper-only-live" });
+
+    expect(result.success).toBe(false);
+    expect(result.failureCode).toBe("micro_live_blocked");
+
+    const evidence = await executionRepository.listByTradeIntentId("paper-only-live");
+    expect(evidence.map((record) => record.kind)).toContain("live_refusal_summary");
+    expect(evidence.map((record) => record.kind)).toContain("execution_summary");
+    expect(evidence.at(0)?.allowed).toBe(false);
+    expect(evidence.at(0)?.failureCode).toBe("micro_live_blocked");
+
+    const incidents = await incidentRepository.list(10);
+    expect(incidents.some((incident) => incident.type === "live_guardrail_refused")).toBe(true);
+  });
+
+  it("blocks paused or rolled back rollout posture and marks the refusal as durably reviewable", async () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+    process.env.ROLLOUT_POSTURE = "paused_or_rolled_back";
+
+    const executionRepository = new InMemoryExecutionRepository();
+    const handler = await createExecutionHandler({
+      rpcClient: createRpcClient(),
+      walletAddress: "11111111111111111111111111111111",
+      signTransaction: async (tx) => tx,
+      executionEvidenceRepository: executionRepository,
+    });
+    const result = await handler({ ...baseIntent, executionMode: "live", idempotencyKey: "rolled-back-live" });
+
+    expect(result.success).toBe(false);
+    expect(result.failureCode).toBe("micro_live_blocked");
+    const evidence = await executionRepository.listByTradeIntentId("rolled-back-live");
+    expect(evidence.some((record) => record.kind === "live_refusal_summary")).toBe(true);
+    expect(evidence.some((record) => record.allowed === false)).toBe(true);
+  });
+
+  it("fails closed when rollout posture configuration is malformed", async () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+    process.env.ROLLOUT_POSTURE = "totally-invalid";
+
+    const handler = await createExecutionHandler({
+      rpcClient: createRpcClient(),
+      walletAddress: "11111111111111111111111111111111",
+      signTransaction: async (tx) => tx,
+    });
+    const result = await handler({ ...baseIntent, executionMode: "live", idempotencyKey: "invalid-rollout" });
+
+    expect(result.success).toBe(false);
+    expect(result.failureCode).toBe("micro_live_config_invalid");
+    expect(result.failClosed).toBe(true);
   });
 
   it("enforces max notional cap deterministically", async () => {

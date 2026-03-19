@@ -17,6 +17,7 @@ describe("bootstrap runtime closure (phase-1)", () => {
     delete process.env.CONTROL_TOKEN;
     delete process.env.LIVE_TEST_MODE;
     delete process.env.TRADING_ENABLED;
+    delete process.env.ROLLOUT_POSTURE;
   });
 
   afterEach(() => {
@@ -257,5 +258,34 @@ describe("bootstrap runtime closure (phase-1)", () => {
         port: 3355,
       })
     ).rejects.toThrow(/TRADING_ENABLED=true|LIVE_TEST_MODE=true|WALLET_ADDRESS|CONTROL_TOKEN|OPERATOR_READ_TOKEN/);
+  });
+
+  it("fails closed when rollout posture is invalid or paused for live startup", async () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+    process.env.TRADING_ENABLED = "true";
+    process.env.LIVE_TEST_MODE = "true";
+    process.env.WALLET_ADDRESS = "11111111111111111111111111111111";
+    process.env.CONTROL_TOKEN = "phase10-live-control-token";
+    process.env.OPERATOR_READ_TOKEN = "phase10-live-read-token";
+    process.env.ROLLOUT_POSTURE = "paused_or_rolled_back";
+
+    await expect(
+      bootstrap({
+        host: "127.0.0.1",
+        port: 3357,
+      })
+    ).rejects.toThrow(/rollout posture 'paused_or_rolled_back' does not permit live deployment/);
+  });
+
+  it("fails closed when rollout posture configuration is malformed", async () => {
+    process.env.ROLLOUT_POSTURE = "not-a-real-posture";
+
+    await expect(
+      bootstrap({
+        host: "127.0.0.1",
+        port: 3358,
+      })
+    ).rejects.toThrow(/Startup readiness failed: Invalid rollout posture/);
   });
 });

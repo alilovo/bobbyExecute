@@ -7,7 +7,7 @@ import { CircuitBreaker } from "../../src/governance/circuit-breaker.js";
 import { InMemoryActionLogger } from "../../src/observability/action-log.js";
 import { ADAPTER_IDS } from "../../src/adapters/adapters-with-cb.js";
 
-const PORT = 3334;
+const PORT = 3342;
 
 describe("Server (Wave 3)", () => {
   let server: Awaited<ReturnType<typeof createServer>>;

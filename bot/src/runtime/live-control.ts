@@ -8,6 +8,12 @@ export type LiveControlPosture =
   | "live_blocked"
   | "live_killed";
 
+export type RolloutPosture =
+  | "paper_only"
+  | "micro_live"
+  | "staged_live_candidate"
+  | "paused_or_rolled_back";
+
 export type LiveControlReasonCode =
   | "live_not_enabled"
   | "micro_live_config_invalid"
@@ -36,8 +42,23 @@ export interface MicroLiveCaps {
   allowlistTokens: string[];
 }
 
+export interface RolloutSnapshot {
+  posture: RolloutPosture;
+  configured: boolean;
+  valid: boolean;
+  reasonCode?: LiveControlReasonCode;
+  reasonDetail?: string;
+  lastReasonAt?: string;
+}
+
 export interface MicroLiveControlSnapshot {
   posture: LiveControlPosture;
+  rolloutPosture: RolloutPosture;
+  rolloutConfigured: boolean;
+  rolloutConfigValid: boolean;
+  rolloutReasonCode?: LiveControlReasonCode;
+  rolloutReasonDetail?: string;
+  rolloutLastReasonAt?: string;
   executionMode: "dry" | "paper" | "live";
   liveEnabled: boolean;
   armed: boolean;
@@ -126,6 +147,8 @@ const DEFAULT_CAPS: MicroLiveCaps = {
   allowlistTokens: [],
 };
 
+const DEFAULT_ROLLOUT_POSTURE: RolloutPosture = "micro_live";
+
 const state: MutableControlState = {
   armed: false,
   blocked: false,
@@ -201,6 +224,44 @@ function readExecutionMode(env: NodeJS.ProcessEnv): ExecutionMode {
   return "dry";
 }
 
+function readRolloutPosture(
+  executionMode: ExecutionMode
+): RolloutSnapshot {
+  const raw = process.env.ROLLOUT_POSTURE?.trim();
+  const configured = raw != null && raw.length > 0;
+
+  if (!configured) {
+    return {
+      posture: executionMode === "live" ? DEFAULT_ROLLOUT_POSTURE : "paper_only",
+      configured: false,
+      valid: true,
+    };
+  }
+
+  const normalized = raw.toLowerCase();
+  if (
+    normalized === "paper_only" ||
+    normalized === "micro_live" ||
+    normalized === "staged_live_candidate" ||
+    normalized === "paused_or_rolled_back"
+  ) {
+    return {
+      posture: normalized as RolloutPosture,
+      configured: true,
+      valid: true,
+    };
+  }
+
+  return {
+    posture: "paused_or_rolled_back",
+    configured: true,
+    valid: false,
+    reasonCode: "micro_live_config_invalid",
+    reasonDetail: `Invalid rollout posture '${raw}'. Expected paper_only, micro_live, staged_live_candidate, or paused_or_rolled_back.`,
+    lastReasonAt: new Date().toISOString(),
+  };
+}
+
 function readCaps(env: NodeJS.ProcessEnv): { valid: true; caps: MicroLiveCaps } | { valid: false; error: string } {
   try {
     const caps: MicroLiveCaps = {
@@ -251,14 +312,26 @@ function setReason(code: LiveControlReasonCode, detail: string | undefined, nowI
   state.lastReasonAt = nowIso;
 }
 
-function evaluatePosture(executionMode: ExecutionMode): LiveControlPosture {
+function evaluatePosture(executionMode: ExecutionMode, rollout: RolloutSnapshot): LiveControlPosture {
   if (executionMode !== "live") {
     return "live_unavailable";
+  }
+  if (!rollout.valid) {
+    return "live_blocked";
+  }
+  if (rollout.posture === "paper_only" || rollout.posture === "paused_or_rolled_back") {
+    return "live_blocked";
   }
   if (isKillSwitchHalted()) {
     return "live_killed";
   }
   if (state.blocked) {
+    return "live_blocked";
+  }
+  if (
+    rollout.posture === "staged_live_candidate" &&
+    (!state.armed || state.degraded || state.manualRearmRequired)
+  ) {
     return "live_blocked";
   }
   return state.armed ? "live_armed" : "live_disarmed";
@@ -280,6 +353,7 @@ function refuse(
     operatorActionRequired,
   };
   setReason(code, detail, at);
+  const rollout = readRolloutPosture(executionMode);
   return {
     allowed: false,
     refusal: {
@@ -288,7 +362,7 @@ function refuse(
       detail,
       at,
       operatorActionRequired,
-      posture: evaluatePosture(executionMode),
+      posture: evaluatePosture(executionMode, rollout),
     },
   };
 }
@@ -307,11 +381,18 @@ export function getMicroLiveControlSnapshot(): MicroLiveControlSnapshot {
   const killSwitch = getKillSwitchState();
   const capsConfig = readCaps(process.env);
   const caps = capsConfig.valid ? capsConfig.caps : DEFAULT_CAPS;
+  const rollout = readRolloutPosture(executionMode);
   const now = Date.now();
   cleanupCounters(now, caps);
 
   return {
-    posture: evaluatePosture(executionMode),
+    posture: evaluatePosture(executionMode, rollout),
+    rolloutPosture: rollout.posture,
+    rolloutConfigured: rollout.configured,
+    rolloutConfigValid: rollout.valid,
+    rolloutReasonCode: rollout.reasonCode,
+    rolloutReasonDetail: rollout.reasonDetail,
+    rolloutLastReasonAt: rollout.lastReasonAt,
     executionMode,
     liveEnabled,
     armed: state.armed,
@@ -339,11 +420,27 @@ export function getMicroLiveControlSnapshot(): MicroLiveControlSnapshot {
 export function armMicroLive(actor = "operator_api"): { success: boolean; message: string; snapshot: MicroLiveControlSnapshot } {
   const executionMode = readExecutionMode(process.env);
   const nowIso = new Date().toISOString();
+  const rollout = readRolloutPosture(executionMode);
 
   if (executionMode !== "live") {
     return {
       success: false,
       message: "Arm denied: deployment is not in live mode.",
+      snapshot: getMicroLiveControlSnapshot(),
+    };
+  }
+
+  if (!rollout.valid || rollout.posture === "paper_only" || rollout.posture === "paused_or_rolled_back") {
+    state.blocked = true;
+    state.manualRearmRequired = true;
+    setReason(
+      rollout.reasonCode ?? "micro_live_blocked",
+      rollout.reasonDetail ?? `Arm denied: rollout posture '${rollout.posture}' does not permit live operation.`,
+      nowIso
+    );
+    return {
+      success: false,
+      message: `Arm denied: rollout posture '${rollout.posture}' does not permit live operation.`,
       snapshot: getMicroLiveControlSnapshot(),
     };
   }
@@ -434,6 +531,7 @@ export function evaluateMicroLiveIntent(intent: TradeIntent): LiveControlDecisio
     return { allowed: true };
   }
 
+  const rollout = readRolloutPosture(executionMode);
   if (executionMode !== "live") {
     return refuse(
       executionMode,
@@ -441,6 +539,39 @@ export function evaluateMicroLiveIntent(intent: TradeIntent): LiveControlDecisio
       "preflight",
       "Live intent rejected because deployment is not in live mode.",
       false
+    );
+  }
+
+  if (!rollout.valid) {
+    state.blocked = true;
+    state.degraded = true;
+    state.manualRearmRequired = true;
+    return refuse(
+      executionMode,
+      rollout.reasonCode ?? "micro_live_config_invalid",
+      "preflight",
+      rollout.reasonDetail ?? "Live intent rejected because rollout posture configuration is invalid.",
+      true
+    );
+  }
+
+  if (rollout.posture === "paper_only") {
+    return refuse(
+      executionMode,
+      "micro_live_blocked",
+      "preflight",
+      "Live intent rejected because rollout posture is paper_only.",
+      true
+    );
+  }
+
+  if (rollout.posture === "paused_or_rolled_back") {
+    return refuse(
+      executionMode,
+      "micro_live_blocked",
+      "preflight",
+      "Live intent rejected because rollout posture is paused_or_rolled_back.",
+      true
     );
   }
 
@@ -460,6 +591,16 @@ export function evaluateMicroLiveIntent(intent: TradeIntent): LiveControlDecisio
   const caps = capsConfig.caps;
   const nowMs = Date.now();
   cleanupCounters(nowMs, caps);
+
+  if (rollout.posture === "staged_live_candidate" && (!state.armed || state.degraded || state.manualRearmRequired)) {
+    return refuse(
+      executionMode,
+      "micro_live_blocked",
+      "preflight",
+      "Live intent rejected because staged_live_candidate posture is not ready for live operation.",
+      true
+    );
+  }
 
   if (isKillSwitchHalted()) {
     state.armed = false;

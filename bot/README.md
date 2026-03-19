@@ -57,3 +57,7 @@ npm run premerge
 - `src/config/guardrails.yaml` – risk limits, allowlist/denylist
 - `src/config/permissions.yaml` – tool–permission mapping
 - `src/config/agents.yaml` – agent profiles
+
+## Operations
+
+- [`docs/ops/production-readiness.md`](docs/ops/production-readiness.md) – operator runbook, readiness semantics, and deployment checklist

@@ -2,6 +2,115 @@
  * KPI API contracts for Wave 3 - Runtime Visibility & Dashboard Bridge.
  * Matches readiness--waves.md §6.
  */
+export interface RuntimeReadiness {
+  posture: "healthy_for_posture" | "degraded_but_safe_in_paper" | "blocked_for_live" | "manual_review_required";
+  liveAllowed: boolean;
+  paperSafe: boolean;
+  rolloutPosture: "paper_only" | "micro_live" | "staged_live_candidate" | "paused_or_rolled_back";
+  rolloutConfigured: boolean;
+  rolloutConfigValid: boolean;
+  canArmMicroLive: boolean;
+  canUseStagedLiveCandidate: boolean;
+  blockers: Array<{
+    code: string;
+    scope: "startup" | "paper" | "micro_live" | "staged_live_candidate";
+    message: string;
+  }>;
+  reason?: string;
+}
+
+export interface RuntimeLiveControl {
+  posture: string;
+  rolloutPosture: RuntimeReadiness["rolloutPosture"];
+  rolloutConfigured: boolean;
+  rolloutConfigValid: boolean;
+  rolloutReasonCode?: string;
+  rolloutReasonDetail?: string;
+  rolloutLastReasonAt?: string;
+  caps: {
+    requireArm: boolean;
+    maxNotionalPerTrade: number;
+    maxTradesPerWindow: number;
+    windowMs: number;
+    cooldownMs: number;
+    maxInFlight: number;
+    failuresToBlock: number;
+    failureWindowMs: number;
+    maxDailyNotional?: number;
+    allowlistTokens: string[];
+  };
+  armed: boolean;
+  killSwitchActive: boolean;
+  blocked: boolean;
+  reasonCode?: string;
+  reasonDetail?: string;
+  lastOperatorAction?: "arm" | "disarm" | "kill" | "reset_kill";
+  lastOperatorActionAt?: string;
+  lastGuardrailRefusal?: {
+    code: string;
+    stage: "preflight" | "limits";
+    at: string;
+    detail?: string;
+    operatorActionRequired: boolean;
+  };
+}
+
+export interface RuntimeRecentHistory {
+  recentCycleCount: number;
+  cycleOutcomes: Record<"success" | "blocked" | "error", number>;
+  attemptsByMode: Record<"dry" | "paper" | "live", number>;
+  refusalCounts: Record<string, number>;
+  failureStageCounts: Record<string, number>;
+  verificationHealth: {
+    passed: number;
+    failed: number;
+    failureReasons: Record<string, number>;
+  };
+  incidentCounts: Record<string, number>;
+  controlActions: Array<{
+    id: string;
+    at: string;
+    severity: "info" | "warning" | "critical";
+    type: string;
+    message: string;
+  }>;
+  stateTransitions: Array<{
+    at: string;
+    type: string;
+    message: string;
+  }>;
+  recentCycles: Array<{
+    traceId: string;
+    cycleTimestamp: string;
+    mode: "dry" | "paper" | "live";
+    outcome: "success" | "blocked" | "error";
+    stage: string;
+    blocked: boolean;
+    blockedReason?: string;
+    intakeOutcome: "ok" | "stale" | "adapter_error" | "invalid" | "kill_switch_halted";
+    executionOccurred: boolean;
+    verificationOccurred: boolean;
+    decisionOccurred: boolean;
+    errorOccurred: boolean;
+    decision?: {
+      allowed: boolean;
+      direction?: string;
+      confidence?: number;
+      riskAllowed?: boolean;
+      chaosAllowed?: boolean;
+      reason?: string;
+      tradeIntentId?: string;
+    };
+  }>;
+  recentIncidents: Array<{
+    id: string;
+    at: string;
+    severity: "info" | "warning" | "critical";
+    type: string;
+    message: string;
+  }>;
+}
+
 export interface HealthResponse {
   status: "OK" | "DEGRADED" | "FAIL";
   uptimeMs: number;
@@ -26,23 +135,7 @@ export interface HealthResponse {
     lastBlockedReason?: string;
     lastEngineStage?: string;
     lastIntakeOutcome?: "ok" | "stale" | "adapter_error" | "invalid" | "kill_switch_halted";
-    liveControl?: {
-      posture: string;
-      armed: boolean;
-      killSwitchActive: boolean;
-      blocked: boolean;
-      reasonCode?: string;
-      reasonDetail?: string;
-      lastOperatorAction?: "arm" | "disarm" | "kill" | "reset_kill";
-      lastOperatorActionAt?: string;
-      lastGuardrailRefusal?: {
-        code: string;
-        stage: "preflight" | "limits";
-        at: string;
-        detail?: string;
-        operatorActionRequired: boolean;
-      };
-    };
+    liveControl?: RuntimeLiveControl;
     degraded?: {
       active: boolean;
       consecutiveCycles: number;
@@ -59,6 +152,16 @@ export interface HealthResponse {
       degradedAdapterIds: string[];
       unhealthyAdapterIds: string[];
     };
+    readiness?: {
+      posture: RuntimeReadiness["posture"];
+      liveAllowed: boolean;
+      paperSafe: boolean;
+      rolloutPosture: RuntimeReadiness["rolloutPosture"];
+      rolloutConfigured: boolean;
+      rolloutConfigValid: boolean;
+      reason?: string;
+    };
+    recentHistory?: RuntimeRecentHistory;
   };
 }
 
@@ -80,23 +183,7 @@ export interface KpiSummaryResponse {
     errorCount: number;
     lastDecisionAt?: string;
     lastIntakeOutcome?: "ok" | "stale" | "adapter_error" | "invalid" | "kill_switch_halted";
-    liveControl?: {
-      posture: string;
-      armed: boolean;
-      killSwitchActive: boolean;
-      blocked: boolean;
-      reasonCode?: string;
-      reasonDetail?: string;
-      lastOperatorAction?: "arm" | "disarm" | "kill" | "reset_kill";
-      lastOperatorActionAt?: string;
-      lastGuardrailRefusal?: {
-        code: string;
-        stage: "preflight" | "limits";
-        at: string;
-        detail?: string;
-        operatorActionRequired: boolean;
-      };
-    };
+    liveControl?: RuntimeLiveControl;
     degraded?: {
       active: boolean;
       consecutiveCycles: number;
@@ -113,6 +200,16 @@ export interface KpiSummaryResponse {
       degradedAdapterIds: string[];
       unhealthyAdapterIds: string[];
     };
+    readiness?: {
+      posture: RuntimeReadiness["posture"];
+      liveAllowed: boolean;
+      paperSafe: boolean;
+      rolloutPosture: RuntimeReadiness["rolloutPosture"];
+      rolloutConfigured: boolean;
+      rolloutConfigValid: boolean;
+      reason?: string;
+    };
+    recentHistory?: RuntimeRecentHistory;
   };
 }
 
