@@ -1,7 +1,7 @@
 /**
  * Wave 7: Execution integration - quote, verify, swap flow.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createExecutionHandler } from "../../src/agents/execution.agent.js";
 import { createRpcClient } from "../../src/adapters/rpc-verify/client.js";
 import type { TradeIntent } from "../../src/core/contracts/trade.js";
@@ -26,6 +26,11 @@ const liveIntent: TradeIntent = {
 };
 
 describe("Execution integration (Wave 7)", () => {
+  afterEach(() => {
+    delete process.env.LIVE_TRADING;
+    delete process.env.RPC_MODE;
+  });
+
   it("handler with RPC client runs verify + swap path", async () => {
     const rpcClient = createRpcClient();
     const handler = await createExecutionHandler({
@@ -71,5 +76,71 @@ describe("Execution integration (Wave 7)", () => {
     expect(result.dryRun).toBe(false);
     expect(result.paperExecution).toBe(false);
     expect(result.error).toContain("Live execution disabled");
+  });
+
+  it("live intent fails closed when live swap dependencies are incomplete", async () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+
+    const rpcClient = createRpcClient();
+    const handler = await createExecutionHandler({
+      rpcClient,
+      walletAddress: "11111111111111111111111111111111",
+    });
+
+    const result = await handler(liveIntent);
+    expect(result.success).toBe(false);
+    expect(result.executionMode).toBe("live");
+    expect(result.paperExecution).toBe(false);
+    expect(result.error).toContain("requires rpcClient, walletAddress, and signTransaction");
+
+  });
+
+  it("live intent uses quote + swap boundary when fully wired", async () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+
+    const quoteFetcher = vi.fn().mockResolvedValue({
+      quoteId: "q-live",
+      amountOut: "123",
+      minAmountOut: "120",
+      slippageBps: 100,
+      rawQuotePayload: { routePlan: [] },
+    });
+    const swapExecutor = vi.fn().mockResolvedValue({
+      traceId: liveIntent.traceId,
+      timestamp: liveIntent.timestamp,
+      tradeIntentId: liveIntent.idempotencyKey,
+      success: true,
+      executionMode: "live",
+      dryRun: false,
+      paperExecution: false,
+      txSignature: "live-sig-1",
+    });
+
+    const handler = await createExecutionHandler({
+      rpcClient: {
+        sendRawTransaction: async () => "sig",
+        getTokenInfo: async () => ({ mint: "mint", decimals: 9, exists: true }),
+        getBalance: async () => ({ address: "a", balance: "10000000000", decimals: 9 }),
+        getTransactionReceipt: async () => ({}),
+      },
+      walletAddress: "11111111111111111111111111111111",
+      signTransaction: async (tx) => tx,
+      quoteFetcher,
+      swapExecutor,
+    });
+
+    const result = await handler(liveIntent);
+    expect(result.success).toBe(true);
+    expect(result.executionMode).toBe("live");
+    expect(result.paperExecution).toBe(false);
+    expect(quoteFetcher).toHaveBeenCalledWith(liveIntent);
+    expect(swapExecutor).toHaveBeenCalledTimes(1);
+    expect(swapExecutor.mock.calls[0][0]).toEqual(liveIntent);
+    expect(swapExecutor.mock.calls[0][1]).toMatchObject({ quoteId: "q-live" });
+    expect(swapExecutor.mock.calls[0][2]).toMatchObject({
+      walletPublicKey: "11111111111111111111111111111111",
+    });
   });
 });
