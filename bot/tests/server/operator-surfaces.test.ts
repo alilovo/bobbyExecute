@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { createServer } from "../../src/server/index.js";
 import { createDryRunRuntime } from "../../src/runtime/dry-run-runtime.js";
 import { resetKillSwitch } from "../../src/governance/kill-switch.js";
@@ -10,7 +13,7 @@ import { InMemoryIncidentRepository, type IncidentRecord } from "../../src/persi
 import { RepositoryIncidentRecorder } from "../../src/observability/incidents.js";
 import { armMicroLive, killMicroLive, resetMicroLiveControlForTests } from "../../src/runtime/live-control.js";
 
-const config = {
+const baseConfig = {
   nodeEnv: "test" as const,
   dryRun: true,
   tradingEnabled: false,
@@ -27,6 +30,7 @@ const config = {
   maxSlippagePercent: 5,
   reviewPolicyMode: "required" as const,
 };
+let config = baseConfig;
 const OPERATOR_READ_TOKEN = "phase10-operator-read-token";
 
 function authHeaders(token = OPERATOR_READ_TOKEN): HeadersInit {
@@ -64,16 +68,27 @@ async function waitForCondition(check: () => boolean | Promise<boolean>, timeout
 describe("Operator read-only surfaces", () => {
   const servers: Array<Awaited<ReturnType<typeof createServer>>> = [];
   const runtimes: ReturnType<typeof createDryRunRuntime>[] = [];
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "operator-surfaces-"));
+    config = {
+      ...baseConfig,
+      journalPath: join(tempDir, "journal.jsonl"),
+    };
+  });
 
   afterEach(async () => {
     for (const runtime of runtimes) await runtime.stop();
     for (const server of servers) await server.close();
+    await rm(tempDir, { recursive: true, force: true });
     resetKillSwitch();
     resetMicroLiveControlForTests();
     delete process.env.LIVE_TRADING;
     delete process.env.RPC_MODE;
     servers.length = 0;
     runtimes.length = 0;
+    config = baseConfig;
   });
 
   it("GET /runtime/cycles returns grounded persisted summaries", async () => {

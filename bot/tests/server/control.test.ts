@@ -2,6 +2,9 @@
  * Runtime control routes.
  */
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { createServer } from "../../src/server/index.js";
 import { resetKillSwitch } from "../../src/governance/kill-switch.js";
 import type { DryRunRuntime } from "../../src/runtime/dry-run-runtime.js";
@@ -18,8 +21,10 @@ describe("Control routes", () => {
   let server: Awaited<ReturnType<typeof createServer>>;
   let baseUrl: string;
   let runtime: DryRunRuntime;
+  let tempDir: string;
 
   beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "control-test-"));
     resetKillSwitch();
     resetMicroLiveControlForTests();
     process.env.LIVE_TRADING = "true";
@@ -36,7 +41,7 @@ describe("Control routes", () => {
       dexpaprikaBaseUrl: "https://api.dexpaprika.com",
       moralisBaseUrl: "https://solana-gateway.moralis.io",
       walletAddress: "11111111111111111111111111111111",
-      journalPath: "data/control-test-journal.jsonl",
+      journalPath: join(tempDir, "journal.jsonl"),
       circuitBreakerFailureThreshold: 5,
       circuitBreakerRecoveryMs: 60_000,
       maxSlippagePercent: 5,
@@ -53,6 +58,7 @@ describe("Control routes", () => {
   afterEach(async () => {
     await runtime.stop();
     await server.close();
+    await rm(tempDir, { recursive: true, force: true });
     resetKillSwitch();
     resetMicroLiveControlForTests();
     delete process.env.LIVE_TRADING;

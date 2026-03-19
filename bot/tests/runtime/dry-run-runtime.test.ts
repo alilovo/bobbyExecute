@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { DryRunRuntime } from "../../src/runtime/dry-run-runtime.js";
 import { resetKillSwitch, triggerKillSwitch } from "../../src/governance/kill-switch.js";
 import { CircuitBreaker } from "../../src/governance/circuit-breaker.js";
@@ -8,7 +11,7 @@ import { RepositoryIncidentRecorder } from "../../src/observability/incidents.js
 import { InMemoryActionLogger } from "../../src/observability/action-log.js";
 import type { Config } from "../../src/config/config-schema.js";
 
-const TEST_CONFIG: Config = {
+const TEST_CONFIG_BASE: Config = {
   nodeEnv: "test",
   dryRun: true,
   tradingEnabled: false,
@@ -25,6 +28,7 @@ const TEST_CONFIG: Config = {
   maxSlippagePercent: 5,
   reviewPolicyMode: "required",
 };
+let TEST_CONFIG: Config = TEST_CONFIG_BASE;
 
 function createMarketSnapshot(traceId: string, freshnessMs = 0) {
   return {
@@ -55,8 +59,23 @@ async function waitForCondition(check: () => boolean, timeoutMs = 2_000): Promis
 }
 
 describe("DryRunRuntime (phase-2)", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "dry-run-runtime-"));
+    TEST_CONFIG = {
+      ...TEST_CONFIG_BASE,
+      journalPath: join(tempDir, "journal.jsonl"),
+    };
+  });
+
   afterEach(() => {
+    TEST_CONFIG = TEST_CONFIG_BASE;
     resetKillSwitch();
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("fails closed when kill switch is active", async () => {

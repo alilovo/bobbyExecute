@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { bootstrap } from "../../src/bootstrap.js";
 import { resetConfigCache } from "../../src/config/load-config.js";
 import { resetKillSwitch } from "../../src/governance/kill-switch.js";
@@ -9,6 +12,8 @@ import { InMemoryActionLogger } from "../../src/observability/action-log.js";
 const ORIG_ENV = process.env;
 
 describe("bootstrap runtime closure (phase-1)", () => {
+  let tempDir: string;
+
   beforeEach(() => {
     resetConfigCache();
     process.env = { ...ORIG_ENV };
@@ -20,10 +25,19 @@ describe("bootstrap runtime closure (phase-1)", () => {
     delete process.env.ROLLOUT_POSTURE;
   });
 
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "bootstrap-runtime-"));
+    process.env.JOURNAL_PATH = join(tempDir, "journal.jsonl");
+  });
+
   afterEach(() => {
     resetKillSwitch();
     resetConfigCache();
     process.env = ORIG_ENV;
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("starts server and dry-run runtime together", async () => {

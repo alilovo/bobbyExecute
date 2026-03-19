@@ -61,3 +61,4 @@ npm run premerge
 ## Operations
 
 - [`docs/ops/production-readiness.md`](docs/ops/production-readiness.md) – operator runbook, readiness semantics, and deployment checklist
+- [`docs/ops/staging-rehearsal-template.md`](docs/ops/staging-rehearsal-template.md) – reusable staging rehearsal report and go/no-go template
