@@ -65,6 +65,10 @@ export const ExecutionReportSchema = z.object({
   dryRun: z.boolean().optional(),
   executionMode: z.enum(["dry", "paper", "live"]).optional(),
   paperExecution: z.boolean().optional(),
+  failClosed: z.boolean().optional(),
+  failureStage: z.string().optional(),
+  failureCode: z.string().optional(),
+  artifacts: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const RpcVerificationReportSchema = z.object({

@@ -16,6 +16,8 @@ export interface ExecutionHandlerDeps {
   rpcClient?: RpcClient;
   walletAddress?: string;
   signTransaction?: (tx: VersionedTransaction) => Promise<VersionedTransaction>;
+  buildSwapTransaction?: SwapDeps["buildSwapTransaction"];
+  verifyTransaction?: SwapDeps["verifyTransaction"];
   quoteFetcher?: (intent: TradeIntent) => Promise<QuoteResult>;
   swapExecutor?: (intent: TradeIntent, quote?: QuoteResult, deps?: SwapDeps) => Promise<ExecutionReport>;
 }
@@ -53,6 +55,20 @@ export async function createExecutionHandler(
         dryRun: false,
         executionMode: "live",
         paperExecution: false,
+        failClosed: true,
+        failureStage: "preflight",
+        failureCode: "live_dependency_incomplete",
+        artifacts: {
+          mode: "live",
+          failClosed: true,
+          stage: "preflight",
+          dependencyState: {
+            hasRpcClient: !!rpcClient,
+            hasWalletAddress: !!walletAddress,
+            hasSendRawTransaction: !!sendRawTransaction,
+            hasSignTransaction: !!signTransaction,
+          },
+        },
       };
     }
 
@@ -83,15 +99,127 @@ export async function createExecutionHandler(
       return swapExecutor(intent, undefined, undefined);
     }
 
+    const swapRpcClient = rpcClient?.getTransactionReceipt
+      ? {
+          sendRawTransaction: sendRawTransaction!,
+          getTransactionReceipt: rpcClient.getTransactionReceipt.bind(rpcClient),
+        }
+      : {
+          sendRawTransaction: sendRawTransaction!,
+        };
+
     const swapDeps: SwapDeps | undefined = hasLiveSwapDeps
       ? {
-          rpcClient: { sendRawTransaction: sendRawTransaction! },
+          rpcClient: swapRpcClient,
           walletPublicKey: walletAddress!,
           signTransaction: signTransaction!,
+          buildSwapTransaction: deps?.buildSwapTransaction,
+          verifyTransaction: deps?.verifyTransaction,
         }
       : undefined;
 
-    const quote = liveIntent ? await quoteFetcher(intent) : undefined;
-    return swapExecutor(intent, quote, swapDeps);
+    let quote: QuoteResult | undefined;
+    if (liveIntent) {
+      try {
+        quote = await quoteFetcher(intent);
+      } catch (error) {
+        return {
+          traceId: intent.traceId,
+          timestamp: intent.timestamp,
+          tradeIntentId: intent.idempotencyKey,
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+          dryRun: false,
+          executionMode: "live",
+          paperExecution: false,
+          failClosed: true,
+          failureStage: "quote",
+          failureCode: "live_quote_failed",
+          artifacts: {
+            mode: "live",
+            failClosed: true,
+            stage: "quote",
+            quote: { fetched: false },
+          },
+        };
+      }
+    }
+
+    try {
+      const result = await swapExecutor(intent, quote, swapDeps);
+      if (!liveIntent) {
+        return result;
+      }
+
+      if (result.success) {
+        const hasTx = typeof result.txSignature === "string" && result.txSignature.trim().length > 0;
+        const verificationConfirmed =
+          typeof result.artifacts === "object" &&
+          result.artifacts !== null &&
+          "verification" in result.artifacts &&
+          typeof (result.artifacts as Record<string, unknown>).verification === "object" &&
+          (result.artifacts as Record<string, unknown>).verification !== null &&
+          (result.artifacts as { verification: { confirmed?: boolean } }).verification.confirmed === true;
+        if (!hasTx || !verificationConfirmed) {
+          return {
+            traceId: intent.traceId,
+            timestamp: intent.timestamp,
+            tradeIntentId: intent.idempotencyKey,
+            success: false,
+            error: "Live success rejected: missing concrete tx signature or confirmation evidence.",
+            dryRun: false,
+            executionMode: "live",
+            paperExecution: false,
+            failClosed: true,
+            failureStage: !hasTx ? "send" : "verification",
+            failureCode: !hasTx ? "live_send_ambiguous" : "live_verification_failed",
+            artifacts: {
+              mode: "live",
+              failClosed: true,
+              stage: !hasTx ? "send" : "verification",
+              priorResult: result.artifacts ?? {},
+            },
+          };
+        }
+      } else {
+        return {
+          ...result,
+          executionMode: "live",
+          dryRun: false,
+          paperExecution: false,
+          failClosed: result.failClosed ?? true,
+          artifacts: result.artifacts ?? {
+            mode: "live",
+            failClosed: true,
+            stage: result.failureStage ?? "unknown",
+          },
+        };
+      }
+
+      return result;
+    } catch (error) {
+      return {
+        traceId: intent.traceId,
+        timestamp: intent.timestamp,
+        tradeIntentId: intent.idempotencyKey,
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        dryRun: false,
+        executionMode: "live",
+        paperExecution: false,
+        failClosed: true,
+        failureStage: "swap_build",
+        failureCode: "live_swap_build_failed",
+        artifacts: {
+          mode: "live",
+          failClosed: true,
+          stage: "swap_build",
+          quote: {
+            quoteId: quote?.quoteId,
+            fetchedAt: quote?.fetchedAt,
+          },
+        },
+      };
+    }
   };
 }

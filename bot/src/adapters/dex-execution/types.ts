@@ -6,6 +6,7 @@ export interface QuoteResult {
   quoteId: string;
   amountOut: string;
   minAmountOut: string;
+  fetchedAt?: string;
   slippageBps: number;
   /** Raw Jupiter Quote API response for downstream use ( Swap, debugging ). */
   rawQuotePayload?: unknown;

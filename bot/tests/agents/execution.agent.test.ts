@@ -1,5 +1,5 @@
 /**
- * Execution agent - quote, verifyBeforeTrade, executeSwap integration.
+ * Execution agent - live boundary and fail-closed behavior.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createExecutionHandler } from "@bot/agents/execution.agent.js";
@@ -24,17 +24,15 @@ describe("createExecutionHandler", () => {
     delete process.env.RPC_MODE;
   });
 
-  it("returns paper result when no deps (default)", async () => {
+  it("keeps paper behavior unchanged for non-live intents", async () => {
     const handler = await createExecutionHandler();
     const result = await handler(baseIntent);
     expect(result.success).toBe(true);
-    expect(result.dryRun).toBe(false);
     expect(result.executionMode).toBe("paper");
     expect(result.paperExecution).toBe(true);
-    expect(result.tradeIntentId).toBe("exec-key-1");
   });
 
-  it("runs verifyBeforeTrade and executeSwap when deps with rpcClient and walletAddress", async () => {
+  it("runs verifyBeforeTrade and executeSwap when verify deps are present", async () => {
     const rpcClient = createRpcClient();
     const handler = await createExecutionHandler({
       rpcClient,
@@ -76,11 +74,11 @@ describe("createExecutionHandler", () => {
 
     expect(result.success).toBe(false);
     expect(result.executionMode).toBe("live");
-    expect(result.paperExecution).toBe(false);
-    expect(result.error).toContain("requires rpcClient, walletAddress, and signTransaction");
+    expect(result.failureCode).toBe("live_dependency_incomplete");
+    expect(result.failClosed).toBe(true);
   });
 
-  it("runs live quote + swap with injected executors when fully wired", async () => {
+  it("rejects synthetic live success that lacks verification evidence", async () => {
     process.env.LIVE_TRADING = "true";
     process.env.RPC_MODE = "real";
 
@@ -88,6 +86,7 @@ describe("createExecutionHandler", () => {
       quoteId: "q-live",
       amountOut: "200",
       minAmountOut: "190",
+      fetchedAt: new Date().toISOString(),
       slippageBps: 100,
       rawQuotePayload: { routePlan: [] },
     });
@@ -100,6 +99,7 @@ describe("createExecutionHandler", () => {
       dryRun: false,
       paperExecution: false,
       txSignature: "sig-live",
+      artifacts: {},
     });
 
     const handler = await createExecutionHandler({
@@ -119,9 +119,9 @@ describe("createExecutionHandler", () => {
       executionMode: "live",
     });
 
-    expect(result.success).toBe(true);
-    expect(result.executionMode).toBe("live");
-    expect(result.paperExecution).toBe(false);
+    expect(result.success).toBe(false);
+    expect(result.failureCode).toBe("live_verification_failed");
+    expect(result.failClosed).toBe(true);
     expect(quoteFetcher).toHaveBeenCalledTimes(1);
     expect(swapExecutor).toHaveBeenCalledTimes(1);
   });

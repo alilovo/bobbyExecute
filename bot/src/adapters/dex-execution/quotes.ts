@@ -66,10 +66,12 @@ export async function getQuote(intent: TradeIntent): Promise<QuoteResult> {
   }
 
   const raw = (await res.json()) as JupiterQuoteResponse;
+  const fetchedAt = new Date().toISOString();
   return {
     quoteId: intent.idempotencyKey,
     amountOut: raw.outAmount,
     minAmountOut: raw.otherAmountThreshold ?? raw.outAmount,
+    fetchedAt,
     slippageBps,
     rawQuotePayload: raw,
   };
