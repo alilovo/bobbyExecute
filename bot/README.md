@@ -50,6 +50,8 @@ npm run build
 npm test
 npm run test:golden
 npm run premerge
+npm run live:preflight
+npm run live:test
 ```
 
 ## Config

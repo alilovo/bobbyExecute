@@ -58,9 +58,31 @@ describe("Config validation (P1)", () => {
   it("live config rejects missing explicit pre-live prerequisites", () => {
     process.env.LIVE_TRADING = "true";
     process.env.RPC_MODE = "real";
+    delete process.env.TRADING_ENABLED;
+    delete process.env.LIVE_TEST_MODE;
+    delete process.env.WALLET_ADDRESS;
+    delete process.env.CONTROL_TOKEN;
+    delete process.env.OPERATOR_READ_TOKEN;
 
     expect(() => parseConfig(process.env as Record<string, string | undefined>)).toThrow(
       /TRADING_ENABLED=true|LIVE_TEST_MODE=true|WALLET_ADDRESS|CONTROL_TOKEN|OPERATOR_READ_TOKEN/
+    );
+  });
+
+  it("loadConfig rejects invalid live-test caps in live mode", () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+    process.env.TRADING_ENABLED = "true";
+    process.env.LIVE_TEST_MODE = "true";
+    process.env.LIVE_TEST_MAX_CAPITAL_USD = "0";
+    process.env.LIVE_TEST_MAX_TRADES_PER_DAY = "1";
+    process.env.LIVE_TEST_MAX_DAILY_LOSS_USD = "50";
+    process.env.WALLET_ADDRESS = "11111111111111111111111111111111";
+    process.env.CONTROL_TOKEN = "phase10-live-control-token";
+    process.env.OPERATOR_READ_TOKEN = "phase10-live-operator-token";
+
+    expect(() => loadConfig(process.env as Record<string, string | undefined>)).toThrow(
+      /LIVE_TEST_MAX_CAPITAL_USD must be at least 1/
     );
   });
 

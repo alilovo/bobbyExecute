@@ -27,6 +27,7 @@ export * from "./governance/circuit-breaker.js";
 export * from "./governance/kill-switch.js";
 export {
   getLiveTestConfig,
+  assertLiveTestPrerequisites,
   type LiveTestConfig,
 } from "./config/safety.js";
 export {

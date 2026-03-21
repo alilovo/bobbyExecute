@@ -2,13 +2,16 @@
  * Wave 8: Live-test config, daily loss tracker.
  */
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { getLiveTestConfig } from "../../src/config/safety.js";
+import { assertLiveTestPrerequisites, getLiveTestConfig } from "../../src/config/safety.js";
+import { parseConfig } from "../../src/config/config-schema.js";
+import { resetConfigCache } from "../../src/config/load-config.js";
 import {
   createDailyLossTracker,
   isDailyLimitReached,
   getDailyLossState,
   resetDailyLossState,
 } from "../../src/governance/daily-loss-tracker.js";
+import { runLiveTestPreflight } from "../../src/scripts/live-test-preflight.js";
 import { FakeClock } from "../../src/core/clock.js";
 import { Engine } from "../../src/core/engine.js";
 import type { MarketSnapshot } from "../../src/core/contracts/market.js";
@@ -19,10 +22,12 @@ describe("Live test config (Wave 8)", () => {
 
   beforeEach(() => {
     process.env = { ...orig };
+    resetConfigCache();
   });
 
   afterEach(() => {
     process.env = orig;
+    resetConfigCache();
   });
 
   it("getLiveTestConfig returns defaults when LIVE_TEST_MODE unset", () => {
@@ -40,6 +45,61 @@ describe("Live test config (Wave 8)", () => {
     const cfg = getLiveTestConfig();
     expect(cfg.enabled).toBe(true);
     expect(cfg.maxTradesPerDay).toBe(3);
+  });
+
+  it("assertLiveTestPrerequisites returns normalized config in live mode", () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+    process.env.TRADING_ENABLED = "true";
+    process.env.LIVE_TEST_MODE = "true";
+    process.env.LIVE_TEST_MAX_CAPITAL_USD = "75";
+    process.env.LIVE_TEST_MAX_TRADES_PER_DAY = "2";
+    process.env.LIVE_TEST_MAX_DAILY_LOSS_USD = "20";
+    process.env.WALLET_ADDRESS = "11111111111111111111111111111111";
+    process.env.CONTROL_TOKEN = "phase10-live-control-token";
+    process.env.OPERATOR_READ_TOKEN = "phase10-live-operator-token";
+
+    const config = parseConfig(process.env as Record<string, string | undefined>);
+    const liveTest = assertLiveTestPrerequisites(config);
+
+    expect(liveTest.enabled).toBe(true);
+    expect(liveTest.maxCapitalUsd).toBe(75);
+    expect(liveTest.maxTradesPerDay).toBe(2);
+    expect(liveTest.maxDailyLossUsd).toBe(20);
+  });
+
+  it("runLiveTestPreflight rejects non-live execution modes", () => {
+    process.env.LIVE_TEST_MODE = "true";
+    delete process.env.LIVE_TRADING;
+    delete process.env.RPC_MODE;
+
+    expect(() => runLiveTestPreflight()).toThrow(
+      /Live-test preflight requires LIVE_TRADING=true/
+    );
+  });
+
+  it("runLiveTestPreflight returns a live-test report in valid live mode", () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+    process.env.TRADING_ENABLED = "true";
+    process.env.LIVE_TEST_MODE = "true";
+    process.env.LIVE_TEST_MAX_CAPITAL_USD = "80";
+    process.env.LIVE_TEST_MAX_TRADES_PER_DAY = "2";
+    process.env.LIVE_TEST_MAX_DAILY_LOSS_USD = "25";
+    process.env.WALLET_ADDRESS = "11111111111111111111111111111111";
+    process.env.CONTROL_TOKEN = "phase10-live-control-token";
+    process.env.OPERATOR_READ_TOKEN = "phase10-live-operator-token";
+
+    const report = runLiveTestPreflight();
+
+    expect(report).toMatchObject({
+      executionMode: "live",
+      rpcMode: "real",
+      liveTestEnabled: true,
+      maxCapitalUsd: 80,
+      maxTradesPerDay: 2,
+      maxDailyLossUsd: 25,
+    });
   });
 });
 

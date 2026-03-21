@@ -6,6 +6,7 @@ Use this runbook for controlled live testing after Waves 1–8 completion.
 
 - [ ] All waves 1–7 complete
 - [ ] `npm run premerge` passes
+- [ ] `npm run live:preflight` passes
 - [ ] Dry run successful (1 week)
 - [ ] Shadow mode successful (1 week)
 
@@ -22,15 +23,37 @@ Use this runbook for controlled live testing after Waves 1–8 completion.
 
 ## Pre-flight Checklist
 
-Run `bot/scripts/live-test-checklist.sh` before enabling live test.
+Run one of the following before enabling live test:
+
+```bash
+cd bot
+npm run live:preflight
+```
+
+or, from the repo root:
+
+```bash
+bot/scripts/live-test-checklist.sh
+```
 
 ## Execution Flow
 
-1. **Start server**: `cd bot && npm run build && npm run start:server`
-2. **Verify health**: `curl http://localhost:3333/health`
-3. **Monitor KPIs**: Dashboard at `/kpi/summary`, `/kpi/adapters`, `/kpi/decisions`
-4. **Emergency stop**: `POST /emergency-stop` if needed
-5. **Reset**: `POST /control/reset` (manual operator only)
+1. **Run preflight**: `cd bot && npm run live:preflight`
+2. **Start live-test server**: `cd bot && npm run live:test`
+3. **Verify health**: `curl http://localhost:3333/health`
+4. **Monitor KPIs**: Dashboard at `/kpi/summary`, `/kpi/adapters`, `/kpi/decisions`
+5. **Emergency stop**: `POST /emergency-stop` if needed
+6. **Reset**: `POST /control/reset` (manual operator only)
+
+## Live Test Round
+
+The current workflow is a controlled round with one live-test server session:
+
+1. Preflight must pass.
+2. Server starts in `LIVE_TRADING=true`, `RPC_MODE=real`, `LIVE_TEST_MODE=true`.
+3. Operator validates `/health` and `/kpi/summary`.
+4. One bounded live round is executed through the guarded runtime/control flow.
+5. Operator stops the session or uses `POST /emergency-stop` / `POST /control/reset` if needed.
 
 ## Rollback Triggers
 

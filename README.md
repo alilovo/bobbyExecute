@@ -106,6 +106,16 @@ npm run lint
 npm test
 ```
 
+For the live-test workflow, use:
+
+```bash
+cd bot
+npm run live:preflight
+npm run live:test
+```
+
+The preflight command validates the full offline gate plus live-test prerequisites before the server starts.
+
 ---
 
 ## Runtime Server

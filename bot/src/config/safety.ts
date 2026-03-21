@@ -33,6 +33,27 @@ export function assertLiveTradingRequiresRealRpc(): void {
   assertRealModeForLive();
 }
 
+function readLiveTestIntegerEnv(
+  envKey: string,
+  fallback: number,
+  min: number
+): number {
+  const raw = process.env[envKey];
+  if (raw == null || raw === "") {
+    return fallback;
+  }
+
+  const trimmed = raw.trim();
+  if (!/^-?\d+$/.test(trimmed)) {
+    throw new Error(`${envKey} must be an integer.`);
+  }
+  const parsed = Number.parseInt(trimmed, 10);
+  if (parsed < min) {
+    throw new Error(`${envKey} must be at least ${min}.`);
+  }
+  return parsed;
+}
+
 export function assertLiveTradingPrerequisites(config: Config): void {
   if (config.executionMode !== "live") {
     return;
@@ -88,17 +109,39 @@ const DEFAULT_LIVE_TEST: LiveTestConfig = {
 export function getLiveTestConfig(): LiveTestConfig {
   const enabled =
     process.env[LIVE_TEST_MODE_ENV]?.toLowerCase() === "true" || false;
-  const maxCapitalUsd = Math.max(
-    0,
-    parseInt(process.env[MAX_CAPITAL_USD_ENV] ?? String(DEFAULT_LIVE_TEST.maxCapitalUsd), 10) || DEFAULT_LIVE_TEST.maxCapitalUsd
+  const maxCapitalUsd = readLiveTestIntegerEnv(
+    MAX_CAPITAL_USD_ENV,
+    DEFAULT_LIVE_TEST.maxCapitalUsd,
+    1
   );
-  const maxTradesPerDay = Math.max(
-    1,
-    parseInt(process.env[MAX_TRADES_PER_DAY_ENV] ?? String(DEFAULT_LIVE_TEST.maxTradesPerDay), 10) || DEFAULT_LIVE_TEST.maxTradesPerDay
+  const maxTradesPerDay = readLiveTestIntegerEnv(
+    MAX_TRADES_PER_DAY_ENV,
+    DEFAULT_LIVE_TEST.maxTradesPerDay,
+    1
   );
-  const maxDailyLossUsd = Math.max(
-    0,
-    parseInt(process.env[MAX_DAILY_LOSS_USD_ENV] ?? String(DEFAULT_LIVE_TEST.maxDailyLossUsd), 10) || DEFAULT_LIVE_TEST.maxDailyLossUsd
+  const maxDailyLossUsd = readLiveTestIntegerEnv(
+    MAX_DAILY_LOSS_USD_ENV,
+    DEFAULT_LIVE_TEST.maxDailyLossUsd,
+    0
   );
   return { enabled, maxCapitalUsd, maxTradesPerDay, maxDailyLossUsd };
+}
+
+/**
+ * Validates live-test prerequisites and returns the normalized live-test config.
+ * In live mode, live-test mode must be enabled and caps must be sane.
+ * In non-live modes, this is a no-op so paper/dry startup keeps working.
+ */
+export function assertLiveTestPrerequisites(config: Config): LiveTestConfig {
+  const liveTestConfig = getLiveTestConfig();
+
+  if (config.executionMode !== "live") {
+    return liveTestConfig;
+  }
+
+  if (!liveTestConfig.enabled) {
+    throw new Error("LIVE_TRADING=true requires LIVE_TEST_MODE=true.");
+  }
+
+  return liveTestConfig;
 }
