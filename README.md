@@ -26,7 +26,7 @@ This repository is safe-by-default. It supports offline testing, paper-style run
 | Contributor | `README.md` -> [`governance/SoT.md`](governance/SoT.md) -> [`docs/bobbyexecution/README.md`](docs/bobbyexecution/README.md) |
 | Operator / end user | `README.md` -> [`bot/CONFIG_GUIDE.md`](bot/CONFIG_GUIDE.md) -> [`docs/bobbyexecution/live_test_runbook.md`](docs/bobbyexecution/live_test_runbook.md) |
 | Auditor | [`governance/SoT.md`](governance/SoT.md) -> [`docs/bobbyexecution/README.md`](docs/bobbyexecution/README.md) -> [`docs/bobbyexecution/production_readiness_checklist.md`](docs/bobbyexecution/production_readiness_checklist.md) |
-| Implementer | [`governance/SoT.md`](governance/SoT.md) -> [`docs/bobbyexecution/navigation_protocol.md`](docs/bobbyexecution/navigation_protocol.md) -> [`docs/bobbyexecution/spec_generation_protocol.md`](docs/bobbyexecution/spec_generation_protocol.md) |
+| Developer / maintainer | [`governance/SoT.md`](governance/SoT.md) -> [`bot/README.md`](bot/README.md) -> [`docs/architecture/master-trading-bot-intelligence-spec.md`](docs/architecture/master-trading-bot-intelligence-spec.md) |
 | Incident responder | [`docs/bobbyexecution/incident_and_killswitch_runbook.md`](docs/bobbyexecution/incident_and_killswitch_runbook.md) |
 | Archive / retired docs | [`archive/README.md`](archive/README.md) |
 

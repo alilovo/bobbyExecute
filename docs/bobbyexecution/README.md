@@ -51,29 +51,8 @@ If you are setting up the repo on your own machine for the first time:
 | Contributor onboarding | [`../../governance/SoT.md`](../../governance/SoT.md) → this index |
 | Local setup | [`../../governance/SoT.md`](../../governance/SoT.md) → [`../../bot/CONFIG_GUIDE.md`](../../bot/CONFIG_GUIDE.md) |
 | Auditor entry point | [`../../governance/SoT.md`](../../governance/SoT.md) → [`production_readiness_checklist.md`](production_readiness_checklist.md) → [`live_test_runbook.md`](live_test_runbook.md) |
-| Implementer entry point | [`navigation_protocol.md`](navigation_protocol.md) → [`spec_generation_protocol.md`](spec_generation_protocol.md) |
 | Incident / emergency | [`incident_and_killswitch_runbook.md`](incident_and_killswitch_runbook.md) |
 | Pre-live-test checklist | [`production_readiness_checklist.md`](production_readiness_checklist.md) |
-
----
-
-## Architecture & Thinking
-
-- [`system_prompt.md`](system_prompt.md) — system operating identity and constraints
-- [`navigation_protocol.md`](navigation_protocol.md) — how to route engineering requests
-- [`systems_thinking_framework.md`](systems_thinking_framework.md) — reasoning framework
-- [`architecture_pattern_library.md`](architecture_pattern_library.md) — reusable architecture patterns
-- [`multi_agent_orchestration.md`](multi_agent_orchestration.md) — multi-agent design and ownership
-- [`decision_matrix.md`](decision_matrix.md) — decision classification and routing
-
----
-
-## Spec / Design / Review
-
-- [`spec_generation_protocol.md`](spec_generation_protocol.md) — how to produce implementation-ready specs
-- [`documentation_protocol.md`](documentation_protocol.md) — documentation standards and process
-- [`repo_design_standards.md`](repo_design_standards.md) — repo structure and naming conventions
-- [`architecture_review_protocol.md`](architecture_review_protocol.md) — architecture review process
 
 ---
 
@@ -88,9 +67,15 @@ Deep chaos reference: [`docs/trading/trading-edge_chaos-scenarios.md`](../tradin
 
 ---
 
+## Architecture Reference
+
+- [`docs/architecture/master-trading-bot-intelligence-spec.md`](../architecture/master-trading-bot-intelligence-spec.md) — canonical high-level system design for the current bot runtime
+- [`bot/README.md`](../../bot/README.md) — runtime overview and local operator setup
+
+---
+
 ## Readiness / Audit / Incident Response
 
 - [`production_readiness_checklist.md`](production_readiness_checklist.md) — mandatory gates before any live test
 - [`archive/README.md`](../../archive/README.md) — retired audit reports and cleaned-up docs
-- [`implementation_audit_prompt.md`](implementation_audit_prompt.md) — structured audit prompt for implementation review
 - [`incident_and_killswitch_runbook.md`](incident_and_killswitch_runbook.md) — emergency stop, level classification, post-incident review
