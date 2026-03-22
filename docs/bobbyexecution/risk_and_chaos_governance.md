@@ -80,5 +80,6 @@ Used for catastrophic runtime conditions; should trigger emergency stop consider
 
 - Canonical governance (chaos section): [`governance/SoT.md §12`](../../governance/SoT.md)
 - Deep chaos scenario reference: [`docs/trading/trading-edge_chaos-scenarios.md`](../trading/trading-edge_chaos-scenarios.md)
-- Audit report: [`production_readiness_audit_report.md`](production_readiness_audit_report.md)
+- Production readiness checklist: [`production_readiness_checklist.md`](production_readiness_checklist.md)
+- Archive: [`archive/README.md`](../../archive/README.md)
 - Domain index: [`docs/bobbyexecution/README.md`](README.md)

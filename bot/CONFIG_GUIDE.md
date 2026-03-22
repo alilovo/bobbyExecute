@@ -7,6 +7,48 @@
 
 All configuration is managed via environment variables loaded in `bot/src/config/`.
 
+### Current State
+
+- `bot/` is the active TypeScript runtime.
+- Dry and paper modes are the normal local paths.
+- Live-test startup is guarded, bounded, and fail-closed.
+- Uncontrolled live trading is not the current operating claim of this repo.
+
+### Local User Setup
+
+1. Copy [`.env.example`](../.env.example) to `.env` in the repo root.
+2. Keep these safe defaults for local work:
+   - `LIVE_TRADING=false`
+   - `DRY_RUN=true`
+   - `RPC_MODE=stub`
+   - `TRADING_ENABLED=false`
+3. Install dependencies:
+
+   ```bash
+   cd bot
+   npm install
+   ```
+
+4. Run the offline gate:
+
+   ```bash
+   npm run premerge
+   ```
+
+5. Start the bot API:
+
+   ```bash
+   npm run start:server
+   ```
+
+6. Optional dashboard setup:
+   - create `dashboard/.env.local`
+   - set `NEXT_PUBLIC_API_URL=http://localhost:3333`
+   - set `NEXT_PUBLIC_USE_MOCK=false`
+   - run `cd dashboard && npm install && npm run dev`
+
+7. If you want to use mutating control routes locally, set `CONTROL_TOKEN` and `OPERATOR_READ_TOKEN` in the root `.env`. Leaving them empty keeps those routes fail-closed.
+
 ### Safety Modes
 
 - **DRY_TRADING** (Default: true)
@@ -24,7 +66,7 @@ All configuration is managed via environment variables loaded in `bot/src/config
 - **LIVE_TRADING** (Production Only)
   ```
   LIVE_TRADING=true RPC_MODE=real RPC_URL=<real-endpoint>
-  → FAIL-CLOSED: Requires RPC_MODE=real or startup fails
+  → FAIL-CLOSED: Requires RPC_MODE=real and live-test prerequisites or startup fails
   ```
 
 ### RPC Selection
@@ -119,7 +161,7 @@ TRADING_ENABLED=true
 REVIEW_POLICY_MODE=required
 ```
 
-### Production (Live Trading)
+### Controlled Live-Test / Live Trading
 ```bash
 NODE_ENV=production
 LIVE_TRADING=true
@@ -129,6 +171,8 @@ TRADING_ENABLED=true
 REVIEW_POLICY_MODE=required
 WALLET_ADDRESS=YOUR_PROD_WALLET
 ```
+
+This mode is guarded by startup validation, operator auth, and live-test state surfaces. It is not a silent fallback path.
 
 ---
 

@@ -5,7 +5,8 @@
 >
 > **Canonical governance:** [`governance/SoT.md §12`](../../governance/SoT.md)
 > **Risk governance protocol:** [`docs/bobbyexecution/risk_and_chaos_governance.md`](../bobbyexecution/risk_and_chaos_governance.md)
-> **Audit report:** [`docs/bobbyexecution/production_readiness_audit_report.md`](../bobbyexecution/production_readiness_audit_report.md)
+> **Readiness checklist:** [`docs/bobbyexecution/production_readiness_checklist.md`](../bobbyexecution/production_readiness_checklist.md)
+> **Archive:** [`archive/README.md`](../../archive/README.md)
 
 ---
 
@@ -89,5 +90,5 @@ Fail-closed bedeutet: Bei Unsicherheit oder Risiko-Schwelle, sofort abbrechen (k
 
 - Canonical governance (chaos safety): [`governance/SoT.md §12`](../../governance/SoT.md)
 - Risk and chaos governance protocol: [`docs/bobbyexecution/risk_and_chaos_governance.md`](../bobbyexecution/risk_and_chaos_governance.md)
-- Production readiness audit: [`docs/bobbyexecution/production_readiness_audit_report.md`](../bobbyexecution/production_readiness_audit_report.md)
+- Production readiness checklist: [`docs/bobbyexecution/production_readiness_checklist.md`](../bobbyexecution/production_readiness_checklist.md)
 - Domain index: [`docs/bobbyexecution/README.md`](../bobbyexecution/README.md)

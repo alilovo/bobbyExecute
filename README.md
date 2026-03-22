@@ -2,7 +2,7 @@
 
 Governance-first Solana trading bot with deterministic execution, hash-chained memory, chaos gates, and a Fastify runtime status API.
 
-This repository is safe-by-default. It supports offline testing, paper-style runtime cycles, and authenticated control/monitoring endpoints. It is not ready for uncontrolled live trading.
+This repository is safe-by-default. It supports offline testing, paper-style runtime cycles, and a guarded live-test path with explicit operator control surfaces. It is not ready for uncontrolled live trading.
 
 ---
 
@@ -25,9 +25,10 @@ This repository is safe-by-default. It supports offline testing, paper-style run
 |---|---|
 | Contributor | `README.md` -> [`governance/SoT.md`](governance/SoT.md) -> [`docs/bobbyexecution/README.md`](docs/bobbyexecution/README.md) |
 | Operator / end user | `README.md` -> [`bot/CONFIG_GUIDE.md`](bot/CONFIG_GUIDE.md) -> [`docs/bobbyexecution/live_test_runbook.md`](docs/bobbyexecution/live_test_runbook.md) |
-| Auditor | [`governance/SoT.md`](governance/SoT.md) -> [`docs/bobbyexecution/production_readiness_audit_report.md`](docs/bobbyexecution/production_readiness_audit_report.md) |
+| Auditor | [`governance/SoT.md`](governance/SoT.md) -> [`docs/bobbyexecution/README.md`](docs/bobbyexecution/README.md) -> [`docs/bobbyexecution/production_readiness_checklist.md`](docs/bobbyexecution/production_readiness_checklist.md) |
 | Implementer | [`governance/SoT.md`](governance/SoT.md) -> [`docs/bobbyexecution/navigation_protocol.md`](docs/bobbyexecution/navigation_protocol.md) -> [`docs/bobbyexecution/spec_generation_protocol.md`](docs/bobbyexecution/spec_generation_protocol.md) |
 | Incident responder | [`docs/bobbyexecution/incident_and_killswitch_runbook.md`](docs/bobbyexecution/incident_and_killswitch_runbook.md) |
+| Archive / retired docs | [`archive/README.md`](archive/README.md) |
 
 ---
 
@@ -53,6 +54,51 @@ If you are new to the project, use this sequence:
 5. Start the runtime server.
 6. Use the health and KPI endpoints before trying control actions.
 
+### Local Setup
+
+The quickest local setup for a new user is:
+
+1. Copy [`.env.example`](.env.example) to `.env` in the repo root.
+2. Keep the safe defaults for local work:
+
+   ```bash
+   LIVE_TRADING=false
+   DRY_RUN=true
+   RPC_MODE=stub
+   TRADING_ENABLED=false
+   ```
+
+3. Install the bot dependencies:
+
+   ```bash
+   cd bot
+   npm install
+   ```
+
+4. Run the offline quality gate:
+
+   ```bash
+   npm run premerge
+   ```
+
+5. Start the API server:
+
+   ```bash
+   npm run start:server
+   ```
+
+6. Optional: start the dashboard in a second terminal:
+
+   ```bash
+   cd dashboard
+   npm install
+   npm run dev
+   ```
+
+   Use `dashboard/.env.local` with `NEXT_PUBLIC_API_URL=http://localhost:3333` and `NEXT_PUBLIC_USE_MOCK=false` when you want the UI to read the local bot API.
+
+7. Check `GET /health`, `GET /kpi/summary`, and `GET /runtime/status` before trying any control actions.
+
 ### Required basics
 
 - Node 22
@@ -72,6 +118,14 @@ TRADING_ENABLED=false
 ```
 
 This keeps the runtime offline and avoids real wallet risk.
+
+### Current State
+
+- `bot/` is the active TypeScript runtime.
+- Dry and paper modes are the normal local paths.
+- Live-test startup is guarded, bounded, and operator-visible.
+- `archive/README.md` collects retired documentation references.
+- The repository does not claim uncontrolled live trading readiness.
 
 ---
 
@@ -277,7 +331,7 @@ Use this rule of thumb:
 - Live test only after the live-test checklist passes
 - Kill switch and incident runbook if anything behaves unexpectedly
 
-See [`docs/bobbyexecution/production_readiness_audit_report.md`](docs/bobbyexecution/production_readiness_audit_report.md) for the current audit state.
+See [`docs/bobbyexecution/production_readiness_checklist.md`](docs/bobbyexecution/production_readiness_checklist.md) and [`docs/bobbyexecution/live_test_runbook.md`](docs/bobbyexecution/live_test_runbook.md) for the current operator readiness state.
 
 ---
 

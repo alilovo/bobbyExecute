@@ -60,5 +60,6 @@ The current audit identified these required fixes:
 
 - Canonical governance (market data / adapters): [`governance/SoT.md §6–§7`](../../governance/SoT.md)
 - Trading execution protocol: [`trading_execution_protocol.md`](trading_execution_protocol.md)
-- Production readiness audit: [`production_readiness_audit_report.md`](production_readiness_audit_report.md)
+- Production readiness checklist: [`production_readiness_checklist.md`](production_readiness_checklist.md)
+- Archive: [`archive/README.md`](../../archive/README.md)
 - Domain index: [`docs/bobbyexecution/README.md`](README.md)

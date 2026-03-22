@@ -10,6 +10,34 @@ Use this runbook for controlled live testing after Waves 1–8 completion.
 - [ ] Dry run successful (1 week)
 - [ ] Shadow mode successful (1 week)
 
+## Local Setup Before Preflight
+
+1. Copy [`.env.example`](../../.env.example) to `.env` in the repo root.
+2. Keep the safe local defaults:
+
+   ```bash
+   LIVE_TRADING=false
+   DRY_RUN=true
+   RPC_MODE=stub
+   TRADING_ENABLED=false
+   ```
+
+3. Install and validate the bot:
+
+   ```bash
+   cd bot
+   npm install
+   npm run premerge
+   ```
+
+4. Start the API if you want to inspect the runtime locally:
+
+   ```bash
+   npm run start:server
+   ```
+
+5. Optional: run the dashboard with `NEXT_PUBLIC_API_URL=http://localhost:3333` and `NEXT_PUBLIC_USE_MOCK=false`.
+
 ## Environment Variables (Live Test Mode)
 
 | Variable | Default | Description |

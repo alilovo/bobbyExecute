@@ -19,17 +19,28 @@ Use it to find the right document for any engineering, safety, audit, or inciden
 
 ---
 
-## Current Readiness Snapshot
+## Current Operator Truth
 
-Based on the latest audit ([`production_readiness_audit_report.md`](production_readiness_audit_report.md)):
+Use these documents for the current operational state:
 
-- **Overall readiness:** `4.2 / 10`
-- **Execution safety:** `2 / 10`
-- **Observability:** `4 / 10`
-- **Dashboard readiness:** `5 / 10`
-- **Runtime safety:** `5 / 10`
+- [`production_readiness_checklist.md`](production_readiness_checklist.md)
+- [`live_test_runbook.md`](live_test_runbook.md)
+- [`incident_and_killswitch_runbook.md`](incident_and_killswitch_runbook.md)
 
-**Status: Not ready for controlled live test.**
+Historical audit reports are kept in git history and no longer define the live operator path.
+
+## Local Setup
+
+If you are setting up the repo on your own machine for the first time:
+
+1. Read [`../../governance/SoT.md`](../../governance/SoT.md) and this index.
+2. Copy [`.env.example`](../../.env.example) to `.env` in the repo root.
+3. Keep the safe defaults for local work: `LIVE_TRADING=false`, `DRY_RUN=true`, `RPC_MODE=stub`, `TRADING_ENABLED=false`.
+4. Run `cd bot && npm install`.
+5. Run `cd bot && npm run premerge`.
+6. Start the bot API with `cd bot && npm run start:server`.
+7. Optional: start the dashboard from `dashboard/` with a local `.env.local`.
+8. Use `GET /health`, `GET /kpi/summary`, and `GET /runtime/status` to confirm the local runtime state.
 
 ---
 
@@ -38,7 +49,8 @@ Based on the latest audit ([`production_readiness_audit_report.md`](production_r
 | Use case | First document |
 |---|---|
 | Contributor onboarding | [`../../governance/SoT.md`](../../governance/SoT.md) → this index |
-| Auditor entry point | [`../../governance/SoT.md`](../../governance/SoT.md) → [`production_readiness_audit_report.md`](production_readiness_audit_report.md) |
+| Local setup | [`../../governance/SoT.md`](../../governance/SoT.md) → [`../../bot/CONFIG_GUIDE.md`](../../bot/CONFIG_GUIDE.md) |
+| Auditor entry point | [`../../governance/SoT.md`](../../governance/SoT.md) → [`production_readiness_checklist.md`](production_readiness_checklist.md) → [`live_test_runbook.md`](live_test_runbook.md) |
 | Implementer entry point | [`navigation_protocol.md`](navigation_protocol.md) → [`spec_generation_protocol.md`](spec_generation_protocol.md) |
 | Incident / emergency | [`incident_and_killswitch_runbook.md`](incident_and_killswitch_runbook.md) |
 | Pre-live-test checklist | [`production_readiness_checklist.md`](production_readiness_checklist.md) |
@@ -79,6 +91,6 @@ Deep chaos reference: [`docs/trading/trading-edge_chaos-scenarios.md`](../tradin
 ## Readiness / Audit / Incident Response
 
 - [`production_readiness_checklist.md`](production_readiness_checklist.md) — mandatory gates before any live test
-- [`production_readiness_audit_report.md`](production_readiness_audit_report.md) — current audit findings and remediation plan
+- [`archive/README.md`](../../archive/README.md) — retired audit reports and cleaned-up docs
 - [`implementation_audit_prompt.md`](implementation_audit_prompt.md) — structured audit prompt for implementation review
 - [`incident_and_killswitch_runbook.md`](incident_and_killswitch_runbook.md) — emergency stop, level classification, post-incident review

@@ -48,6 +48,6 @@ Do not live test if any of these remain true:
 ## Authority / Related Docs
 
 - Canonical governance: [`governance/SoT.md`](../../governance/SoT.md)
-- Audit report: [`production_readiness_audit_report.md`](production_readiness_audit_report.md)
+- Archive: [`archive/README.md`](../../archive/README.md)
 - Incident runbook: [`incident_and_killswitch_runbook.md`](incident_and_killswitch_runbook.md)
 - Domain index: [`docs/bobbyexecution/README.md`](README.md)

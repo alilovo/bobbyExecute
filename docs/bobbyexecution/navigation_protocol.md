@@ -6,8 +6,8 @@ Purpose: choose the correct engineering workflow for every BobbyExecution reques
 
 ### 1. Production readiness / live-test request
 Use:
-- `production_readiness_audit_report.md`
 - `production_readiness_checklist.md`
+- `live_test_runbook.md`
 - `architecture_review_protocol.md`
 - `runtime_observability_protocol.md`
 
