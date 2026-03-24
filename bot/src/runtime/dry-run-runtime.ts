@@ -1,4 +1,6 @@
 import { Engine, type EngineState } from "../core/engine.js";
+import type { Clock } from "../core/clock.js";
+import { SystemClock } from "../core/clock.js";
 import type { Config } from "../config/config-schema.js";
 import type { ExecutionReport, RpcVerificationReport, TradeIntent } from "../core/contracts/trade.js";
 import type { MarketSnapshot } from "../core/contracts/market.js";
@@ -7,6 +9,7 @@ import { isKillSwitchHalted, triggerKillSwitch } from "../governance/kill-switch
 import { CircuitBreaker } from "../governance/circuit-breaker.js";
 import { FileSystemJournalWriter, type JournalWriter } from "../journal-writer/writer.js";
 import type { JournalEntry } from "../core/contracts/journal.js";
+import type { DecisionCoordinator } from "../core/contracts/decision-envelope.js";
 import {
   fetchMarketData,
   type AdapterOrchestratorConfig,
@@ -155,6 +158,8 @@ export interface RuntimeCycleReplay {
 export interface DryRunRuntimeDeps {
   engine?: Engine;
   actionLogger?: ActionLogger;
+  clock?: Clock;
+  decisionCoordinator?: DecisionCoordinator;
   loopIntervalMs?: number;
   logger?: Pick<Console, "info" | "error">;
   fetchMarketDataFn?: typeof fetchMarketData;
@@ -181,6 +186,7 @@ export class DryRunRuntime {
   private readonly engine: Engine;
   private readonly loopIntervalMs: number;
   private readonly logger: Pick<Console, "info" | "error">;
+  private readonly clock: Clock;
   private readonly fetchMarketDataFn: typeof fetchMarketData;
   private readonly paperMarketAdapters: MarketAdapterFetch[];
   private readonly maxPaperMarketStalenessMs: number;
@@ -220,11 +226,14 @@ export class DryRunRuntime {
   ) {
     this.journalWriter =
       deps.journalWriter ?? new FileSystemJournalWriter(config.journalPath, { autoStartPeriodicFlush: false });
+    this.clock = deps.clock ?? new SystemClock();
     this.engine =
       deps.engine ??
       new Engine({
+        clock: this.clock,
         dryRun: config.executionMode !== "live",
         actionLogger: deps.actionLogger,
+        decisionCoordinator: deps.decisionCoordinator,
         journalWriter: this.journalWriter,
         journalPolicy: "mandatory",
       });
@@ -243,7 +252,7 @@ export class DryRunRuntime {
       deps.fetchPaperWalletSnapshot ??
       (async () => ({
         traceId: "paper-wallet-unavailable",
-        timestamp: new Date().toISOString(),
+        timestamp: this.clock.now().toISOString(),
         source: "moralis",
         walletAddress: this.config.walletAddress ?? "paper-wallet",
         balances: [],
@@ -768,7 +777,7 @@ export class DryRunRuntime {
     }
 
     let currentCycleIntakeOutcome: RuntimeCycleIntakeOutcome = "invalid";
-    let currentCycleTimestamp = new Date().toISOString();
+    let currentCycleTimestamp = this.clock.now().toISOString();
     let currentCycleTraceId = `runtime-${currentCycleTimestamp}`;
 
     if (isKillSwitchHalted()) {

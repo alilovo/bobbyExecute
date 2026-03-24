@@ -14,6 +14,8 @@ import { isKillSwitchHalted } from "../governance/kill-switch.js";
 import { lookupActionHandbook } from "../governance/action-handbook-lookup.js";
 import type { IntentSpec } from "./contracts/intent.js";
 import { createTraceId } from "../observability/trace-id.js";
+import { createDecisionCoordinator, type DecisionCoordinator } from "./decision/index.js";
+import type { DecisionEnvelope, DecisionStage } from "./contracts/decision-envelope.js";
 import {
   type IdempotencyStore,
   IDEMPOTENCY_REPLAY_BLOCK,
@@ -42,6 +44,7 @@ export interface OrchestratorState {
   phase: OrchestratorPhase;
   traceId: string;
   timestamp: string;
+  decisionEnvelope?: DecisionEnvelope;
   intentSpec?: IntentSpec;
   signalPack?: SignalPack;
   scoreCard?: ScoreCard;
@@ -83,6 +86,7 @@ export interface OrchestratorConfig {
   clock?: Clock;
   dryRun?: boolean;
   idempotencyStore?: IdempotencyStore;
+  decisionCoordinator?: DecisionCoordinator;
 }
 
 export class Orchestrator {
@@ -91,6 +95,7 @@ export class Orchestrator {
   private readonly memoryDb: MemoryDB;
   private readonly memoryLog: MemoryLog;
   private readonly idempotencyStore?: IdempotencyStore;
+  private readonly decisionCoordinator: DecisionCoordinator;
 
   constructor(config: OrchestratorConfig = {}) {
     this.clock = config.clock ?? new SystemClock();
@@ -98,6 +103,7 @@ export class Orchestrator {
     this.memoryDb = new MemoryDB();
     this.memoryLog = new MemoryLog();
     this.idempotencyStore = config.idempotencyStore;
+    this.decisionCoordinator = config.decisionCoordinator ?? createDecisionCoordinator();
   }
 
   async run(
@@ -107,20 +113,18 @@ export class Orchestrator {
     focusedTx?: FocusedTxHandler,
     reviewGate?: ReviewGateHandler
   ): Promise<OrchestratorState> {
-    const timestamp = this.clock.now().toISOString();
-    const replayMode = process.env.REPLAY_MODE === "true";
-    const traceId = createTraceId({
-      timestamp,
-      seed: replayMode ? intentSpec : undefined,
-      prefix: "orch",
-      mode: replayMode ? "replay" : "live",
-    });
     const state: OrchestratorState = {
       phase: "research",
-      traceId,
-      timestamp,
+      traceId: "",
+      timestamp: this.clock.now().toISOString(),
       intentSpec,
     };
+    const replayMode = process.env.REPLAY_MODE === "true";
+    let signalPack: SignalPack | undefined;
+    let scoreCard: ScoreCard | undefined;
+    let patternResult: PatternResult | undefined;
+    let riskBreakdown: RiskBreakdown | undefined;
+    let decisionResult: DecisionResult | undefined;
 
     try {
       if (isKillSwitchHalted()) {
@@ -129,102 +133,162 @@ export class Orchestrator {
         throw new Error(state.error);
       }
 
-      const signalPack = await research(intentSpec);
-      state.signalPack = signalPack;
-      state.phase = "analyse";
+      const envelope = await this.decisionCoordinator.run({
+        entrypoint: "orchestrator",
+        flow: "analysis",
+        clock: this.clock,
+        traceIdSeed: replayMode ? intentSpec : undefined,
+        tracePrefix: "orch",
+        handlers: {
+          ingest: async (context) => {
+            state.traceId = context.traceId;
+            state.timestamp = context.timestamp;
 
-      const scoreCard = computeScoreCard(traceId, timestamp, signalPack);
-      state.scoreCard = scoreCard;
-      state.phase = "reasoning";
+            signalPack = await research(intentSpec);
+            state.signalPack = signalPack;
+            state.phase = "analyse";
 
-      const patternResult = recognizePatterns(traceId, timestamp, scoreCard, signalPack);
-      state.patternResult = patternResult;
+            return { payload: { intentSpec, signalPack } };
+          },
+          signal: async (context) => {
+            if (!signalPack) {
+              throw new Error("ORCHESTRATOR_COORDINATOR_MISSING_SIGNAL_PACK");
+            }
 
-      const riskBreakdown = computeRiskBreakdown(traceId, timestamp, signalPack, scoreCard);
-      state.riskBreakdown = riskBreakdown;
+            scoreCard = computeScoreCard(context.traceId, context.timestamp, signalPack);
+            state.scoreCard = scoreCard;
+            state.phase = "reasoning";
 
-      const decisionResult = toDecisionResult(traceId, timestamp, scoreCard, patternResult, riskBreakdown);
-      state.decisionResult = decisionResult;
-      state.phase = "compress_db";
+            return { payload: { scoreCard } };
+          },
+          reasoning: async (context) => {
+            if (!signalPack || !scoreCard) {
+              throw new Error("ORCHESTRATOR_COORDINATOR_MISSING_REASONING_STATE");
+            }
 
-      const dataQuality = {
-        completeness: signalPack.dataQuality.completeness,
-        freshness: signalPack.dataQuality.freshness,
-      };
+            patternResult = recognizePatterns(context.traceId, context.timestamp, scoreCard, signalPack);
+            state.patternResult = patternResult;
 
-      if (this.memoryDb.shouldRenew(dataQuality)) {
-        const snapshot = this.memoryDb.renew(
-          { signalPack, scoreCard, patternResult, decisionResult },
-          dataQuality,
-          traceId
-        );
-        await this.memoryDb.compress(snapshot);
-      }
+            riskBreakdown = computeRiskBreakdown(context.traceId, context.timestamp, signalPack, scoreCard);
+            state.riskBreakdown = riskBreakdown;
 
-      state.phase = "chaos_gate";
+            decisionResult = toDecisionResult(
+              context.traceId,
+              context.timestamp,
+              scoreCard,
+              patternResult,
+              riskBreakdown
+            );
+            state.decisionResult = decisionResult;
+            state.phase = "compress_db";
 
-      const { passed, report } = await runChaosGate(traceId);
-      state.chaosPassed = passed;
-      state.chaosReportHash = report.auditHashChain;
+            return { payload: { scoreCard, patternResult, riskBreakdown, decisionResult } };
+          },
+          risk: async (context) => {
+            if (!signalPack || !scoreCard || !patternResult || !decisionResult) {
+              throw new Error("ORCHESTRATOR_COORDINATOR_MISSING_RISK_STATE");
+            }
 
-      state.phase = "memory_log";
+            const dataQuality = {
+              completeness: signalPack.dataQuality.completeness,
+              freshness: signalPack.dataQuality.freshness,
+            };
 
-      this.memoryLog.append({
-        traceId,
-        timestamp,
-        stage: "orchestrator_complete",
-        decisionHash: hashDecision({ scoreCard, patternResult }),
-        resultHash: hashResult({ decisionResult }),
-        input: { intentSpec, signalPack },
-        output: { scoreCard, patternResult, decisionResult },
+            if (this.memoryDb.shouldRenew(dataQuality)) {
+              const snapshot = this.memoryDb.renew(
+                { signalPack, scoreCard, patternResult, decisionResult },
+                dataQuality,
+                context.traceId
+              );
+              await this.memoryDb.compress(snapshot);
+            }
+
+            state.phase = "chaos_gate";
+            const { passed, report } = await runChaosGate(context.traceId);
+            state.chaosPassed = passed;
+            state.chaosReportHash = report.auditHashChain;
+
+            this.memoryLog.append({
+              traceId: context.traceId,
+              timestamp: context.timestamp,
+              stage: "orchestrator_complete",
+              decisionHash: hashDecision({ scoreCard, patternResult }),
+              resultHash: hashResult({ decisionResult }),
+              input: { intentSpec, signalPack },
+              output: { scoreCard, patternResult, decisionResult },
+            });
+
+            state.phase = "memory_log";
+            return { payload: { passed, report } };
+          },
+          execute: async (context) => {
+            if (!decisionResult) {
+              throw new Error("ORCHESTRATOR_COORDINATOR_MISSING_DECISION_RESULT");
+            }
+
+            state.phase = "focused_tx";
+            const reviewGateApproved = reviewGate ? await reviewGate(decisionResult) : true;
+            state.reviewGateApproved = reviewGateApproved;
+
+            const liveAllowDecision = !this.dryRun && decisionResult.decision === "allow";
+            if (liveAllowDecision && !reviewGateApproved) {
+              throw new Error("Fail-closed: review gate rejected allow-decision execution");
+            }
+            if (liveAllowDecision && !focusedTx) {
+              throw new Error("Fail-closed: focusedTx handler required for allow-decision execution");
+            }
+            if (liveAllowDecision && !secretsVault) {
+              throw new Error("Fail-closed: secretsVault handler required for allow-decision execution");
+            }
+
+            const shouldExecuteTx =
+              !isKillSwitchHalted() &&
+              liveAllowDecision &&
+              reviewGateApproved &&
+              focusedTx &&
+              secretsVault;
+            state.focusedTxExecuted = Boolean(shouldExecuteTx);
+
+            if (shouldExecuteTx) {
+              const idemKey = intentSpec.idempotencyKey ?? context.traceId;
+              if (this.idempotencyStore) {
+                const exists = await this.idempotencyStore.has(idemKey);
+                if (exists) {
+                  throw new Error(`${IDEMPOTENCY_REPLAY_BLOCK}: ${idemKey}`);
+                }
+              }
+              const secretLease = ensureValidVaultLease(await secretsVault!());
+              await focusedTx(decisionResult, secretLease);
+              if (this.idempotencyStore) {
+                await this.idempotencyStore.put(idemKey, { executed: true }, 86_400_000);
+              }
+            }
+
+            return { payload: { reviewGateApproved, focusedTxExecuted: state.focusedTxExecuted } };
+          },
+          journal: async () => {
+            if (!decisionResult) {
+              throw new Error("ORCHESTRATOR_COORDINATOR_MISSING_JOURNAL_STATE");
+            }
+
+            state.nextAction = lookupActionHandbook({
+              phase: state.phase,
+              decision: decisionResult.decision,
+              dryRun: this.dryRun,
+              focusedTxExecuted: Boolean(state.focusedTxExecuted),
+            });
+            state.phase = "focused_tx";
+            return { payload: { nextAction: state.nextAction } };
+          },
+          monitor: async () => {
+            state.phase = "focused_tx";
+            return { payload: { phase: state.phase } };
+          },
+        },
       });
 
-      state.phase = "focused_tx";
-
-      const reviewGateApproved = reviewGate ? await reviewGate(decisionResult) : true;
-      state.reviewGateApproved = reviewGateApproved;
-
-      const liveAllowDecision = !this.dryRun && decisionResult.decision === "allow";
-      if (liveAllowDecision && !reviewGateApproved) {
-        throw new Error("Fail-closed: review gate rejected allow-decision execution");
-      }
-      if (liveAllowDecision && !focusedTx) {
-        throw new Error("Fail-closed: focusedTx handler required for allow-decision execution");
-      }
-      if (liveAllowDecision && !secretsVault) {
-        throw new Error("Fail-closed: secretsVault handler required for allow-decision execution");
-      }
-
-      const shouldExecuteTx =
-        !isKillSwitchHalted() &&
-        liveAllowDecision &&
-        reviewGateApproved &&
-        focusedTx &&
-        secretsVault;
-      state.focusedTxExecuted = Boolean(shouldExecuteTx);
-
-      if (shouldExecuteTx) {
-        const idemKey = intentSpec.idempotencyKey ?? traceId;
-        if (this.idempotencyStore) {
-          const exists = await this.idempotencyStore.has(idemKey);
-          if (exists) {
-            throw new Error(`${IDEMPOTENCY_REPLAY_BLOCK}: ${idemKey}`);
-          }
-        }
-        const secretLease = ensureValidVaultLease(await secretsVault!());
-        await focusedTx(decisionResult, secretLease);
-        if (this.idempotencyStore) {
-          await this.idempotencyStore.put(idemKey, { executed: true }, 86_400_000);
-        }
-      }
-
-      state.nextAction = lookupActionHandbook({
-        phase: state.phase,
-        decision: decisionResult.decision,
-        dryRun: this.dryRun,
-        focusedTxExecuted: state.focusedTxExecuted,
-      });
-
+      state.decisionEnvelope = envelope;
+      state.phase = mapDecisionStageToOrchestratorPhase(envelope.stage);
       return state;
     } catch (err) {
       state.error = err instanceof Error ? err.message : String(err);
@@ -325,4 +389,22 @@ function ensureValidVaultLease(rawLease: unknown): SecretLease {
     leaseId: lease.leaseId,
     renewable: lease.renewable,
   };
+}
+
+function mapDecisionStageToOrchestratorPhase(stage: DecisionStage): OrchestratorPhase {
+  switch (stage) {
+    case "ingest":
+      return "research";
+    case "signal":
+      return "analyse";
+    case "reasoning":
+      return "reasoning";
+    case "risk":
+      return "chaos_gate";
+    case "execute":
+    case "verify":
+    case "journal":
+    case "monitor":
+      return "focused_tx";
+  }
 }

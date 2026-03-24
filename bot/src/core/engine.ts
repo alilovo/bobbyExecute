@@ -19,6 +19,8 @@ import { appendJournal } from "../persistence/journal-repository.js";
 import { SystemClock } from "./clock.js";
 import { hashDecision, hashResult } from "./determinism/hash.js";
 import { createTraceId } from "../observability/trace-id.js";
+import { createDecisionCoordinator, type DecisionCoordinator } from "./decision/index.js";
+import type { DecisionEnvelope, DecisionStage } from "./contracts/decision-envelope.js";
 
 export type EngineStage =
   | "ingest"
@@ -40,6 +42,7 @@ export type EngineState = {
   stage: EngineStage;
   traceId: string;
   timestamp: string;
+  decisionEnvelope?: DecisionEnvelope;
   market?: MarketSnapshot;
   wallet?: WalletSnapshot;
   signal?: { direction: string; confidence: number; cqd?: import("./contracts/cqd.js").CQDSnapshotV1 };
@@ -97,6 +100,7 @@ export interface EngineConfig {
   dryRun?: boolean;
   /** For deterministic tests - when set, used as traceId suffix instead of random */
   traceIdSeed?: string;
+  decisionCoordinator?: DecisionCoordinator;
   /** Optional JournalWriter - when provided, journal entries are persisted */
   journalWriter?: JournalWriter;
   /** Critical journaling policy for runtime authority artifacts */
@@ -114,6 +118,7 @@ export class Engine {
   private readonly actionLogger?: ActionLogger;
   private readonly dryRun: boolean;
   private readonly traceIdSeed?: string;
+  private readonly decisionCoordinator: DecisionCoordinator;
   private readonly journalWriter?: JournalWriter;
   private readonly journalPolicy: "optional" | "mandatory";
   private readonly chaosFn: ChaosHandler;
@@ -125,6 +130,7 @@ export class Engine {
     this.actionLogger = config.actionLogger;
     this.dryRun = config.dryRun ?? true;
     this.traceIdSeed = config.traceIdSeed;
+    this.decisionCoordinator = config.decisionCoordinator ?? createDecisionCoordinator();
     this.journalWriter = config.journalWriter;
     this.journalPolicy = config.journalPolicy ?? "optional";
     this.chaosFn = config.chaosFn ?? defaultChaosHandler;
@@ -139,142 +145,222 @@ export class Engine {
     executeFn: ExecuteHandler,
     verifyFn: VerifyHandler
   ): Promise<EngineState> {
-    const timestamp = this.clock.now().toISOString();
-    const traceId = createTraceId({
-      timestamp,
-      prefix: "trace",
-      seed: this.traceIdSeed,
-      mode: this.traceIdSeed || process.env.REPLAY_MODE === "true" ? "replay" : "live",
-    });
     const state: EngineState = {
       stage: "ingest",
-      traceId,
-      timestamp,
+      traceId: "",
+      timestamp: this.clock.now().toISOString(),
     };
+    let market: MarketSnapshot | undefined;
+    let wallet: WalletSnapshot | undefined;
+    let signal: { direction: string; confidence: number; cqd?: import("./contracts/cqd.js").CQDSnapshotV1 } | undefined;
+    let intent: TradeIntent | undefined;
+    let execReport: ExecutionReport | undefined;
+    let rpcVerify: RpcVerificationReport | undefined;
 
     try {
-      const { market, wallet } = await ingest();
-      state.market = market;
-      state.wallet = wallet;
-      state.stage = "signal";
+      const envelope = await this.decisionCoordinator.run({
+        entrypoint: "engine",
+        flow: "trade",
+        clock: this.clock,
+        traceIdSeed: this.traceIdSeed,
+        tracePrefix: "trace",
+        handlers: {
+          ingest: async (context) => {
+            state.traceId = context.traceId;
+            state.timestamp = context.timestamp;
 
-      const signal = await signalFn(market);
-      state.signal = signal;
-      state.stage = "risk";
-      await this.emitStageTransition(state, "signal", "risk");
+            const intake = await ingest();
+            market = intake.market;
+            wallet = intake.wallet;
+            state.market = market;
+            state.wallet = wallet;
+            state.stage = "signal";
 
-      const intent: TradeIntent = {
-        traceId,
-        timestamp: this.clock.now().toISOString(),
-        idempotencyKey: `${traceId}-intent`,
-        tokenIn: "SOL",
-        tokenOut: "USDC",
-        amountIn: "1",
-        minAmountOut: "0.95",
-        slippagePercent: 1,
-        dryRun: this.dryRun,
-        executionMode: this.dryRun ? "dry" : "paper",
-      };
-      state.tradeIntent = intent;
-      await this.appendCriticalJournal(state, "decision_outcome", { market, wallet, signal }, { intent });
+            return { payload: { market, wallet } };
+          },
+          signal: async (context) => {
+            if (!market || !wallet) {
+              throw new Error("ENGINE_COORDINATOR_MISSING_INGEST_STATE");
+            }
 
-      const risk = await riskFn(intent, market, wallet);
-      state.riskAllowed = risk.allowed;
-      await this.appendCriticalJournal(
-        state,
-        "risk_decision",
-        { intent, market, wallet },
-        { allowed: risk.allowed, reason: risk.reason },
-        !risk.allowed,
-        risk.reason
-      );
-      if (!risk.allowed) {
-        state.blocked = true;
-        state.blockedReason = risk.reason;
-        await this.log(state, "risk_blocked");
-        return state;
-      }
+            signal = await signalFn(market);
+            state.signal = signal;
+            state.stage = "risk";
+            await this.emitStageTransition(state, "signal", "risk");
 
-      if (this.dailyLossTracker?.isLimitReached()) {
-        state.blocked = true;
-        state.blockedReason = "Daily loss limit reached";
-        await this.log(state, "daily_loss_blocked");
-        return state;
-      }
+            intent = {
+              traceId: context.traceId,
+              timestamp: context.timestamp,
+              idempotencyKey: `${context.traceId}-intent`,
+              tokenIn: "SOL",
+              tokenOut: "USDC",
+              amountIn: "1",
+              minAmountOut: "0.95",
+              slippagePercent: 1,
+              dryRun: this.dryRun,
+              executionMode: this.dryRun ? "dry" : "paper",
+            };
+            state.tradeIntent = intent;
+            await this.appendCriticalJournal(state, "decision_outcome", { market, wallet, signal }, { intent });
 
-      state.blocked = false;
-      state.stage = "chaos";
-      await this.emitStageTransition(state, "risk", "chaos");
+            return { payload: { market, wallet, signal, intent } };
+          },
+          risk: async () => {
+            if (!intent || !market || !wallet || !signal) {
+              throw new Error("ENGINE_COORDINATOR_MISSING_SIGNAL_STATE");
+            }
 
-      const chaos = await this.chaosFn(intent, market, wallet, signal);
-      state.chaosAllowed = chaos.allowed;
-      state.chaosReportHash = chaos.reportHash;
-      await this.appendCriticalJournal(
-        state,
-        "chaos_decision",
-        { intent, market, wallet, signal },
-        { allowed: chaos.allowed, reason: chaos.reason, reportHash: chaos.reportHash },
-        !chaos.allowed,
-        chaos.reason
-      );
-      if (!chaos.allowed) {
-        state.blocked = true;
-        state.blockedReason = chaos.reason ?? "Chaos gate denied execution";
-        await this.log(state, "chaos_blocked");
-        return state;
-      }
+            const risk = await riskFn(intent, market, wallet);
+            state.riskAllowed = risk.allowed;
+            await this.appendCriticalJournal(
+              state,
+              "risk_decision",
+              { intent, market, wallet },
+              { allowed: risk.allowed, reason: risk.reason },
+              !risk.allowed,
+              risk.reason
+            );
+            if (!risk.allowed) {
+              state.blocked = true;
+              state.blockedReason = risk.reason;
+              await this.log(state, "risk_blocked");
+              return {
+                blocked: true,
+                blockedReason: risk.reason,
+                payload: { allowed: risk.allowed, reason: risk.reason },
+              };
+            }
 
-      state.stage = "execute";
-      await this.emitStageTransition(state, "chaos", "execute");
-      const execReport = await executeFn(intent);
-      state.executionReport = execReport;
-      await this.appendCriticalJournal(state, "execution_result", { intent }, { execReport });
-      state.stage = "verify";
-      await this.emitStageTransition(state, "execute", "verify");
+            if (this.dailyLossTracker?.isLimitReached()) {
+              state.blocked = true;
+              state.blockedReason = "Daily loss limit reached";
+              await this.log(state, "daily_loss_blocked");
+              return {
+                blocked: true,
+                blockedReason: state.blockedReason,
+                payload: { allowed: false, reason: state.blockedReason },
+              };
+            }
 
-      const rpcVerify = await verifyFn(intent, execReport);
-      state.rpcVerification = rpcVerify;
-      await this.appendCriticalJournal(
-        state,
-        "verification_result",
-        { intent, execReport },
-        { rpcVerify },
-        !rpcVerify.passed,
-        rpcVerify.reason
-      );
-      if (!rpcVerify.passed) {
-        state.blocked = true;
-        state.blockedReason = rpcVerify.reason ?? "RPC verification failed";
-        await this.log(state, "verify_failed");
-        return state;
-      }
+            state.stage = "chaos";
+            await this.emitStageTransition(state, "risk", "chaos");
 
-      if (this.dailyLossTracker && !this.dryRun && state.executionReport) {
-        const lossUsd = estimateLossUsd(intent, state.executionReport, state.market?.priceUsd);
-        this.dailyLossTracker.recordTrade(lossUsd);
-      }
+            const chaos = await this.chaosFn(intent, market, wallet, signal);
+            state.chaosAllowed = chaos.allowed;
+            state.chaosReportHash = chaos.reportHash;
+            await this.appendCriticalJournal(
+              state,
+              "chaos_decision",
+              { intent, market, wallet, signal },
+              { allowed: chaos.allowed, reason: chaos.reason, reportHash: chaos.reportHash },
+              !chaos.allowed,
+              chaos.reason
+            );
+            if (!chaos.allowed) {
+              state.blocked = true;
+              state.blockedReason = chaos.reason ?? "Chaos gate denied execution";
+              await this.log(state, "chaos_blocked");
+              return {
+                blocked: true,
+                blockedReason: state.blockedReason,
+                payload: { allowed: false, reason: chaos.reason, reportHash: chaos.reportHash },
+              };
+            }
 
-      state.stage = "journal";
-      await this.emitStageTransition(state, "verify", "journal");
-      const decisionHash = hashDecision({ market, wallet, signal });
-      const resultHash = hashResult({ execReport, rpcVerify });
-      state.journalEntry = {
-        traceId,
-        timestamp: this.clock.now().toISOString(),
-        stage: "complete",
-        decisionHash,
-        resultHash,
-        input: { market, wallet, signal, intent },
-        output: { execReport, rpcVerify },
-        blocked: false,
-      };
-      if (this.journalWriter) {
-        await appendJournal(this.journalWriter, state.journalEntry);
-      }
-      await this.log(state, "complete");
-      await this.emitStageTransition(state, "journal", "monitor");
+            state.stage = "execute";
+            await this.emitStageTransition(state, "chaos", "execute");
+            return { payload: { riskAllowed: risk.allowed, chaosAllowed: chaos.allowed } };
+          },
+          execute: async () => {
+            if (!intent) {
+              throw new Error("ENGINE_COORDINATOR_MISSING_INTENT");
+            }
 
-      state.stage = "monitor";
+            state.stage = "execute";
+            execReport = await executeFn(intent);
+            state.executionReport = execReport;
+            await this.appendCriticalJournal(state, "execution_result", { intent }, { execReport });
+            state.stage = "verify";
+            await this.emitStageTransition(state, "execute", "verify");
+
+            return { payload: { execReport } };
+          },
+          verify: async () => {
+            if (!intent || !execReport) {
+              throw new Error("ENGINE_COORDINATOR_MISSING_EXECUTION_STATE");
+            }
+
+            rpcVerify = await verifyFn(intent, execReport);
+            state.rpcVerification = rpcVerify;
+            await this.appendCriticalJournal(
+              state,
+              "verification_result",
+              { intent, execReport },
+              { rpcVerify },
+              !rpcVerify.passed,
+              rpcVerify.reason
+            );
+            if (!rpcVerify.passed) {
+              state.blocked = true;
+              state.blockedReason = rpcVerify.reason ?? "RPC verification failed";
+              await this.log(state, "verify_failed");
+              return {
+                blocked: true,
+                blockedReason: state.blockedReason,
+                payload: { rpcVerify },
+              };
+            }
+
+            if (this.dailyLossTracker && !this.dryRun && state.executionReport) {
+              const lossUsd = estimateLossUsd(intent, state.executionReport, state.market?.priceUsd);
+              this.dailyLossTracker.recordTrade(lossUsd);
+            }
+
+            state.stage = "journal";
+            await this.emitStageTransition(state, "verify", "journal");
+            return { payload: { rpcVerify } };
+          },
+          journal: async () => {
+            if (!intent || !execReport || !rpcVerify || !market || !wallet || !signal) {
+              throw new Error("ENGINE_COORDINATOR_MISSING_JOURNAL_STATE");
+            }
+
+            const decisionHash = hashDecision({ market, wallet, signal });
+            const resultHash = hashResult({ execReport, rpcVerify });
+            state.stage = "journal";
+            state.journalEntry = {
+              traceId: state.traceId,
+              timestamp: this.clock.now().toISOString(),
+              stage: "complete",
+              decisionHash,
+              resultHash,
+              input: { market, wallet, signal, intent },
+              output: { execReport, rpcVerify },
+              blocked: false,
+            };
+            if (this.journalWriter) {
+              await appendJournal(this.journalWriter, state.journalEntry);
+            }
+            state.blocked = false;
+            state.blockedReason = undefined;
+            await this.log(state, "complete");
+            state.stage = "monitor";
+            await this.emitStageTransition(state, "journal", "monitor");
+            return {
+              payload: { decisionHash, resultHash },
+            };
+          },
+          monitor: async () => {
+            state.stage = "monitor";
+            return { payload: { stage: "monitor" } };
+          },
+        },
+      });
+
+      state.decisionEnvelope = envelope;
+      state.blocked = envelope.blocked;
+      state.blockedReason = envelope.blockedReason;
+      state.stage = state.chaosAllowed === false ? "chaos" : mapDecisionStageToEngineStage(envelope.stage);
       return state;
     } catch (err) {
       state.error = err instanceof Error ? err.message : String(err);
@@ -413,4 +499,11 @@ function estimateLossUsd(
     return lossUnits / 1e6;
   }
   return (lossUnits / 1e6) * (priceUsd ?? 1);
+}
+
+function mapDecisionStageToEngineStage(stage: DecisionStage): EngineStage {
+  if (stage === "reasoning") {
+    return "risk";
+  }
+  return stage;
 }

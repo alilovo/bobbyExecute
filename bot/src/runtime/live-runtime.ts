@@ -1,4 +1,6 @@
 import type { Config } from "../config/config-schema.js";
+import type { Clock } from "../core/clock.js";
+import { SystemClock } from "../core/clock.js";
 import type { MarketSnapshot } from "../core/contracts/market.js";
 import type { WalletSnapshot } from "../core/contracts/wallet.js";
 import type { SignalPack } from "../core/contracts/signalpack.js";
@@ -73,6 +75,7 @@ import { runScoringEngine } from "../scoring/scoring-engine.js";
 import { recognizePatterns } from "../patterns/pattern-engine.js";
 import { runRiskEngine } from "../risk/risk-engine.js";
 import { runSignalEngine } from "../signals/signal-engine.js";
+import { createDecisionCoordinator, type DecisionCoordinator } from "../core/decision/index.js";
 import { type RuntimeController } from "./controller.js";
 import type {
   RuntimeControlResult,
@@ -88,6 +91,8 @@ const RECENT_INCIDENT_LIMIT = 20;
 export interface LiveRuntimeDeps {
   ingestHandler?: () => Promise<{ market: MarketSnapshot; wallet: WalletSnapshot }>;
   executionHandlerFactory?: typeof createExecutionHandler;
+  clock?: Clock;
+  decisionCoordinator?: DecisionCoordinator;
   rpcClient?: RpcClient;
   signTransaction?: ExecutionHandlerDeps["signTransaction"];
   buildSwapTransaction?: ExecutionHandlerDeps["buildSwapTransaction"];
@@ -115,6 +120,8 @@ interface LiveRuntimeResolvedDeps {
   liveControlRepository: LiveControlRepository;
   dailyLossRepository: DailyLossRepository;
   idempotencyRepository: IdempotencyRepository;
+  clock: Clock;
+  decisionCoordinator: DecisionCoordinator;
   logger: Pick<Console, "info" | "error">;
   loopIntervalMs: number;
 }
@@ -327,12 +334,16 @@ export async function createLiveRuntime(config: Config, runtimeDeps: LiveRuntime
     liveControlRepository,
     dailyLossRepository,
     idempotencyRepository,
+    clock: runtimeDeps.clock ?? new SystemClock(),
+    decisionCoordinator: runtimeDeps.decisionCoordinator ?? createDecisionCoordinator(),
     logger: runtimeDeps.logger ?? console,
     loopIntervalMs: runtimeDeps.loopIntervalMs ?? 15_000,
   });
 }
 
 export class LiveRuntime implements RuntimeController {
+  private readonly clock: Clock;
+  private readonly decisionCoordinator: DecisionCoordinator;
   private intervalRef: NodeJS.Timeout | null = null;
   private status: RuntimeStatus = "idle";
   private cycleInFlight = false;
@@ -353,7 +364,10 @@ export class LiveRuntime implements RuntimeController {
   constructor(
     private readonly config: Config,
     private readonly deps: LiveRuntimeResolvedDeps
-  ) {}
+  ) {
+    this.clock = deps.clock;
+    this.decisionCoordinator = deps.decisionCoordinator;
+  }
 
   async start(): Promise<void> {
     if (this.status === "running") {
@@ -564,7 +578,7 @@ export class LiveRuntime implements RuntimeController {
       return;
     }
 
-    let currentCycleTimestamp = new Date().toISOString();
+    let currentCycleTimestamp = this.clock.now().toISOString();
     let currentCycleTraceId = `runtime-${currentCycleTimestamp}`;
     let currentCycleIntakeOutcome: "ok" | "stale" | "adapter_error" | "invalid" | "kill_switch_halted" = "invalid";
 
@@ -608,7 +622,7 @@ export class LiveRuntime implements RuntimeController {
 
     this.cycleInFlight = true;
     try {
-      currentCycleTimestamp = new Date().toISOString();
+      currentCycleTimestamp = this.clock.now().toISOString();
       currentCycleTraceId = `runtime-${currentCycleTimestamp}`;
       this.counters.cycleCount += 1;
       this.lastCycleAt = currentCycleTimestamp;

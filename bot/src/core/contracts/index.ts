@@ -1,5 +1,6 @@
 export * from "./agent.js";
 export * from "./dataquality.js";
+export * from "./decision-envelope.js";
 export * from "./decision.js";
 export * from "./decisionresult.js";
 export * from "./intent.js";

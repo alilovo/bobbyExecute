@@ -8,6 +8,7 @@ import { createRuntime, type RuntimeDeps } from "./runtime/create-runtime.js";
 import { getKillSwitchState } from "./governance/kill-switch.js";
 import type { RuntimeController } from "./runtime/controller.js";
 import type { Config } from "./config/config-schema.js";
+import { createDecisionCoordinator } from "./core/decision/index.js";
 
 /**
  * Bootstrap the application: validate config, start runtime, start server.
@@ -23,7 +24,11 @@ export async function bootstrap(options?: {
   const config = loadConfig();
   const port = options?.port ?? parseInt(process.env.PORT ?? "3333", 10);
   const host = options?.host ?? process.env.HOST ?? "0.0.0.0";
-  const runtime = await createRuntime(config, options?.runtimeDeps ?? {});
+  const runtimeDeps: RuntimeDeps = options?.runtimeDeps ?? {};
+  const runtime = await createRuntime(config, {
+    ...runtimeDeps,
+    decisionCoordinator: runtimeDeps.decisionCoordinator ?? createDecisionCoordinator(),
+  });
 
   console.info(
     "[bootstrap] Starting BobbyExecution runtime",
