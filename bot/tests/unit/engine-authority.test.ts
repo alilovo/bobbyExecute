@@ -4,6 +4,7 @@ import { FakeClock } from "../../src/core/clock.js";
 import { InMemoryJournalWriter, type JournalWriter } from "../../src/journal-writer/writer.js";
 import { EventBus } from "../../src/eventbus/eventBus.js";
 import type { JournalEntry } from "../../src/core/contracts/journal.js";
+import type { DecisionCoordinator } from "../../src/core/contracts/decision-envelope.js";
 import type { TradeIntent } from "../../src/core/contracts/trade.js";
 
 function makeHandlers() {
@@ -71,6 +72,21 @@ class StageFailingJournalWriter implements JournalWriter {
   async getRange(_from: string, _to: string, _limit?: number): Promise<JournalEntry[]> {
     return this.entries;
   }
+}
+
+function makeMalformedDecisionCoordinator(): DecisionCoordinator {
+  return {
+    run: vi.fn(async () => ({
+      schemaVersion: "decision.envelope.v1",
+      entrypoint: "engine",
+      flow: "trade",
+      traceId: "trace-1",
+      stage: "monitor",
+      blocked: false,
+      decisionHash: "decision-hash-1",
+      // resultHash is intentionally missing to prove runtime validation blocks it.
+    })) as DecisionCoordinator["run"],
+  };
 }
 
 describe("Engine authority closure", () => {
@@ -164,5 +180,22 @@ describe("Engine authority closure", () => {
     expect(stages).toContain("execution_result");
     expect(stages).toContain("verification_result");
     expect(stages).toContain("complete");
+  });
+
+  it("rejects malformed decision envelopes from the coordinator", async () => {
+    const clock = new FakeClock("2026-03-17T12:00:00.000Z");
+    const { ingest, signalFn, riskFn, executeFn, verifyFn } = makeHandlers();
+
+    const engine = new Engine({
+      clock,
+      dryRun: true,
+      decisionCoordinator: makeMalformedDecisionCoordinator(),
+    });
+
+    await expect(engine.run(ingest, signalFn, riskFn, executeFn, verifyFn)).rejects.toThrow(
+      /INVALID_DECISION_ENVELOPE:engine/
+    );
+    expect(executeFn).not.toHaveBeenCalled();
+    expect(verifyFn).not.toHaveBeenCalled();
   });
 });

@@ -263,6 +263,14 @@ export async function createExecutionHandler(
       return finalize(await swapExecutor(intent, undefined, undefined));
     }
 
+    const normalizedNonLiveIntent =
+      liveIntent || intent.executionMode != null
+        ? intent
+        : {
+            ...intent,
+            executionMode: intent.dryRun ? "dry" : "paper",
+          } as TradeIntent;
+
     const swapRpcClient = rpcClient?.getTransactionReceipt
       ? {
           sendRawTransaction: sendRawTransaction!,
@@ -310,7 +318,7 @@ export async function createExecutionHandler(
     }
 
     try {
-      const result = await swapExecutor(intent, quote, swapDeps);
+      const result = await swapExecutor(normalizedNonLiveIntent, quote, swapDeps);
       if (!liveIntent) {
         return result;
       }

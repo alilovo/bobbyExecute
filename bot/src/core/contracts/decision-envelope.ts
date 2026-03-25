@@ -42,6 +42,22 @@ export type DecisionFlow = z.infer<typeof DecisionFlowSchema>;
 export type DecisionStage = z.infer<typeof DecisionStageSchema>;
 export type DecisionEnvelope = z.infer<typeof DecisionEnvelopeSchema>;
 
+export function assertDecisionEnvelope(value: unknown, source = "unknown"): DecisionEnvelope {
+  const result = DecisionEnvelopeSchema.safeParse(value);
+  if (result.success) {
+    return result.data;
+  }
+
+  const reason = result.error.issues
+    .map((issue) => {
+      const path = issue.path.length > 0 ? issue.path.join(".") : "root";
+      return `${path}:${issue.message}`;
+    })
+    .join(";");
+
+  throw new Error(`INVALID_DECISION_ENVELOPE:${source}:${reason}`);
+}
+
 export interface DecisionStageContext {
   entrypoint: DecisionEntrypoint;
   flow: DecisionFlow;

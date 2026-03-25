@@ -29,24 +29,31 @@ describe("Swap Safety (M0)", () => {
     else delete process.env.LIVE_TRADING;
   });
 
-  it("returns paper result when LIVE_TRADING unset and dryRun=false", async () => {
+  it("returns dry result when LIVE_TRADING unset and dryRun=false", async () => {
     const result = await executeSwap(baseIntent);
     expect(result.dryRun).toBe(true);
     expect(result.success).toBe(true);
     expect(result.tradeIntentId).toBe("key-1");
   });
 
-  it("returns paper result when LIVE_TRADING=false and dryRun=false", async () => {
+  it("returns dry result when LIVE_TRADING=false and dryRun=false", async () => {
     process.env.LIVE_TRADING = "false";
     const result = await executeSwap(baseIntent);
     expect(result.dryRun).toBe(true);
     expect(result.success).toBe(true);
   });
 
-  it("returns paper result when LIVE_TRADING empty and dryRun=false", async () => {
+  it("returns dry result when LIVE_TRADING empty and dryRun=false", async () => {
     process.env.LIVE_TRADING = "";
     const result = await executeSwap(baseIntent);
     expect(result.dryRun).toBe(true);
+  });
+
+  it("preserves explicit paper mode when executionMode=paper and LIVE_TRADING is unset", async () => {
+    const result = await executeSwap({ ...baseIntent, executionMode: "paper" });
+    expect(result.dryRun).toBe(false);
+    expect(result.paperExecution).toBe(true);
+    expect(result.success).toBe(true);
   });
 
   it("returns paper result when intent.dryRun=true regardless of LIVE_TRADING", async () => {

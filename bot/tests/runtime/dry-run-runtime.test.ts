@@ -75,6 +75,7 @@ describe("DryRunRuntime (phase-2)", () => {
   });
 
   afterEach(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 25));
     await rm(tempDir, { recursive: true, force: true });
   });
 

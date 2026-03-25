@@ -10,8 +10,24 @@ import { resetKillSwitch } from "../../src/governance/kill-switch.js";
 import type { DryRunRuntime } from "../../src/runtime/dry-run-runtime.js";
 import { resetMicroLiveControlForTests } from "../../src/runtime/live-control.js";
 
-const PORT = 3336;
 const CONTROL_TOKEN = "phase10-control-token";
+
+async function createBoundServer(config: Parameters<typeof createServer>[0]) {
+  const server = await createServer({
+    ...config,
+    port: 0,
+    host: "127.0.0.1",
+  });
+  const address = server.server.address();
+  if (typeof address !== "object" || address === null || !("port" in address)) {
+    throw new Error("Failed to determine control test server port");
+  }
+
+  return {
+    server,
+    baseUrl: `http://127.0.0.1:${address.port}`,
+  };
+}
 
 function authHeaders(token = CONTROL_TOKEN): HeadersInit {
   return { "x-control-token": token };
@@ -71,11 +87,12 @@ describe("Control routes", () => {
       reviewPolicyMode: "required",
     });
     await runtime.start();
-    server = await createServer({ port: PORT, host: "127.0.0.1", runtime, getRuntimeSnapshot: () => runtime.getSnapshot(), getBotStatus: () => {
+    const started = await createBoundServer({ runtime, getRuntimeSnapshot: () => runtime.getSnapshot(), getBotStatus: () => {
       const s = runtime.getStatus();
       return s === "running" ? "running" : s === "paused" ? "paused" : "stopped";
     }, controlAuthToken: CONTROL_TOKEN });
-    baseUrl = `http://127.0.0.1:${PORT}`;
+    server = started.server;
+    baseUrl = started.baseUrl;
   });
 
   afterEach(async () => {
@@ -138,9 +155,7 @@ describe("Control routes", () => {
 
     const runtimeLive = await createLiveTestRuntime(liveTempDir);
     await runtimeLive.start();
-    const liveServer = await createServer({
-      port: PORT + 10,
-      host: "127.0.0.1",
+    const liveStarted = await createBoundServer({
       runtime: runtimeLive,
       getRuntimeSnapshot: () => runtimeLive.getSnapshot(),
       getBotStatus: () => {
@@ -149,9 +164,10 @@ describe("Control routes", () => {
       },
       controlAuthToken: CONTROL_TOKEN,
     });
+    const { server: liveServer, baseUrl: liveBaseUrl } = liveStarted;
 
     try {
-      const stopRes = await fetch(`http://127.0.0.1:${PORT + 10}/emergency-stop`, {
+      const stopRes = await fetch(`${liveBaseUrl}/emergency-stop`, {
         method: "POST",
         headers: authHeaders(),
       });
@@ -164,7 +180,7 @@ describe("Control routes", () => {
       expect(stopBody.liveControl.stopped).toBe(true);
       expect(stopBody.liveControl.stopReason).toBe("kill_switch_emergency_stop");
 
-      const resetRes = await fetch(`http://127.0.0.1:${PORT + 10}/control/reset`, {
+      const resetRes = await fetch(`${liveBaseUrl}/control/reset`, {
         method: "POST",
         headers: authHeaders(),
       });
@@ -196,9 +212,7 @@ describe("Control routes", () => {
 
     const runtimeLive = await createLiveTestRuntime(liveTempDir);
     await runtimeLive.start();
-    const liveServer = await createServer({
-      port: PORT + 11,
-      host: "127.0.0.1",
+    const liveStarted = await createBoundServer({
       runtime: runtimeLive,
       getRuntimeSnapshot: () => runtimeLive.getSnapshot(),
       getBotStatus: () => {
@@ -207,9 +221,10 @@ describe("Control routes", () => {
       },
       controlAuthToken: CONTROL_TOKEN,
     });
+    const { server: liveServer, baseUrl: liveBaseUrl } = liveStarted;
 
     try {
-      const firstReset = await fetch(`http://127.0.0.1:${PORT + 11}/control/reset`, {
+      const firstReset = await fetch(`${liveBaseUrl}/control/reset`, {
         method: "POST",
         headers: authHeaders(),
       });
@@ -219,7 +234,7 @@ describe("Control routes", () => {
       expect(firstBody.liveControl.roundStatus).toBe("failed");
       expect(firstBody.runtimeStatus).toBe("paused");
 
-      const secondReset = await fetch(`http://127.0.0.1:${PORT + 11}/control/reset`, {
+      const secondReset = await fetch(`${liveBaseUrl}/control/reset`, {
         method: "POST",
         headers: authHeaders(),
       });
@@ -317,10 +332,12 @@ describe("Control routes", () => {
   });
 
   it("control routes fail closed when no control token is configured", async () => {
-    const unconfiguredServer = await createServer({ port: PORT + 1, host: "127.0.0.1", runtime });
+    const { server: unconfiguredServer, baseUrl: unconfiguredBaseUrl } = await createBoundServer({
+      runtime,
+    });
 
     try {
-      const res = await fetch(`http://127.0.0.1:${PORT + 1}/control/pause`, {
+      const res = await fetch(`${unconfiguredBaseUrl}/control/pause`, {
         method: "POST",
         headers: authHeaders(),
       });
@@ -335,14 +352,12 @@ describe("Control routes", () => {
   });
 
   it("POST /emergency-stop fails closed when runtime control is unavailable", async () => {
-    const runtimeLessServer = await createServer({
-      port: PORT + 2,
-      host: "127.0.0.1",
+    const { server: runtimeLessServer, baseUrl: runtimeLessBaseUrl } = await createBoundServer({
       controlAuthToken: CONTROL_TOKEN,
     });
 
     try {
-      const res = await fetch(`http://127.0.0.1:${PORT + 2}/emergency-stop`, {
+      const res = await fetch(`${runtimeLessBaseUrl}/emergency-stop`, {
         method: "POST",
         headers: authHeaders(),
       });

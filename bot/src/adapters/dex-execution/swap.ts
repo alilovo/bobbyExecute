@@ -202,8 +202,23 @@ export async function executeSwap(
   deps?: SwapDeps
 ): Promise<ExecutionReport> {
   const liveAllowed = isLiveTradingEnabled();
+  const executionMode = intent.executionMode ?? (liveAllowed ? "live" : "dry");
 
-  if (intent.executionMode === "live" && !liveAllowed) {
+  if (intent.dryRun) {
+    const actualOut = quote ? quote.amountOut : intent.minAmountOut;
+    return {
+      traceId: intent.traceId,
+      timestamp: intent.timestamp,
+      tradeIntentId: intent.idempotencyKey,
+      success: true,
+      actualAmountOut: actualOut,
+      dryRun: true,
+      executionMode: "dry",
+      paperExecution: false,
+    };
+  }
+
+  if (executionMode === "live" && !liveAllowed) {
     return {
       traceId: intent.traceId,
       timestamp: intent.timestamp,
@@ -219,25 +234,8 @@ export async function executeSwap(
     };
   }
 
-  if (intent.executionMode === "live" && intent.dryRun) {
-    return {
-      traceId: intent.traceId,
-      timestamp: intent.timestamp,
-      tradeIntentId: intent.idempotencyKey,
-      success: false,
-      error: "Live execution intent cannot run with dryRun=true.",
-      dryRun: false,
-      executionMode: "live",
-      paperExecution: false,
-      failClosed: true,
-      failureStage: "preflight",
-      failureCode: "live_dependency_incomplete",
-    };
-  }
-
-  if (intent.executionMode !== "live" || intent.dryRun) {
+  if (executionMode !== "live") {
     const actualOut = quote ? quote.amountOut : intent.minAmountOut;
-    const executionMode = intent.executionMode ?? (intent.dryRun ? "dry" : "paper");
     return {
       traceId: intent.traceId,
       timestamp: intent.timestamp,

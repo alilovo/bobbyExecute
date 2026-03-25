@@ -32,6 +32,22 @@ const baseConfig = {
 };
 let config = baseConfig;
 const OPERATOR_READ_TOKEN = "phase10-operator-read-token";
+const PORTS = {
+  cycles: 4565,
+  boundedCycles: 4566,
+  incidents: 4567,
+  replay: 4568,
+  repeated: 4569,
+  boundedIncidents: 4570,
+  status: 4571,
+  runtimeUnavailable: 4572,
+  invalidLimits: 4573,
+  liveControl: 4574,
+  controlHistory: 4575,
+  missingReplay: 4576,
+  authSurfaces: 4577,
+  missingAuth: 4578,
+};
 
 function authHeaders(token = OPERATOR_READ_TOKEN): HeadersInit {
   return { "x-operator-token": token };
@@ -81,6 +97,7 @@ describe("Operator read-only surfaces", () => {
   afterEach(async () => {
     for (const runtime of runtimes) await runtime.stop();
     for (const server of servers) await server.close();
+    await new Promise((resolve) => setTimeout(resolve, 25));
     await rm(tempDir, { recursive: true, force: true });
     resetKillSwitch();
     resetMicroLiveControlForTests();
@@ -103,7 +120,7 @@ describe("Operator read-only surfaces", () => {
     const persistedCycles = await cycleSummaryWriter.list(5);
 
     const server = await createServer({
-      port: 3345,
+      port: PORTS.cycles,
       host: "127.0.0.1",
       runtime,
       getRuntimeSnapshot: () => runtime.getSnapshot(),
@@ -111,7 +128,7 @@ describe("Operator read-only surfaces", () => {
     });
     servers.push(server);
 
-    const res = await fetch("http://127.0.0.1:3345/runtime/cycles?limit=5", { headers: authHeaders() });
+    const res = await fetch(`http://127.0.0.1:${PORTS.cycles}/runtime/cycles?limit=5`, { headers: authHeaders() });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
@@ -196,7 +213,7 @@ describe("Operator read-only surfaces", () => {
     runtimes.push(runtime);
 
     const server = await createServer({
-      port: 3346,
+      port: PORTS.boundedCycles,
       host: "127.0.0.1",
       runtime,
       getRuntimeSnapshot: () => runtime.getSnapshot(),
@@ -204,7 +221,7 @@ describe("Operator read-only surfaces", () => {
     });
     servers.push(server);
 
-    const res = await fetch("http://127.0.0.1:3346/runtime/cycles?limit=2", { headers: authHeaders() });
+    const res = await fetch(`http://127.0.0.1:${PORTS.boundedCycles}/runtime/cycles?limit=2`, { headers: authHeaders() });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
@@ -236,7 +253,7 @@ describe("Operator read-only surfaces", () => {
     const persistedIncidents = await incidentRepository.list(10);
 
     const server = await createServer({
-      port: 3347,
+      port: PORTS.incidents,
       host: "127.0.0.1",
       runtime,
       getRuntimeSnapshot: () => runtime.getSnapshot(),
@@ -244,7 +261,7 @@ describe("Operator read-only surfaces", () => {
     });
     servers.push(server);
 
-    const res = await fetch("http://127.0.0.1:3347/incidents?limit=10", { headers: authHeaders() });
+    const res = await fetch(`http://127.0.0.1:${PORTS.incidents}/incidents?limit=10`, { headers: authHeaders() });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
@@ -291,7 +308,7 @@ describe("Operator read-only surfaces", () => {
 
     const summary = (await cycleSummaryWriter.list(5))[0];
     const server = await createServer({
-      port: 3352,
+      port: PORTS.replay,
       host: "127.0.0.1",
       runtime,
       getRuntimeSnapshot: () => runtime.getSnapshot(),
@@ -299,7 +316,7 @@ describe("Operator read-only surfaces", () => {
     });
     servers.push(server);
 
-    const res = await fetch(`http://127.0.0.1:3352/runtime/cycles/${summary.traceId}/replay`, { headers: authHeaders() });
+    const res = await fetch(`http://127.0.0.1:${PORTS.replay}/runtime/cycles/${summary.traceId}/replay`, { headers: authHeaders() });
     expect(res.status).toBe(200);
     const body = await res.json();
 
@@ -363,7 +380,7 @@ describe("Operator read-only surfaces", () => {
     await runtime.pause("operator_parity_pause");
 
     const server = await createServer({
-      port: 3354,
+      port: PORTS.repeated,
       host: "127.0.0.1",
       runtime,
       getRuntimeSnapshot: () => runtime.getSnapshot(),
@@ -376,11 +393,11 @@ describe("Operator read-only surfaces", () => {
     servers.push(server);
 
     const [healthRes, kpiRes, statusRes, cyclesRes, incidentsRes] = await Promise.all([
-      fetch("http://127.0.0.1:3354/health"),
-      fetch("http://127.0.0.1:3354/kpi/summary"),
-      fetch("http://127.0.0.1:3354/runtime/status", { headers: authHeaders() }),
-      fetch("http://127.0.0.1:3354/runtime/cycles?limit=10", { headers: authHeaders() }),
-      fetch("http://127.0.0.1:3354/incidents?limit=10", { headers: authHeaders() }),
+      fetch(`http://127.0.0.1:${PORTS.repeated}/health`),
+      fetch(`http://127.0.0.1:${PORTS.repeated}/kpi/summary`),
+      fetch(`http://127.0.0.1:${PORTS.repeated}/runtime/status`, { headers: authHeaders() }),
+      fetch(`http://127.0.0.1:${PORTS.repeated}/runtime/cycles?limit=10`, { headers: authHeaders() }),
+      fetch(`http://127.0.0.1:${PORTS.repeated}/incidents?limit=10`, { headers: authHeaders() }),
     ]);
 
     const healthBody = await healthRes.json();
@@ -540,7 +557,7 @@ describe("Operator read-only surfaces", () => {
     }
 
     const server = await createServer({
-      port: 3348,
+      port: PORTS.boundedIncidents,
       host: "127.0.0.1",
       runtime,
       getRuntimeSnapshot: () => runtime.getSnapshot(),
@@ -548,7 +565,7 @@ describe("Operator read-only surfaces", () => {
     });
     servers.push(server);
 
-    const res = await fetch("http://127.0.0.1:3348/incidents?limit=2", { headers: authHeaders() });
+    const res = await fetch(`http://127.0.0.1:${PORTS.boundedIncidents}/incidents?limit=2`, { headers: authHeaders() });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
@@ -565,7 +582,7 @@ describe("Operator read-only surfaces", () => {
     await runtime.pause("operator_read_surface_test");
 
     const server = await createServer({
-      port: 3349,
+      port: PORTS.status,
       host: "127.0.0.1",
       runtime,
       getRuntimeSnapshot: () => runtime.getSnapshot(),
@@ -578,9 +595,9 @@ describe("Operator read-only surfaces", () => {
     servers.push(server);
 
     const [statusRes, healthRes, kpiRes] = await Promise.all([
-      fetch("http://127.0.0.1:3349/runtime/status", { headers: authHeaders() }),
-      fetch("http://127.0.0.1:3349/health"),
-      fetch("http://127.0.0.1:3349/kpi/summary"),
+      fetch(`http://127.0.0.1:${PORTS.status}/runtime/status`, { headers: authHeaders() }),
+      fetch(`http://127.0.0.1:${PORTS.status}/health`),
+      fetch(`http://127.0.0.1:${PORTS.status}/kpi/summary`),
     ]);
 
     expect(statusRes.status).toBe(200);
@@ -599,17 +616,17 @@ describe("Operator read-only surfaces", () => {
 
   it("operator read surfaces fail explicitly when runtime wiring is unavailable", async () => {
     const server = await createServer({
-      port: 3350,
+      port: PORTS.runtimeUnavailable,
       host: "127.0.0.1",
       operatorReadAuthToken: OPERATOR_READ_TOKEN,
     });
     servers.push(server);
 
     const [cyclesRes, replayRes, incidentsRes, statusRes] = await Promise.all([
-      fetch("http://127.0.0.1:3350/runtime/cycles", { headers: authHeaders() }),
-      fetch("http://127.0.0.1:3350/runtime/cycles/missing/replay", { headers: authHeaders() }),
-      fetch("http://127.0.0.1:3350/incidents", { headers: authHeaders() }),
-      fetch("http://127.0.0.1:3350/runtime/status", { headers: authHeaders() }),
+      fetch(`http://127.0.0.1:${PORTS.runtimeUnavailable}/runtime/cycles`, { headers: authHeaders() }),
+      fetch(`http://127.0.0.1:${PORTS.runtimeUnavailable}/runtime/cycles/missing/replay`, { headers: authHeaders() }),
+      fetch(`http://127.0.0.1:${PORTS.runtimeUnavailable}/incidents`, { headers: authHeaders() }),
+      fetch(`http://127.0.0.1:${PORTS.runtimeUnavailable}/runtime/status`, { headers: authHeaders() }),
     ]);
 
     expect(cyclesRes.status).toBe(501);
@@ -645,7 +662,7 @@ describe("Operator read-only surfaces", () => {
     runtimes.push(runtime);
 
     const server = await createServer({
-      port: 3351,
+      port: PORTS.invalidLimits,
       host: "127.0.0.1",
       runtime,
       getRuntimeSnapshot: () => runtime.getSnapshot(),
@@ -654,8 +671,8 @@ describe("Operator read-only surfaces", () => {
     servers.push(server);
 
     const [nonNumericCycles, oversizedIncidents] = await Promise.all([
-      fetch("http://127.0.0.1:3351/runtime/cycles?limit=abc", { headers: authHeaders() }),
-      fetch("http://127.0.0.1:3351/incidents?limit=201", { headers: authHeaders() }),
+      fetch(`http://127.0.0.1:${PORTS.invalidLimits}/runtime/cycles?limit=abc`, { headers: authHeaders() }),
+      fetch(`http://127.0.0.1:${PORTS.invalidLimits}/incidents?limit=201`, { headers: authHeaders() }),
     ]);
 
     expect(nonNumericCycles.status).toBe(400);
@@ -685,7 +702,7 @@ describe("Operator read-only surfaces", () => {
     killMicroLive("operator-test-kill");
 
     const server = await createServer({
-      port: 3357,
+      port: PORTS.liveControl,
       host: "127.0.0.1",
       runtime,
       getRuntimeSnapshot: () => runtime.getSnapshot(),
@@ -693,7 +710,7 @@ describe("Operator read-only surfaces", () => {
     });
     servers.push(server);
 
-    const statusRes = await fetch("http://127.0.0.1:3357/runtime/status", { headers: authHeaders() });
+    const statusRes = await fetch(`http://127.0.0.1:${PORTS.liveControl}/runtime/status`, { headers: authHeaders() });
     expect(statusRes.status).toBe(200);
     const statusBody = await statusRes.json();
 
@@ -703,7 +720,7 @@ describe("Operator read-only surfaces", () => {
       killSwitchActive: true,
     });
 
-    const healthRes = await fetch("http://127.0.0.1:3357/health");
+    const healthRes = await fetch(`http://127.0.0.1:${PORTS.liveControl}/health`);
     const healthBody = await healthRes.json();
     expect(healthBody.runtime.liveControl).toMatchObject({
       posture: "live_killed",
@@ -711,7 +728,7 @@ describe("Operator read-only surfaces", () => {
       killSwitchActive: true,
     });
 
-    const kpiRes = await fetch("http://127.0.0.1:3357/kpi/summary");
+    const kpiRes = await fetch(`http://127.0.0.1:${PORTS.liveControl}/kpi/summary`);
     const kpiBody = await kpiRes.json();
     expect(kpiBody.runtime.liveControl).toMatchObject({
       posture: "live_killed",
@@ -736,7 +753,7 @@ describe("Operator read-only surfaces", () => {
     await runtime.pause("history_pause");
 
     const server = await createServer({
-      port: 3358,
+      port: PORTS.controlHistory,
       host: "127.0.0.1",
       runtime,
       getRuntimeSnapshot: () => runtime.getSnapshot(),
@@ -745,9 +762,9 @@ describe("Operator read-only surfaces", () => {
     servers.push(server);
 
     const [statusRes, kpiRes, incidentsRes] = await Promise.all([
-      fetch("http://127.0.0.1:3358/runtime/status", { headers: authHeaders() }),
-      fetch("http://127.0.0.1:3358/kpi/summary"),
-      fetch("http://127.0.0.1:3358/incidents?limit=10", { headers: authHeaders() }),
+      fetch(`http://127.0.0.1:${PORTS.controlHistory}/runtime/status`, { headers: authHeaders() }),
+      fetch(`http://127.0.0.1:${PORTS.controlHistory}/kpi/summary`),
+      fetch(`http://127.0.0.1:${PORTS.controlHistory}/incidents?limit=10`, { headers: authHeaders() }),
     ]);
 
     expect(statusRes.status).toBe(200);
@@ -782,7 +799,7 @@ describe("Operator read-only surfaces", () => {
     runtimes.push(runtime);
 
     const server = await createServer({
-      port: 3353,
+      port: PORTS.missingReplay,
       host: "127.0.0.1",
       runtime,
       getRuntimeSnapshot: () => runtime.getSnapshot(),
@@ -790,7 +807,7 @@ describe("Operator read-only surfaces", () => {
     });
     servers.push(server);
 
-    const res = await fetch("http://127.0.0.1:3353/runtime/cycles/missing-trace/replay", { headers: authHeaders() });
+    const res = await fetch(`http://127.0.0.1:${PORTS.missingReplay}/runtime/cycles/missing-trace/replay`, { headers: authHeaders() });
     expect(res.status).toBe(404);
     await expect(res.json()).resolves.toMatchObject({
       success: false,
@@ -806,7 +823,7 @@ describe("Operator read-only surfaces", () => {
     runtimes.push(runtime);
 
     const securedServer = await createServer({
-      port: 3355,
+      port: PORTS.authSurfaces,
       host: "127.0.0.1",
       runtime,
       getRuntimeSnapshot: () => runtime.getSnapshot(),
@@ -815,8 +832,8 @@ describe("Operator read-only surfaces", () => {
     servers.push(securedServer);
 
     const [missing, invalid] = await Promise.all([
-      fetch("http://127.0.0.1:3355/runtime/status"),
-      fetch("http://127.0.0.1:3355/runtime/status", { headers: authHeaders("wrong-token") }),
+      fetch(`http://127.0.0.1:${PORTS.authSurfaces}/runtime/status`),
+      fetch(`http://127.0.0.1:${PORTS.authSurfaces}/runtime/status`, { headers: authHeaders("wrong-token") }),
     ]);
 
     expect(missing.status).toBe(403);
@@ -831,14 +848,14 @@ describe("Operator read-only surfaces", () => {
     });
 
     const unconfiguredServer = await createServer({
-      port: 3356,
+      port: PORTS.missingAuth,
       host: "127.0.0.1",
       runtime,
       getRuntimeSnapshot: () => runtime.getSnapshot(),
     });
     servers.push(unconfiguredServer);
 
-    const unconfigured = await fetch("http://127.0.0.1:3356/runtime/status", {
+    const unconfigured = await fetch(`http://127.0.0.1:${PORTS.missingAuth}/runtime/status`, {
       headers: authHeaders(),
     });
     expect(unconfigured.status).toBe(403);
