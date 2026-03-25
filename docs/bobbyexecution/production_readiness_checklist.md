@@ -1,53 +1,42 @@
 # Production Readiness Checklist
 
-Use this checklist before any controlled live test.
+Use this before any controlled live-test or any rollout beyond paper mode.
 
-## Phase 1 — Mandatory before any live test
+## Implemented In Current Code
 
-- [ ] real swap execution implemented
-- [ ] real quote service implemented
-- [ ] `RPC_MODE=real` documented and enforced
-- [ ] bot-side health / KPI server exists
-- [ ] persistent action log exists
-- [ ] persistent journal exists
-- [ ] bot → dashboard bridge exists
-- [ ] adapter health is exported
-- [ ] live failure state is visible in dashboard
-- [ ] no silent stub path remains in execution
+- [x] Deterministic ingest -> signal -> risk -> execute -> verify -> journal -> monitor pipeline
+- [x] Persistent action log, journal, runtime cycle summaries, incidents, and execution evidence
+- [x] Runtime truth surfaces: `/health`, `/runtime/status`, `/runtime/cycles`, `/incidents`, `/kpi/*`
+- [x] Live-control round state with arm, disarm, halt, reset, and emergency stop
+- [x] Adapter circuit breaker, freshness checks, and fail-closed config validation
+- [x] Real quote and live swap path guarded by RPC verification and live prerequisites
 
-## Phase 2 — Strongly required before extended testing
+## Verify Before Controlled Live-Test
 
-- [ ] MEV / sandwich scenario implemented
-- [ ] 5xx retry implemented
-- [ ] fallback cache implemented
-- [ ] freshness checks implemented
-- [ ] secondary RPC or failover implemented
-- [ ] at least core stub chaos scenarios replaced
-- [ ] bot-side kill switch implemented
+- [ ] `cd bot && npm run premerge`
+- [ ] `cd bot && npm run build`
+- [ ] `cd bot && npm run live:preflight`
+- [ ] `LIVE_TRADING=true`
+- [ ] `DRY_RUN=false`
+- [ ] `RPC_MODE=real`
+- [ ] `TRADING_ENABLED=true`
+- [ ] `LIVE_TEST_MODE=true`
+- [ ] `WALLET_ADDRESS` is set
+- [ ] `CONTROL_TOKEN` and `OPERATOR_READ_TOKEN` are set and distinct
+- [ ] `JOURNAL_PATH` points to persistent storage
+- [ ] `GET /health`, `/runtime/status`, `/kpi/summary`, `/kpi/decisions`, `/kpi/adapters`, and `/kpi/metrics` are healthy
+- [ ] `POST /emergency-stop` and `POST /control/reset` behave as documented
+- [ ] the dashboard reflects the same runtime truth as the bot
+- [ ] dry or paper rehearsal has been reviewed in the journal and replay endpoints
 
-## Phase 3 — Recommended operational hardening
+## No-Go Conditions
 
-- [ ] persistent metrics export
-- [ ] `/kpi/adapters` endpoint available
-- [ ] incident runbook verified
-- [ ] dashboard switched to bot truth state where available
-- [ ] E2E tests cover bot + dashboard + execution-disabled path
+- live config validation fails
+- any live prerequisite is missing
+- control tokens are absent or identical
+- runtime status is `error` or adapter health is degraded for live
+- quote or verification handling falls back silently
+- kill switch is active and not reset
+- uncontrolled live trading is being attempted
 
-## No-go conditions
-
-Do not live test if any of these remain true:
-
-- execution path is stubbed
-- dashboard still only reflects `dor-bot` memory proxies
-- bot cannot be emergency-stopped
-- action / decision trail is not durable
-- required critical chaos scenarios are stubbed
-
----
-
-## Authority / Related Docs
-
-- Canonical governance: [`governance/SoT.md`](../../governance/SoT.md)
-- Archive: [`archive/README.md`](../../archive/README.md)
-- Incident runbook: [`incident_and_killswitch_runbook.md`](incident_and_killswitch_runbook.md)
-- Domain index: [`docs/bobbyexecution/README.md`](README.md)
+Controlled live-test only. Uncontrolled live trading remains out of scope.

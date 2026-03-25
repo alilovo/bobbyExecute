@@ -2,84 +2,59 @@
 
 This protocol governs risk, manipulation, and chaos outcomes for BobbyExecution.
 
-## Decision classes
+## Operational Outcomes
 
-Every risk / chaos outcome must resolve to one of:
+- `allow` - all required checks passed
+- `degrade` - useful for paper or analysis, but not enough for confident live action
+- `block` - trade must not proceed
+- `abort` - catastrophic runtime condition, treat as an emergency-stop candidate
 
-- **allow**
-- **degrade**
-- **manual_review**
-- **block**
-- **abort**
+## Current Risk Signals
 
-## Required rule groups
+The current risk engine aggregates:
 
-### Policy rules
-- denylist / allowlist
-- max position size
-- max slippage
-- max daily loss
-- live-trading enablement gate
+- liquidity risk
+- social manipulation risk
+- momentum exhaust risk
+- structural weakness risk
+- pattern flags from the deterministic pattern engine
 
-### Chaos rules
-- adapter integrity
-- data integrity
-- load / timeout failure
-- divergence anomalies
-- liquidity drain
-- flash crash
-- oracle inconsistency
-- MEV / sandwich exposure
-- pump / dump behavior
+The pattern engine currently recognizes:
 
-### Manipulation signals
-- cross-DEX divergence
-- pump velocity without holders
-- abnormal liquidity drain
-- abnormal price collapse
-- suspicious quote / fill mismatch
+1. `velocity_liquidity_divergence`
+2. `bundle_sybil_cluster`
+3. `narrative_shift`
+4. `smart_money_fakeout`
+5. `early_pump_risk`
+6. `sentiment_structural_mismatch`
+7. `cross_source_anomaly`
+8. `fragile_expansion`
 
-## Critical live-test requirements
+## Current Chaos Reference
 
-The following are critical before controlled live testing:
+The trading-edge chaos reference is a deep-support document for the 19-scenario suite. The current category 5 set covers:
 
-- scenario 15 MEV / Sandwich must be implemented
-- high-severity live-path scenarios must not remain stubbed
-- Cat-5 abort behavior must be tested and visible
-- pass rate alone is not enough if critical scenarios are placeholders
+- rug pull and liquidity drain
+- pump and dump
+- sandwich / MEV exposure
+- wash trading
+- liquidity pool price inflation
+- oracle manipulation
+- liquidation cascade
+- sniper / front-running pressure
 
-## Outcome matrix
+## Live-Test Rules
 
-### Allow
-All critical checks passed.
+- Catastrophic scenario failures should be treated as abort candidates.
+- Any live-path manipulation signal should bias toward block rather than allow.
+- Pass rate alone is not enough if a critical scenario is missing or stubbed.
+- Fail closed when data quality, adapter health, or verification confidence is weak.
 
-### Degrade
-Use for non-critical data-quality issues that do not justify execution.
+## Required Logging
 
-### Manual review
-Use when operator review is required before any risky progression.
-
-### Block
-Used when trade must not proceed.
-
-### Abort
-Used for catastrophic runtime conditions; should trigger emergency stop consideration.
-
-## Required logging fields
-
-- scenario id
+- scenario or pattern id
 - severity
 - result
 - block reason
 - trade impact
 - operator action required
-
----
-
-## Authority / Related Docs
-
-- Canonical governance (chaos section): [`governance/SoT.md §12`](../../governance/SoT.md)
-- Deep chaos scenario reference: [`docs/trading/trading-edge_chaos-scenarios.md`](../trading/trading-edge_chaos-scenarios.md)
-- Production readiness checklist: [`production_readiness_checklist.md`](production_readiness_checklist.md)
-- Archive: [`archive/README.md`](../../archive/README.md)
-- Domain index: [`docs/bobbyexecution/README.md`](README.md)

@@ -1,115 +1,79 @@
-# Onchain Trading Bot
+# BobbyExecution Bot
 
-Production-grade Onchain Trading Bot Architecture transplanting patterns from [OrchestrAI_Labs](https://github.com/baum777/OrchestrAI_Labs).
+Active TypeScript runtime for the repository.
 
-## Current State
+## Current Behavior
 
-- `bot/` is the active TypeScript runtime for local development, tests, and guarded live-test startup.
-- Dry and paper modes are the normal local paths.
-- Live-test startup is fail-closed, bounded, and operator-visible.
-- Uncontrolled live trading is not claimed by this repository.
-
-## Stack
-
-- **TypeScript** (Node 22+)
-- **Zod** for schemas
-- **Pino** for JSON logging
-- **Vitest** for tests
-
-## Adapters
-
-- **DexPaprika** – DEX pricing, pools, liquidity
-- **Moralis** – wallet portfolio, token balances
-- **RPC Verify** – truth layer (token/balance/receipt checks)
-
-## Architecture
-
-```
-Ingest → Research → Signal → Risk → Execute → Verify → Journal → Monitor
-```
-
-### Tool Layering (Hard Rule)
-
-All actions route through `ToolRouter`:
-- `market.dexPaprika.*` → market.read / market.trending
-- `wallet.moralis.*` → wallet.read
-- `chain.rpcVerify.*` → chain.verify
-- `trade.dex.*` → trade.quote / trade.execute
-
-### Governance (Fail-Closed)
-
-- Permission enforcement
-- Review gates with commit tokens
-- Circuit breaker for adapters
-- Guardrails (slippage, allowlist/denylist)
-
-### Determinism
-
-- Clock abstraction (`FakeClock` for tests)
-- Canonicalization + SHA-256 hashing
-- Golden task fixtures for replay
+- Ingest -> Signal -> Risk -> Execute -> Verify -> Journal -> Monitor
+- Deterministic scoring, pattern recognition, and fail-closed control
+- Persistent action logs, journal entries, cycle summaries, incidents, and execution evidence
+- Guarded live-test round control with runtime truth surfaces for the dashboard
 
 ## Commands
 
+Run from `bot/`:
+
 ```bash
 npm install
-npm run build
+npm run lint
 npm test
 npm run test:golden
+npm run test:chaos
+npm run test:integration
+npm run test:e2e
+npm run test:config
+npm run build
 npm run premerge
+npm run start:server
 npm run live:preflight
 npm run live:test
 ```
 
-Live-test starts are fail-closed and operator-visible. Check `/health`, `/kpi/summary`, and `/runtime/status` for round state, then use `POST /emergency-stop` or `POST /control/reset` if needed.
+## Config and Authority
 
-## Config
+- Config is loaded from environment variables through `src/config/config-schema.ts`.
+- `RUNTIME_POLICY_AUTHORITY=ts-env` is the only runtime-authoritative mode.
+- `src/config/agents.yaml`, `src/config/guardrails.yaml`, and `src/config/permissions.yaml` are reference policy files, not runtime authority.
+- Safe local defaults remain:
 
-- `src/config/guardrails.yaml` – risk limits, allowlist/denylist
-- `src/config/permissions.yaml` – tool–permission mapping
-- `src/config/agents.yaml` – agent profiles
+  ```bash
+  LIVE_TRADING=false
+  DRY_RUN=true
+  RPC_MODE=stub
+  TRADING_ENABLED=false
+  ```
 
-## Local User Setup
+- `PORT` defaults to `3333` and `HOST` defaults to `0.0.0.0`.
+- Controlled live-test mode additionally requires `LIVE_TRADING=true`, `DRY_RUN=false`, `RPC_MODE=real`, `TRADING_ENABLED=true`, `LIVE_TEST_MODE=true`, `WALLET_ADDRESS`, `CONTROL_TOKEN`, and `OPERATOR_READ_TOKEN`.
 
-1. Copy [`.env.example`](../.env.example) to `.env` in the repo root.
-2. Keep the local-safe defaults unless you are intentionally testing something else:
-   - `LIVE_TRADING=false`
-   - `DRY_RUN=true`
-   - `RPC_MODE=stub`
-   - `TRADING_ENABLED=false`
-3. Install dependencies from `bot/`:
+## Runtime Surfaces
 
-   ```bash
-   cd bot
-   npm install
-   ```
+- `GET /health`
+- `GET /kpi/summary`
+- `GET /kpi/decisions`
+- `GET /kpi/adapters`
+- `GET /kpi/metrics`
+- `GET /runtime/status`
+- `GET /runtime/cycles`
+- `GET /runtime/cycles/:traceId/replay`
+- `GET /incidents`
+- `POST /emergency-stop`
+- `POST /control/pause`
+- `POST /control/resume`
+- `POST /control/halt`
+- `POST /control/reset`
+- `POST /control/live/arm`
+- `POST /control/live/disarm`
 
-4. Run the offline gate:
+## Operational Notes
 
-   ```bash
-   npm run premerge
-   ```
+- `/kpi/*` and `/runtime/*` expose bot truth for the dashboard and operators.
+- `POST /emergency-stop` halts the runtime and persists the incident trail.
+- `POST /control/reset` clears the kill switch and returns the round to a safe preflighted state.
+- If the control token or operator read token is missing, the protected routes fail closed.
 
-5. Start the bot API:
+## Related Docs
 
-   ```bash
-   npm run start:server
-   ```
-
-6. Optional: run the dashboard from `dashboard/` if you want a visual surface:
-
-   ```bash
-   cd dashboard
-   npm install
-   npm run dev
-   ```
-
-   Put `NEXT_PUBLIC_API_URL=http://localhost:3333` and `NEXT_PUBLIC_USE_MOCK=false` in `dashboard/.env.local` to read the local bot API.
-
-7. If you need the control routes locally, set `CONTROL_TOKEN` and `OPERATOR_READ_TOKEN` in the repo root `.env`. If they stay empty, mutating routes remain fail-closed.
-
-## Operations
-
-- [`docs/bobbyexecution/production_readiness_checklist.md`](docs/bobbyexecution/production_readiness_checklist.md) – operator readiness checklist before any live test
-- [`docs/bobbyexecution/live_test_runbook.md`](docs/bobbyexecution/live_test_runbook.md) – limited-capital live test procedure
-- [`docs/operations/action-handbook.md`](docs/operations/action-handbook.md) – reusable operator action flow
+- [`../README.md`](../README.md)
+- [`../docs/bobbyexecution/README.md`](../docs/bobbyexecution/README.md)
+- [`../RENDER_DEPLOYMENT.md`](../RENDER_DEPLOYMENT.md)

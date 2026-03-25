@@ -1,20 +1,34 @@
 # Runtime Observability Protocol
 
-This protocol defines the minimum runtime visibility required for BobbyExecution and the dashboard.
+This protocol defines the minimum visibility required for BobbyExecution and the dashboard.
 
-## Required telemetry layers
+## Canonical Truth Layers
 
-### 1. Action and decision logs
+### 1. Action and Decision Logs
+
 Persist:
+
 - trade intents
 - gate outcomes
 - execution attempts
 - verification results
 - blocked reasons
-- emergency stop actions
+- emergency-stop actions
 
-### 2. Metrics
+### 2. Journal and Replay
+
+Persist:
+
+- append-only journal entries
+- hash-chain metadata
+- runtime cycle summaries
+- incident records
+- execution evidence
+
+### 3. Metrics and Health
+
 Track:
+
 - adapter latency
 - retry count
 - breaker state
@@ -24,14 +38,30 @@ Track:
 - successful confirmations
 - failed confirmations
 
-### 3. Correlation
-Every major event must carry:
-- `run_id`
-- `trace_id`
-- `intent_id`
-- optional `tx_signature`
+## Correlation
 
-## Required dashboard-facing KPIs
+`traceId` is the canonical correlation key across runtime, journal, replay, KPI, and incidents.
+
+Every major event should carry:
+
+- `traceId`
+- timestamp
+- intent or trade identifier when available
+- optional transaction signature
+
+## Dashboard-Facing Surfaces
+
+- `GET /health`
+- `GET /runtime/status`
+- `GET /runtime/cycles`
+- `GET /runtime/cycles/:traceId/replay`
+- `GET /incidents`
+- `GET /kpi/summary`
+- `GET /kpi/decisions`
+- `GET /kpi/adapters`
+- `GET /kpi/metrics`
+
+## What The Dashboard Should See
 
 - system health
 - adapter health
@@ -42,27 +72,19 @@ Every major event must carry:
 - verification outcomes
 - kill-switch status
 
-## Bridge requirement
+## Persistence Expectations
 
-The dashboard must be able to consume **bot-generated runtime truth**, not only `dor-bot` local memory.
+The current runtime writes:
 
-Minimum bridge outputs:
+- action logs
+- journal entries
+- runtime cycle summaries
+- incidents
+- execution evidence
 
-- `/health`
-- `/kpi/summary`
-- `/kpi/decisions`
-- `/kpi/adapters`
-- `/kpi/runtime-safety`
+These records are the bot truth, not in-memory placeholders.
 
-## Current audit gaps
-
-- action log is in-memory only
-- metrics are mostly in-memory
-- adapter health is not written
-- no unified run_id chain
-- no native bot → dashboard bridge
-
-## Alert triggers
+## Alert Triggers
 
 Alert when:
 

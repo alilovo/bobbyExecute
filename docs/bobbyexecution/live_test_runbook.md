@@ -1,127 +1,60 @@
-# Live Test Runbook (Stage 3 — Limited Capital)
+# Live Test Runbook
 
-Use this runbook for controlled live testing after Waves 1–8 completion.
+Use this for a controlled live-test session. The runtime is fail-closed; if prerequisites are missing, startup refuses.
 
-## Prerequisites
+## Preflight
 
-- [ ] All waves 1–7 complete
-- [ ] `npm run premerge` passes
-- [ ] `npm run live:preflight` passes
-- [ ] Dry run successful (1 week)
-- [ ] Shadow mode successful (1 week)
+- Run `cd bot && npm run premerge`
+- Run `cd bot && npm run build`
+- Run `cd bot && npm run live:preflight`
+- Set `LIVE_TRADING=true`, `DRY_RUN=false`, `RPC_MODE=real`, `TRADING_ENABLED=true`, `LIVE_TEST_MODE=true`
+- Set `WALLET_ADDRESS`, `CONTROL_TOKEN`, and `OPERATOR_READ_TOKEN`
+- Keep `JOURNAL_PATH` on persistent storage
 
-## Local Setup Before Preflight
+## Start Sequence
 
-1. Copy [`.env.example`](../../.env.example) to `.env` in the repo root.
-2. Keep the safe local defaults:
+1. Start the service with `cd bot && npm run live:test`.
+2. Confirm the entry logs show live-test mode and `rpcMode=real`.
+3. Confirm the runtime transitions through `preflighted` to `running`.
+4. Verify `GET /health`, `GET /runtime/status`, and `GET /kpi/summary`.
+5. Verify `GET /kpi/adapters` and `GET /kpi/metrics` before any trade attempt.
 
-   ```bash
-   LIVE_TRADING=false
-   DRY_RUN=true
-   RPC_MODE=stub
-   TRADING_ENABLED=false
-   ```
+## What To Watch
 
-3. Install and validate the bot:
-
-   ```bash
-   cd bot
-   npm install
-   npm run premerge
-   ```
-
-4. Start the API if you want to inspect the runtime locally:
-
-   ```bash
-   npm run start:server
-   ```
-
-5. Optional: run the dashboard with `NEXT_PUBLIC_API_URL=http://localhost:3333` and `NEXT_PUBLIC_USE_MOCK=false`.
-
-## Environment Variables (Live Test Mode)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LIVE_TEST_MODE` | false | Enable live-test constraints |
-| `LIVE_TEST_MAX_CAPITAL_USD` | 100 | Max capital in USD |
-| `LIVE_TEST_MAX_TRADES_PER_DAY` | 1 | Max trades per calendar day (UTC) |
-| `LIVE_TEST_MAX_DAILY_LOSS_USD` | 50 | Halt when daily loss >= this |
-| `LIVE_TRADING` | false | Must be true for real swaps |
-| `RPC_MODE` | stub | Must be `real` when LIVE_TRADING=true |
-
-## Pre-flight Checklist
-
-Run one of the following before enabling live test:
-
-```bash
-cd bot
-npm run live:preflight
-```
-
-or, from the repo root:
-
-```bash
-bot/scripts/live-test-checklist.sh
-```
-
-## Execution Flow
-
-1. **Run preflight**: `cd bot && npm run live:preflight`
-2. **Start live-test server**: `cd bot && npm run live:test`
-3. **Verify state**: `GET /health`, `GET /kpi/summary`, and `GET /runtime/status`
-4. **Monitor KPIs**: `/kpi/summary`, `/kpi/adapters`, `/kpi/decisions`
-5. **Emergency stop**: `POST /emergency-stop` if needed
-6. **Reset**: `POST /control/reset` only after the round is stopped, completed, or failed
-
-## Live Test Round
-
-The current workflow is a controlled, operator-visible live-test session:
-
-1. Preflight must pass.
-2. Server starts in `LIVE_TRADING=true`, `RPC_MODE=real`, `LIVE_TEST_MODE=true`.
-3. Bootstrap initializes a live-test round in `preflighted` state and the runtime enters `running`.
-4. `/health`, `/kpi/summary`, and `/runtime/status` expose the live-test round state.
-5. `POST /emergency-stop` moves the round to `stopped` and triggers the kill switch.
-6. `POST /control/reset` clears the kill switch and returns the round to a safe `preflighted` state after a terminal stop or completion.
-
-This slice does **not** claim a real on-chain trade has completed. The runtime is bounded and observable, but actual live execution remains stubbed in this phase.
-
-### State Surfaces
-
-- `liveTestMode`
 - `roundStatus`
 - `roundStartedAt`
 - `roundStoppedAt`
+- `roundCompletedAt`
 - `stopReason`
 - `failureReason`
-- `blocked`, `disarmed`, and `stopped`
-- `tradesToday` and `dailyLossUsd` when available
+- `blocked`
+- `disarmed`
+- `stopped`
+- `killSwitchActive`
+- `posture`
+- `rolloutPosture`
 
-## Rollback Triggers
+Useful read surfaces:
 
-- 2 consecutive losses
-- Daily loss > 50% of max
-- Any CRITICAL alert
-- Chaos Category 5 failure
-- MEV sandwich detected
+- `GET /runtime/status`
+- `GET /runtime/cycles`
+- `GET /runtime/cycles/:traceId/replay`
+- `GET /kpi/summary`
+- `GET /kpi/decisions`
+- `GET /kpi/adapters`
+- `GET /kpi/metrics`
+- `GET /incidents`
 
-## Post-Incident
+## Stop And Reset
 
-- Record timeline, components, financial impact
-- Update this runbook with learnings
-- Document go/no-go for next stage
+- `POST /emergency-stop` immediately halts the runtime and triggers the kill switch.
+- `POST /control/live/disarm` returns the live-control posture to disarmed.
+- `POST /control/reset` clears the kill switch and returns the round to a safe preflighted state.
+- `POST /control/halt` stops the runtime loop when you want a terminal stop without an emergency path.
 
-## Success For This Slice
+## Post-Run Review
 
-Success means the operator can:
-
-1. Preflight the live-test configuration.
-2. Start the guarded live-test server without falling back to paper/dry semantics.
-3. Observe round state through `/health`, `/kpi/summary`, and `/runtime/status`.
-4. Trigger emergency stop and safe reset.
-5. See truthful stop/failure reasons when transitions are rejected.
-
-## Related
-
-- [Incident and Kill-Switch Runbook](incident_and_killswitch_runbook.md)
-- [Production Readiness Checklist](production_readiness_checklist.md)
+1. Review `/runtime/cycles/:traceId/replay` for the attempt.
+2. Review `/incidents` for stop reasons and operator actions.
+3. Review `/kpi/decisions` and `/kpi/summary` for blocked or allowed transitions.
+4. Capture any unexpected quote, verification, or adapter behavior before the next run.

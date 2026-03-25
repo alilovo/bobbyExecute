@@ -47,3 +47,13 @@ The following docs were removed from the active tree:
 - `docs/bobbyexecution/spec_generation_protocol.md`
 - `docs/bobbyexecution/system_prompt.md`
 - `docs/bobbyexecution/systems_thinking_framework.md`
+
+The following docs were removed in the doc-surface consolidation pass:
+
+- `DEPLOYMENT_GUIDE.md`
+- `bot/CONFIG_GUIDE.md`
+- `bot/docs/ops/production-readiness.md`
+- `bot/docs/ops/staging-rehearsal-template.md`
+- `bobbyexecution_manual_bundle/user_manual_en.md`
+- `bobbyexecution_manual_bundle/user_manual_de.md`
+- `docs/operations/secrets-management-blueprint.md`

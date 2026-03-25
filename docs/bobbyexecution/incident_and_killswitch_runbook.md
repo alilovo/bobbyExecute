@@ -1,76 +1,59 @@
 # Incident and Kill-Switch Runbook
 
-Use this runbook for controlled testing and incident response.
+Use this runbook for any blocked live-test, emergency stop, or post-incident recovery.
 
-## Emergency stop triggers
+## Trigger Conditions
 
-Trigger emergency stop when any of the following occurs:
+Trigger an emergency stop when any of these occur:
 
-- Cat-5 chaos scenario fails
-- chaos pass status drops below required threshold
+- live-test round enters `failed` or `stopped`
 - RPC verification fails on a live attempt
-- circuit breaker opens on critical providers
-- repeated consecutive execution failures exceed threshold
-- max daily loss is exceeded
-- dashboard loses bot truth connectivity during live execution
+- adapter health degrades in a live posture
+- daily loss limit is reached
+- the kill switch is already active
+- a control route refuses a live action in a way that requires operator review
+- a catastrophic chaos or risk outcome indicates the runtime should halt
 
-## Required operator actions
+## Immediate Actions
 
-### Level 1 — Soft block
-- stop new trade initiation
-- continue observability collection
-- investigate adapter / RPC health
+1. Stop new trade initiation.
+2. Call `POST /emergency-stop`.
+3. Confirm `GET /runtime/status` shows the expected halted or paused posture.
+4. Confirm `GET /incidents` contains the stop event.
+5. Confirm the kill switch state is persisted and visible.
 
-### Level 2 — Hard block
-- disable live trading
-- block all new execution requests
-- notify operator through dashboard / logs
+## Control Surfaces
 
-### Level 3 — Emergency stop
-- trigger bot-side kill switch
-- stop all handlers that can submit trades
-- confirm no pending live execution remains
-- evaluate sell-all only if explicitly supported and policy-approved
+- `POST /emergency-stop`
+- `POST /control/pause`
+- `POST /control/resume`
+- `POST /control/halt`
+- `POST /control/reset`
+- `POST /control/live/arm`
+- `POST /control/live/disarm`
 
-## Minimum kill-switch requirements
+Read surfaces:
 
-- bot-side API or control path exists
-- kill-switch state is persistent
-- dashboard can show kill-switch state
-- kill-switch blocks new execution immediately
-- activation is journaled and logged
+- `GET /health`
+- `GET /runtime/status`
+- `GET /runtime/cycles`
+- `GET /runtime/cycles/:traceId/replay`
+- `GET /kpi/summary`
+- `GET /kpi/decisions`
+- `GET /kpi/adapters`
+- `GET /incidents`
 
+## Recovery Sequence
 
-## Runtime control + read surfaces (paper runtime)
+1. Inspect the latest incident record and replay.
+2. Confirm whether the failure was data, adapter, quote, verification, or control related.
+3. Reset only after the cause is understood.
+4. Use `POST /control/reset` to clear the kill switch.
+5. Re-check readiness before re-arming live.
 
-Current operator surfaces in `bot/`:
+## Post-Incident Review
 
-- `POST /emergency-stop` → activates kill-switch and pauses runtime
-- `POST /control/reset` → clears kill-switch only (does not auto-resume)
-- `POST /control/pause` / `POST /control/resume` / `POST /control/halt` → explicit runtime controls
-- `GET /health`, `GET /kpi/summary`, `GET /runtime/status` → grounded runtime control-state visibility
-- `GET /runtime/cycles` → recent persisted cycle summaries
-- `GET /incidents` → recent persisted incidents
-
-These surfaces are for dry/paper operational control and review; they are not a live-trading authorization surface.
-
-## Post-incident review
-
-After any incident record:
-
-- timeline
-- affected components
-- financial impact
-- operator actions taken
-- rollback behavior
-- missing telemetry
-- remediation tasks
-
----
-
-## Authority / Related Docs
-
-- Canonical governance (incident section): [`governance/SoT.md §21`](../../governance/SoT.md)
-- Kill switch authority: [`governance/SoT.md §16`](../../governance/SoT.md)
-- Production checklist: [`production_readiness_checklist.md`](production_readiness_checklist.md)
-- Domain index: [`docs/bobbyexecution/README.md`](README.md)
+- Capture timestamp, affected components, operator actions, and stop reason.
+- Record whether the failure was preventable or expected.
+- Note any missing telemetry, stale state, or ambiguous behavior.
+- Keep the incident trail aligned with the journal and runtime replay.
