@@ -19,7 +19,7 @@ import { appendJournal } from "../persistence/journal-repository.js";
 import { SystemClock } from "./clock.js";
 import { hashDecision, hashResult } from "./determinism/hash.js";
 import { createTraceId } from "../observability/trace-id.js";
-import { createDecisionCoordinator, type DecisionCoordinator } from "./decision/index.js";
+import { createCanonicalDecisionAuthority, type DecisionCoordinator } from "./decision/index.js";
 import { assertDecisionEnvelope, type DecisionEnvelope, type DecisionStage } from "./contracts/decision-envelope.js";
 
 export type EngineStage =
@@ -130,7 +130,7 @@ export class Engine {
     this.actionLogger = config.actionLogger;
     this.dryRun = config.dryRun ?? true;
     this.traceIdSeed = config.traceIdSeed;
-    this.decisionCoordinator = config.decisionCoordinator ?? createDecisionCoordinator();
+    this.decisionCoordinator = config.decisionCoordinator ?? createCanonicalDecisionAuthority();
     this.journalWriter = config.journalWriter;
     this.journalPolicy = config.journalPolicy ?? "optional";
     this.chaosFn = config.chaosFn ?? defaultChaosHandler;

@@ -75,7 +75,7 @@ import { runScoringEngine } from "../scoring/scoring-engine.js";
 import { recognizePatterns } from "../patterns/pattern-engine.js";
 import { runRiskEngine } from "../risk/risk-engine.js";
 import { runSignalEngine } from "../signals/signal-engine.js";
-import { createDecisionCoordinator, type DecisionCoordinator } from "../core/decision/index.js";
+import { createCanonicalDecisionAuthority, type DecisionCoordinator } from "../core/decision/index.js";
 import { type RuntimeController } from "./controller.js";
 import type {
   RuntimeControlResult,
@@ -335,7 +335,7 @@ export async function createLiveRuntime(config: Config, runtimeDeps: LiveRuntime
     dailyLossRepository,
     idempotencyRepository,
     clock: runtimeDeps.clock ?? new SystemClock(),
-    decisionCoordinator: runtimeDeps.decisionCoordinator ?? createDecisionCoordinator(),
+    decisionCoordinator: runtimeDeps.decisionCoordinator ?? createCanonicalDecisionAuthority(),
     logger: runtimeDeps.logger ?? console,
     loopIntervalMs: runtimeDeps.loopIntervalMs ?? 15_000,
   });

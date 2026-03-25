@@ -1,5 +1,5 @@
 /**
- * Canonical coordinator for deterministic, fail-closed decision execution.
+ * Canonical authority for deterministic, fail-closed decision production.
  * It owns trace identity, stage order, and canonical decision/result hashing.
  */
 import { createTraceId } from "../../observability/trace-id.js";
@@ -31,7 +31,7 @@ const REQUIRED_STAGES: Record<DecisionFlow, DecisionStage[]> = {
   trade: ["ingest", "signal", "risk", "execute", "verify", "journal"],
 };
 
-export class CanonicalDecisionCoordinator implements DecisionCoordinator {
+export class CanonicalDecisionAuthority implements DecisionCoordinator {
   async run(request: DecisionRequest): Promise<DecisionEnvelope> {
     const timestamp = request.clock.now().toISOString();
     const traceId = createTraceId({
@@ -138,8 +138,12 @@ function normalizeOutcome(stage: DecisionStage, outcome: DecisionStageOutcome | 
   };
 }
 
+export function createCanonicalDecisionAuthority(): DecisionCoordinator {
+  return new CanonicalDecisionAuthority();
+}
+
 export function createDecisionCoordinator(): DecisionCoordinator {
-  return new CanonicalDecisionCoordinator();
+  return createCanonicalDecisionAuthority();
 }
 
 export type { DecisionCoordinator as DecisionCoordinatorInterface };

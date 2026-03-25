@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { FakeClock } from "../../src/core/clock.js";
-import { createDecisionCoordinator } from "../../src/core/decision/index.js";
+import {
+  CanonicalDecisionAuthority,
+  createCanonicalDecisionAuthority,
+  createDecisionCoordinator,
+} from "../../src/core/decision/index.js";
 
-describe("CanonicalDecisionCoordinator", () => {
+describe("CanonicalDecisionAuthority", () => {
   it("produces the same envelope for identical inputs", async () => {
     const clock = new FakeClock("2026-03-17T12:00:00.000Z");
-    const coordinator = createDecisionCoordinator();
+    const coordinator = createCanonicalDecisionAuthority();
     const handlers = {
       ingest: vi.fn(async () => ({ payload: { ingest: "ok" } })),
       signal: vi.fn(async () => ({ payload: { signal: "ok" } })),
@@ -64,5 +68,13 @@ describe("CanonicalDecisionCoordinator", () => {
     expect(envelope.stage).toBe("risk");
     expect(envelope.decisionHash).toMatch(/^[a-f0-9]{64}$/);
     expect(envelope.resultHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("keeps the legacy factory as a thin alias of the canonical authority", () => {
+    const authority = createCanonicalDecisionAuthority();
+    const legacy = createDecisionCoordinator();
+
+    expect(authority).toBeInstanceOf(CanonicalDecisionAuthority);
+    expect(legacy).toBeInstanceOf(CanonicalDecisionAuthority);
   });
 });

@@ -4,7 +4,7 @@ import { createExecutionHandler } from "../agents/execution.agent.js";
 import { createLiveRuntime, type LiveRuntimeDeps } from "./live-runtime.js";
 import { createPaperRuntime, type PaperRuntimeDeps } from "./paper-runtime.js";
 import { parseRolloutPostureConfig } from "../config/safety.js";
-import { createDecisionCoordinator } from "../core/decision/index.js";
+import { createCanonicalDecisionAuthority } from "../core/decision/index.js";
 
 export type RuntimeDeps = PaperRuntimeDeps & LiveRuntimeDeps;
 
@@ -42,7 +42,7 @@ export function assertLiveEligibility(config: Config, runtimeDeps: RuntimeDeps =
 }
 
 export async function createRuntime(config: Config, runtimeDeps: RuntimeDeps = {}): Promise<RuntimeController> {
-  const decisionCoordinator = runtimeDeps.decisionCoordinator ?? createDecisionCoordinator();
+  const decisionCoordinator = runtimeDeps.decisionCoordinator ?? createCanonicalDecisionAuthority();
   const normalizedDeps = {
     ...runtimeDeps,
     decisionCoordinator,

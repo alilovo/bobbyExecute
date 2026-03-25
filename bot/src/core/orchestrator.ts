@@ -14,7 +14,7 @@ import { isKillSwitchHalted } from "../governance/kill-switch.js";
 import { lookupActionHandbook } from "../governance/action-handbook-lookup.js";
 import type { IntentSpec } from "./contracts/intent.js";
 import { createTraceId } from "../observability/trace-id.js";
-import { createDecisionCoordinator, type DecisionCoordinator } from "./decision/index.js";
+import { createCanonicalDecisionAuthority, type DecisionCoordinator } from "./decision/index.js";
 import {
   assertDecisionEnvelope,
   type DecisionEnvelope,
@@ -34,6 +34,7 @@ import { computeSocialManipRisk } from "./risk/social-manip-risk.js";
 import { computeMomentumExhaustRisk } from "./risk/momentum-exhaust-risk.js";
 import { computeStructuralWeaknessRisk } from "./risk/structural-weakness-risk.js";
 import type { RiskBreakdown } from "./contracts/riskbreakdown.js";
+import { deriveDecisionResult } from "./decision/decision-result-derivation.js";
 
 export type OrchestratorPhase =
   | "research"
@@ -107,7 +108,7 @@ export class Orchestrator {
     this.memoryDb = new MemoryDB();
     this.memoryLog = new MemoryLog();
     this.idempotencyStore = config.idempotencyStore;
-    this.decisionCoordinator = config.decisionCoordinator ?? createDecisionCoordinator();
+    this.decisionCoordinator = config.decisionCoordinator ?? createCanonicalDecisionAuthority();
   }
 
   async run(
@@ -177,7 +178,7 @@ export class Orchestrator {
               riskBreakdown = computeRiskBreakdown(context.traceId, context.timestamp, signalPack, scoreCard);
               state.riskBreakdown = riskBreakdown;
 
-              decisionResult = toDecisionResult(
+              decisionResult = deriveDecisionResult(
                 context.traceId,
                 context.timestamp,
                 scoreCard,
@@ -337,36 +338,6 @@ function computeRiskBreakdown(
     momentumExhaust,
     structuralWeakness,
   });
-}
-
-function toDecisionResult(
-  traceId: string,
-  timestamp: string,
-  scoreCard: ScoreCard,
-  patternResult: PatternResult,
-  riskBreakdown?: RiskBreakdown
-): DecisionResult {
-  let direction: "buy" | "sell" | "hold" = "hold";
-  if (scoreCard.hybrid > 0.6) direction = "buy";
-  else if (scoreCard.hybrid < -0.4) direction = "sell";
-
-  const hasReliableConfidence = scoreCard.crossSourceConfidenceScore >= 0.85;
-  const riskDeny = riskBreakdown && riskBreakdown.aggregate >= 0.8;
-  const decision: "allow" | "deny" =
-    direction !== "hold" && hasReliableConfidence && !riskDeny ? "allow" : "deny";
-
-  const decisionHash = hashDecision({ scoreCard, patternResult });
-
-  return {
-    traceId,
-    timestamp,
-    decision,
-    direction,
-    confidence: Math.min(0.95, patternResult.confidence + Math.abs(scoreCard.hybrid) / 2),
-    evidence: patternResult.evidence.map((e) => ({ id: e.id, hash: e.hash, type: "pattern", value: undefined })),
-    decisionHash,
-    rationale: `decision=${decision} hybrid=${scoreCard.hybrid} patterns=${patternResult.patterns.join(",")}`,
-  };
 }
 
 function ensureValidVaultLease(rawLease: unknown): SecretLease {
