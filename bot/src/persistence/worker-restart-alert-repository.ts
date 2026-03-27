@@ -19,10 +19,31 @@ export type WorkerRestartAlertNotificationEventType =
   | "alert_repeated_failure_summary";
 export type WorkerRestartAlertNotificationStatus = "pending" | "sent" | "skipped" | "suppressed" | "failed";
 
+export interface WorkerRestartAlertNotificationDestinationSummary {
+  name: string;
+  sinkType?: string;
+  formatterProfile?: string;
+  priority?: number;
+  selected: boolean;
+  latestDeliveryStatus?: WorkerRestartAlertNotificationStatus;
+  attemptCount: number;
+  lastAttemptedAt?: string;
+  lastFailureReason?: string;
+  suppressionReason?: string;
+  routeReason?: string;
+  dedupeKey?: string;
+  payloadFingerprint?: string;
+  recoveryNotificationSent?: boolean;
+  recoveryNotificationAt?: string;
+}
+
 export interface WorkerRestartAlertNotificationSummary {
   externallyNotified: boolean;
   sinkName?: string;
   sinkType?: string;
+  latestDestinationName?: string;
+  latestDestinationType?: string;
+  latestFormatterProfile?: string;
   eventType?: WorkerRestartAlertNotificationEventType;
   latestDeliveryStatus?: WorkerRestartAlertNotificationStatus;
   attemptCount: number;
@@ -33,6 +54,9 @@ export interface WorkerRestartAlertNotificationSummary {
   payloadFingerprint?: string;
   resolutionNotificationSent?: boolean;
   resolutionNotificationAt?: string;
+  selectedDestinationCount: number;
+  selectedDestinationNames: string[];
+  destinations: WorkerRestartAlertNotificationDestinationSummary[];
 }
 
 export type WorkerRestartAlertEventAction =
@@ -100,6 +124,11 @@ export interface WorkerRestartAlertEventRecord {
   metadata?: Record<string, unknown>;
   notificationSinkName?: string;
   notificationSinkType?: string;
+  notificationDestinationName?: string;
+  notificationDestinationType?: string;
+  notificationFormatterProfile?: string;
+  notificationDestinationPriority?: number;
+  notificationDestinationTags?: string[];
   notificationEventType?: WorkerRestartAlertNotificationEventType;
   notificationStatus?: WorkerRestartAlertNotificationStatus;
   notificationDedupeKey?: string;
@@ -107,10 +136,92 @@ export interface WorkerRestartAlertEventRecord {
   notificationAttemptCount?: number;
   notificationFailureReason?: string;
   notificationSuppressionReason?: string;
+  notificationRouteReason?: string;
   notificationResponseStatus?: number;
   notificationResponseBody?: string;
   notificationScope?: "internal" | "external";
   createdAt: string;
+}
+
+export interface WorkerRestartDeliveryJournalFilters {
+  environment?: string;
+  destinationName?: string;
+  deliveryStatuses?: WorkerRestartAlertNotificationStatus[];
+  eventTypes?: WorkerRestartAlertNotificationEventType[];
+  severities?: WorkerRestartAlertSeverity[];
+  alertId?: string;
+  restartRequestId?: string;
+  formatterProfile?: string;
+  windowStartAt: string;
+  windowEndAt: string;
+  limit: number;
+  offset: number;
+}
+
+export interface WorkerRestartDeliveryJournalRow {
+  eventId: string;
+  alertId: string;
+  restartRequestId?: string;
+  environment: string;
+  destinationName?: string;
+  destinationType?: string;
+  sinkType?: string;
+  formatterProfile?: string;
+  eventType?: WorkerRestartAlertNotificationEventType;
+  deliveryStatus?: WorkerRestartAlertNotificationStatus;
+  severity?: WorkerRestartAlertSeverity;
+  alertStatus?: WorkerRestartAlertStatus;
+  sourceCategory?: WorkerRestartAlertSourceCategory;
+  routeReason?: string;
+  dedupeKey?: string;
+  payloadFingerprint?: string;
+  attemptedAt: string;
+  attemptCount?: number;
+  failureReason?: string;
+  suppressionReason?: string;
+  summary?: string;
+}
+
+export interface WorkerRestartDeliveryJournalResult {
+  windowStartAt: string;
+  windowEndAt: string;
+  limit: number;
+  offset: number;
+  totalCount: number;
+  hasMore: boolean;
+  deliveries: WorkerRestartDeliveryJournalRow[];
+}
+
+export type WorkerRestartDeliveryHealthHint = "healthy" | "degraded" | "failing" | "idle" | "unknown";
+
+export interface WorkerRestartDeliverySummaryRow {
+  destinationName: string;
+  destinationType?: string;
+  sinkType?: string;
+  formatterProfile?: string;
+  totalCount: number;
+  sentCount: number;
+  failedCount: number;
+  suppressedCount: number;
+  skippedCount: number;
+  openAlertCount: number;
+  recentEnvironments: string[];
+  recentEventTypes: WorkerRestartAlertNotificationEventType[];
+  lastActivityAt?: string;
+  lastSentAt?: string;
+  lastFailedAt?: string;
+  lastSuppressedAt?: string;
+  lastSkippedAt?: string;
+  lastFailureReason?: string;
+  latestRouteReason?: string;
+  healthHint: WorkerRestartDeliveryHealthHint;
+}
+
+export interface WorkerRestartDeliverySummaryResult {
+  windowStartAt: string;
+  windowEndAt: string;
+  totalCount: number;
+  destinations: WorkerRestartDeliverySummaryRow[];
 }
 
 export interface WorkerRestartAlertRepository {
@@ -123,6 +234,8 @@ export interface WorkerRestartAlertRepository {
   save(record: WorkerRestartAlertRecord): Promise<WorkerRestartAlertRecord>;
   recordEvent(record: WorkerRestartAlertEventRecord): Promise<WorkerRestartAlertEventRecord>;
   listEvents(environment: string, alertId: string, limit?: number): Promise<WorkerRestartAlertEventRecord[]>;
+  listDeliveryJournal(filters: WorkerRestartDeliveryJournalFilters): Promise<WorkerRestartDeliveryJournalResult>;
+  summarizeDeliveryJournal(filters: WorkerRestartDeliveryJournalFilters): Promise<WorkerRestartDeliverySummaryResult>;
 }
 
 function clone<T>(value: T): T {
@@ -186,6 +299,18 @@ function mapEvent(row: Record<string, unknown>): WorkerRestartAlertEventRecord {
     metadata: row.metadata_json == null ? undefined : clone(row.metadata_json as Record<string, unknown>),
     notificationSinkName: row.notification_sink_name == null ? undefined : String(row.notification_sink_name),
     notificationSinkType: row.notification_sink_type == null ? undefined : String(row.notification_sink_type),
+    notificationDestinationName:
+      row.notification_destination_name == null ? undefined : String(row.notification_destination_name),
+    notificationDestinationType:
+      row.notification_destination_type == null ? undefined : String(row.notification_destination_type),
+    notificationFormatterProfile:
+      row.notification_formatter_profile == null ? undefined : String(row.notification_formatter_profile),
+    notificationDestinationPriority:
+      row.notification_destination_priority == null ? undefined : Number(row.notification_destination_priority),
+    notificationDestinationTags:
+      row.notification_destination_tags_json == null
+        ? undefined
+        : (clone(row.notification_destination_tags_json as string[]) as string[]),
     notificationEventType: row.notification_event_type == null ? undefined : (String(row.notification_event_type) as WorkerRestartAlertNotificationEventType),
     notificationStatus: row.notification_status == null ? undefined : (String(row.notification_status) as WorkerRestartAlertNotificationStatus),
     notificationDedupeKey: row.notification_dedupe_key == null ? undefined : String(row.notification_dedupe_key),
@@ -197,6 +322,7 @@ function mapEvent(row: Record<string, unknown>): WorkerRestartAlertEventRecord {
       row.notification_failure_reason == null ? undefined : String(row.notification_failure_reason),
     notificationSuppressionReason:
       row.notification_suppression_reason == null ? undefined : String(row.notification_suppression_reason),
+    notificationRouteReason: row.notification_route_reason == null ? undefined : String(row.notification_route_reason),
     notificationResponseStatus:
       row.notification_response_status == null ? undefined : Number(row.notification_response_status),
     notificationResponseBody:
@@ -212,6 +338,100 @@ function buildRecord(record: WorkerRestartAlertRecord): WorkerRestartAlertRecord
 
 function buildEvent(record: WorkerRestartAlertEventRecord): WorkerRestartAlertEventRecord {
   return clone(record);
+}
+
+function parseDateOrUndefined(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeDeliveryFilters(filters: WorkerRestartDeliveryJournalFilters): WorkerRestartDeliveryJournalFilters {
+  const limit = Math.min(Math.max(Math.trunc(filters.limit), 1), 200);
+  const offset = Math.max(Math.trunc(filters.offset), 0);
+  const windowStartAt = filters.windowStartAt;
+  const windowEndAt = filters.windowEndAt;
+
+  if (parseDateOrUndefined(windowStartAt) == null || parseDateOrUndefined(windowEndAt) == null) {
+    throw new Error("delivery journal window must be valid ISO timestamps");
+  }
+  if (Date.parse(windowStartAt) > Date.parse(windowEndAt)) {
+    throw new Error("delivery journal window start must be before the end");
+  }
+
+  return {
+    ...filters,
+    limit,
+    offset,
+  };
+}
+
+function isExternalDeliveryEvent(event: WorkerRestartAlertEventRecord): boolean {
+  return event.notificationScope === "external" && Boolean(event.notificationEventType) && Boolean(event.notificationDestinationName);
+}
+
+function matchesDeliveryFilterValue<T extends string>(
+  values: T[] | undefined,
+  candidate: T | undefined
+): boolean {
+  if (!values || values.length === 0) {
+    return true;
+  }
+  if (!candidate) {
+    return false;
+  }
+  return values.includes(candidate);
+}
+
+function buildDeliveryJournalRow(
+  event: WorkerRestartAlertEventRecord,
+  alert: WorkerRestartAlertRecord
+): WorkerRestartDeliveryJournalRow {
+  return {
+    eventId: event.id,
+    alertId: event.alertId,
+    restartRequestId: alert.restartRequestId,
+    environment: event.environment,
+    destinationName: event.notificationDestinationName,
+    destinationType: event.notificationDestinationType,
+    sinkType: event.notificationSinkType,
+    formatterProfile: event.notificationFormatterProfile,
+    eventType: event.notificationEventType,
+    deliveryStatus: event.notificationStatus,
+    severity: alert.severity,
+    alertStatus: alert.status,
+    sourceCategory: alert.sourceCategory,
+    routeReason: event.notificationRouteReason,
+    dedupeKey: event.notificationDedupeKey,
+    payloadFingerprint: event.notificationPayloadFingerprint,
+    attemptedAt: event.createdAt,
+    attemptCount: event.notificationAttemptCount ?? 1,
+    failureReason: event.notificationFailureReason,
+    suppressionReason: event.notificationSuppressionReason,
+    summary: event.summary ?? alert.summary,
+  };
+}
+
+function deriveDeliveryHealthHint(row: Pick<WorkerRestartDeliverySummaryRow, "totalCount" | "sentCount" | "failedCount" | "suppressedCount" | "skippedCount">): WorkerRestartDeliveryHealthHint {
+  if (row.totalCount === 0) {
+    return "idle";
+  }
+  if (row.failedCount > 0 && row.sentCount === 0) {
+    return "failing";
+  }
+  if (row.failedCount > 0 && row.sentCount > 0) {
+    return "degraded";
+  }
+  if (row.sentCount > 0 && row.failedCount === 0) {
+    return "healthy";
+  }
+  if (row.suppressedCount > 0 || row.skippedCount > 0) {
+    return "idle";
+  }
+  return "unknown";
 }
 
 export class InMemoryWorkerRestartAlertRepository implements WorkerRestartAlertRepository {
@@ -298,6 +518,171 @@ export class InMemoryWorkerRestartAlertRepository implements WorkerRestartAlertR
       .slice(0, limit)
       .map((event) => buildEvent(event));
   }
+
+  private collectDeliveryRows(filters: WorkerRestartDeliveryJournalFilters): WorkerRestartDeliveryJournalRow[] {
+    const normalized = normalizeDeliveryFilters(filters);
+    const environments = normalized.environment ? [normalized.environment] : [...this.events.keys()];
+    const rows: WorkerRestartDeliveryJournalRow[] = [];
+
+    for (const environment of environments) {
+      const events = this.getEnvironmentEvents(environment);
+      const alerts = new Map([...this.getEnvironmentAlerts(environment).values()].map((alert) => [alert.id, alert] as const));
+      for (const event of events) {
+        if (!isExternalDeliveryEvent(event)) {
+          continue;
+        }
+        if (normalized.environment && event.environment !== normalized.environment) {
+          continue;
+        }
+        if (normalized.destinationName && event.notificationDestinationName !== normalized.destinationName) {
+          continue;
+        }
+        if (!matchesDeliveryFilterValue(normalized.deliveryStatuses, event.notificationStatus)) {
+          continue;
+        }
+        if (!matchesDeliveryFilterValue(normalized.eventTypes, event.notificationEventType)) {
+          continue;
+        }
+        if (!normalized.formatterProfile || event.notificationFormatterProfile === normalized.formatterProfile) {
+          // fall through
+        } else {
+          continue;
+        }
+        const createdAt = Date.parse(event.createdAt);
+        const windowStart = Date.parse(normalized.windowStartAt);
+        const windowEnd = Date.parse(normalized.windowEndAt);
+        if (createdAt < windowStart || createdAt > windowEnd) {
+          continue;
+        }
+        const alert = alerts.get(event.alertId);
+        if (!alert) {
+          continue;
+        }
+        const row = buildDeliveryJournalRow(event, alert);
+        if (!matchesDeliveryFilterValue(normalized.severities, row.severity)) {
+          continue;
+        }
+        if (normalized.alertId && row.alertId !== normalized.alertId) {
+          continue;
+        }
+        if (normalized.restartRequestId && row.restartRequestId !== normalized.restartRequestId) {
+          continue;
+        }
+        rows.push(row);
+      }
+    }
+
+    return rows.sort((left, right) => {
+      const diff = Date.parse(right.attemptedAt) - Date.parse(left.attemptedAt);
+      return diff !== 0 ? diff : right.eventId.localeCompare(left.eventId);
+    });
+  }
+
+  async listDeliveryJournal(filters: WorkerRestartDeliveryJournalFilters): Promise<WorkerRestartDeliveryJournalResult> {
+    const normalized = normalizeDeliveryFilters(filters);
+    const filtered = this.collectDeliveryRows(normalized);
+    const totalCount = filtered.length;
+    const deliveries = filtered.slice(normalized.offset, normalized.offset + normalized.limit);
+    return {
+      windowStartAt: normalized.windowStartAt,
+      windowEndAt: normalized.windowEndAt,
+      limit: normalized.limit,
+      offset: normalized.offset,
+      totalCount,
+      hasMore: normalized.offset + normalized.limit < totalCount,
+      deliveries,
+    };
+  }
+
+  async summarizeDeliveryJournal(filters: WorkerRestartDeliveryJournalFilters): Promise<WorkerRestartDeliverySummaryResult> {
+    const normalized = normalizeDeliveryFilters(filters);
+    const rows = this.collectDeliveryRows(normalized);
+    const byDestination = new Map<string, WorkerRestartDeliverySummaryRow>();
+    const alertsByEnvironment = new Map<string, Map<string, WorkerRestartAlertRecord>>();
+    for (const row of rows) {
+      const name = row.destinationName ?? "unknown";
+      const current = byDestination.get(name) ?? {
+        destinationName: name,
+        destinationType: row.destinationType,
+        sinkType: row.sinkType,
+        formatterProfile: row.formatterProfile,
+        totalCount: 0,
+        sentCount: 0,
+        failedCount: 0,
+        suppressedCount: 0,
+        skippedCount: 0,
+        openAlertCount: 0,
+        recentEnvironments: [],
+        recentEventTypes: [],
+        healthHint: "idle" as WorkerRestartDeliveryHealthHint,
+      };
+      current.totalCount += 1;
+      if (row.deliveryStatus === "sent") current.sentCount += 1;
+      else if (row.deliveryStatus === "failed") current.failedCount += 1;
+      else if (row.deliveryStatus === "suppressed") current.suppressedCount += 1;
+      else if (row.deliveryStatus === "skipped") current.skippedCount += 1;
+      current.lastActivityAt = current.lastActivityAt && Date.parse(current.lastActivityAt) > Date.parse(row.attemptedAt) ? current.lastActivityAt : row.attemptedAt;
+      if (row.deliveryStatus === "sent" && (!current.lastSentAt || Date.parse(row.attemptedAt) > Date.parse(current.lastSentAt))) {
+        current.lastSentAt = row.attemptedAt;
+      }
+      if (row.deliveryStatus === "failed" && (!current.lastFailedAt || Date.parse(row.attemptedAt) > Date.parse(current.lastFailedAt))) {
+        current.lastFailedAt = row.attemptedAt;
+        current.lastFailureReason = row.failureReason;
+      }
+      if (row.deliveryStatus === "suppressed" && (!current.lastSuppressedAt || Date.parse(row.attemptedAt) > Date.parse(current.lastSuppressedAt))) {
+        current.lastSuppressedAt = row.attemptedAt;
+      }
+      if (row.deliveryStatus === "skipped" && (!current.lastSkippedAt || Date.parse(row.attemptedAt) > Date.parse(current.lastSkippedAt))) {
+        current.lastSkippedAt = row.attemptedAt;
+      }
+      current.latestRouteReason = row.routeReason ?? current.latestRouteReason;
+      if (!current.recentEnvironments.includes(row.environment)) {
+        current.recentEnvironments.push(row.environment);
+      }
+      if (row.eventType && !current.recentEventTypes.includes(row.eventType)) {
+        current.recentEventTypes.push(row.eventType);
+      }
+      byDestination.set(name, current);
+
+      if (!alertsByEnvironment.has(row.environment)) {
+        alertsByEnvironment.set(row.environment, new Map([...this.getEnvironmentAlerts(row.environment).values()].map((alert) => [alert.id, alert] as const)));
+      }
+    }
+
+    const destinationNames = [...byDestination.keys()];
+    const openAlertCountByDestination = new Map<string, number>();
+    if (destinationNames.length > 0) {
+      for (const destinationName of destinationNames) {
+        const openIds = new Set(rows.filter((row) => (row.destinationName ?? "unknown") === destinationName).map((row) => row.alertId));
+        const openCount = [...alertsByEnvironment.values()]
+          .flatMap((alertMap) => [...alertMap.values()])
+          .filter((alert) => alert.status !== "resolved" && openIds.has(alert.id)).length;
+        openAlertCountByDestination.set(destinationName, openCount);
+      }
+    }
+
+    const destinations = [...byDestination.values()]
+      .map((row) => ({
+        ...row,
+        openAlertCount: openAlertCountByDestination.get(row.destinationName) ?? 0,
+        healthHint: deriveDeliveryHealthHint(row),
+      }))
+      .sort((left, right) => {
+        const leftTime = Date.parse(left.lastActivityAt ?? left.lastFailedAt ?? left.lastSentAt ?? left.lastSuppressedAt ?? left.lastSkippedAt ?? "1970-01-01T00:00:00.000Z");
+        const rightTime = Date.parse(right.lastActivityAt ?? right.lastFailedAt ?? right.lastSentAt ?? right.lastSuppressedAt ?? right.lastSkippedAt ?? "1970-01-01T00:00:00.000Z");
+        if (rightTime !== leftTime) {
+          return rightTime - leftTime;
+        }
+        return left.destinationName.localeCompare(right.destinationName);
+      });
+
+    return {
+      windowStartAt: normalized.windowStartAt,
+      windowEndAt: normalized.windowEndAt,
+      totalCount: rows.length,
+      destinations,
+    };
+  }
 }
 
 export class PostgresWorkerRestartAlertRepository implements WorkerRestartAlertRepository {
@@ -312,6 +697,111 @@ export class PostgresWorkerRestartAlertRepository implements WorkerRestartAlertR
     } finally {
       client.release();
     }
+  }
+
+  private buildDeliveryWhereClause(filters: WorkerRestartDeliveryJournalFilters, params: unknown[]): string {
+    const clauses: string[] = ["e.notification_scope = 'external'"];
+    if (filters.environment) {
+      params.push(filters.environment);
+      clauses.push(`e.environment = $${params.length}`);
+    }
+    if (filters.destinationName) {
+      params.push(filters.destinationName);
+      clauses.push(`e.notification_destination_name = $${params.length}`);
+    }
+    if (filters.deliveryStatuses && filters.deliveryStatuses.length > 0) {
+      params.push(filters.deliveryStatuses);
+      clauses.push(`e.notification_status = ANY($${params.length}::text[])`);
+    }
+    if (filters.eventTypes && filters.eventTypes.length > 0) {
+      params.push(filters.eventTypes);
+      clauses.push(`e.notification_event_type = ANY($${params.length}::text[])`);
+    }
+    if (filters.severities && filters.severities.length > 0) {
+      params.push(filters.severities);
+      clauses.push(`a.severity = ANY($${params.length}::text[])`);
+    }
+    if (filters.alertId) {
+      params.push(filters.alertId);
+      clauses.push(`e.alert_id = $${params.length}`);
+    }
+    if (filters.restartRequestId) {
+      params.push(filters.restartRequestId);
+      clauses.push(`a.restart_request_id = $${params.length}`);
+    }
+    if (filters.formatterProfile) {
+      params.push(filters.formatterProfile);
+      clauses.push(`e.notification_formatter_profile = $${params.length}`);
+    }
+    params.push(filters.windowStartAt);
+    clauses.push(`e.created_at >= $${params.length}::timestamptz`);
+    params.push(filters.windowEndAt);
+    clauses.push(`e.created_at <= $${params.length}::timestamptz`);
+    return clauses.join(" AND ");
+  }
+
+  private mapDeliveryJournalRow(row: Record<string, unknown>): WorkerRestartDeliveryJournalRow {
+    return {
+      eventId: String(row.event_id),
+      alertId: String(row.alert_id),
+      restartRequestId: row.restart_request_id == null ? undefined : String(row.restart_request_id),
+      environment: String(row.environment),
+      destinationName: row.destination_name == null ? undefined : String(row.destination_name),
+      destinationType: row.destination_type == null ? undefined : String(row.destination_type),
+      sinkType: row.sink_type == null ? undefined : String(row.sink_type),
+      formatterProfile: row.formatter_profile == null ? undefined : String(row.formatter_profile),
+      eventType: row.event_type == null ? undefined : (String(row.event_type) as WorkerRestartAlertNotificationEventType),
+      deliveryStatus: row.delivery_status == null ? undefined : (String(row.delivery_status) as WorkerRestartAlertNotificationStatus),
+      severity: row.severity == null ? undefined : (String(row.severity) as WorkerRestartAlertSeverity),
+      alertStatus: row.alert_status == null ? undefined : (String(row.alert_status) as WorkerRestartAlertStatus),
+      sourceCategory: row.source_category == null ? undefined : (String(row.source_category) as WorkerRestartAlertSourceCategory),
+      routeReason: row.route_reason == null ? undefined : String(row.route_reason),
+      dedupeKey: row.dedupe_key == null ? undefined : String(row.dedupe_key),
+      payloadFingerprint: row.payload_fingerprint == null ? undefined : String(row.payload_fingerprint),
+      attemptedAt: String(row.attempted_at),
+      attemptCount: row.attempt_count == null ? undefined : Number(row.attempt_count),
+      failureReason: row.failure_reason == null ? undefined : String(row.failure_reason),
+      suppressionReason: row.suppression_reason == null ? undefined : String(row.suppression_reason),
+      summary: row.summary == null ? undefined : String(row.summary),
+    };
+  }
+
+  private mapDeliverySummaryRow(row: Record<string, unknown>): WorkerRestartDeliverySummaryRow {
+    const recentEnvironments = Array.isArray(row.recent_environments) ? (row.recent_environments as string[]) : [];
+    const recentEventTypes = Array.isArray(row.recent_event_types)
+      ? (row.recent_event_types as string[]).filter((value): value is WorkerRestartAlertNotificationEventType =>
+          value === "alert_opened" ||
+          value === "alert_escalated" ||
+          value === "alert_acknowledged" ||
+          value === "alert_resolved" ||
+          value === "alert_repeated_failure_summary"
+        )
+      : [];
+
+    const summary: WorkerRestartDeliverySummaryRow = {
+      destinationName: String(row.destination_name),
+      destinationType: row.destination_type == null ? undefined : String(row.destination_type),
+      sinkType: row.sink_type == null ? undefined : String(row.sink_type),
+      formatterProfile: row.formatter_profile == null ? undefined : String(row.formatter_profile),
+      totalCount: Number(row.total_count ?? 0),
+      sentCount: Number(row.sent_count ?? 0),
+      failedCount: Number(row.failed_count ?? 0),
+      suppressedCount: Number(row.suppressed_count ?? 0),
+      skippedCount: Number(row.skipped_count ?? 0),
+      openAlertCount: Number(row.open_alert_count ?? 0),
+      recentEnvironments,
+      recentEventTypes,
+      lastActivityAt: row.last_activity_at == null ? undefined : String(row.last_activity_at),
+      lastSentAt: row.last_sent_at == null ? undefined : String(row.last_sent_at),
+      lastFailedAt: row.last_failed_at == null ? undefined : String(row.last_failed_at),
+      lastSuppressedAt: row.last_suppressed_at == null ? undefined : String(row.last_suppressed_at),
+      lastSkippedAt: row.last_skipped_at == null ? undefined : String(row.last_skipped_at),
+      lastFailureReason: row.last_failure_reason == null ? undefined : String(row.last_failure_reason),
+      latestRouteReason: row.latest_route_reason == null ? undefined : String(row.latest_route_reason),
+      healthHint: "unknown",
+    };
+    summary.healthHint = deriveDeliveryHealthHint(summary);
+    return summary;
   }
 
   async ensureSchema(): Promise<void> {
@@ -380,6 +870,11 @@ export class PostgresWorkerRestartAlertRepository implements WorkerRestartAlertR
           metadata_json jsonb NOT NULL DEFAULT '{}'::jsonb,
           notification_sink_name text,
           notification_sink_type text,
+          notification_destination_name text,
+          notification_destination_type text,
+          notification_formatter_profile text,
+          notification_destination_priority integer,
+          notification_destination_tags_json jsonb,
           notification_event_type text,
           notification_status text,
           notification_dedupe_key text,
@@ -387,6 +882,7 @@ export class PostgresWorkerRestartAlertRepository implements WorkerRestartAlertR
           notification_attempt_count integer,
           notification_failure_reason text,
           notification_suppression_reason text,
+          notification_route_reason text,
           notification_response_status integer,
           notification_response_body text,
           notification_scope text,
@@ -397,9 +893,30 @@ export class PostgresWorkerRestartAlertRepository implements WorkerRestartAlertR
         CREATE INDEX IF NOT EXISTS worker_restart_alert_events_environment_alert_idx
         ON worker_restart_alert_events (environment, alert_id, created_at DESC)
       `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS worker_restart_alert_events_environment_created_idx
+        ON worker_restart_alert_events (environment, created_at DESC)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS worker_restart_alert_events_environment_destination_created_idx
+        ON worker_restart_alert_events (environment, notification_destination_name, created_at DESC)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS worker_restart_alert_events_environment_status_created_idx
+        ON worker_restart_alert_events (environment, notification_status, created_at DESC)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS worker_restart_alert_events_environment_event_type_created_idx
+        ON worker_restart_alert_events (environment, notification_event_type, created_at DESC)
+      `);
       for (const column of [
         "notification_sink_name text",
         "notification_sink_type text",
+        "notification_destination_name text",
+        "notification_destination_type text",
+        "notification_formatter_profile text",
+        "notification_destination_priority integer",
+        "notification_destination_tags_json jsonb",
         "notification_event_type text",
         "notification_status text",
         "notification_dedupe_key text",
@@ -407,6 +924,7 @@ export class PostgresWorkerRestartAlertRepository implements WorkerRestartAlertR
         "notification_attempt_count integer",
         "notification_failure_reason text",
         "notification_suppression_reason text",
+        "notification_route_reason text",
         "notification_response_status integer",
         "notification_response_body text",
         "notification_scope text",
@@ -572,10 +1090,16 @@ export class PostgresWorkerRestartAlertRepository implements WorkerRestartAlertR
           INSERT INTO worker_restart_alert_events (
             id, environment, alert_id, action, actor, accepted, before_status, after_status,
             reason_code, summary, note, metadata_json, notification_sink_name, notification_sink_type,
-            notification_event_type, notification_status, notification_dedupe_key, notification_payload_fingerprint,
+            notification_destination_name, notification_destination_type, notification_formatter_profile,
+            notification_destination_priority, notification_destination_tags_json, notification_event_type,
+            notification_status, notification_dedupe_key, notification_payload_fingerprint,
             notification_attempt_count, notification_failure_reason, notification_suppression_reason,
-            notification_response_status, notification_response_body, notification_scope, created_at
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+            notification_route_reason, notification_response_status, notification_response_body,
+            notification_scope, created_at
+          ) VALUES (
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+            $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31
+          )
         `,
         [
           record.id,
@@ -592,6 +1116,11 @@ export class PostgresWorkerRestartAlertRepository implements WorkerRestartAlertR
           JSON.stringify(record.metadata ?? {}),
           record.notificationSinkName ?? null,
           record.notificationSinkType ?? null,
+          record.notificationDestinationName ?? null,
+          record.notificationDestinationType ?? null,
+          record.notificationFormatterProfile ?? null,
+          record.notificationDestinationPriority ?? null,
+          record.notificationDestinationTags != null ? JSON.stringify(record.notificationDestinationTags) : null,
           record.notificationEventType ?? null,
           record.notificationStatus ?? null,
           record.notificationDedupeKey ?? null,
@@ -599,6 +1128,7 @@ export class PostgresWorkerRestartAlertRepository implements WorkerRestartAlertR
           record.notificationAttemptCount ?? null,
           record.notificationFailureReason ?? null,
           record.notificationSuppressionReason ?? null,
+          record.notificationRouteReason ?? null,
           record.notificationResponseStatus ?? null,
           record.notificationResponseBody ?? null,
           record.notificationScope ?? null,
@@ -624,6 +1154,125 @@ export class PostgresWorkerRestartAlertRepository implements WorkerRestartAlertR
       )
     );
     return result.rows.map((row) => mapEvent(row as Record<string, unknown>));
+  }
+
+  async listDeliveryJournal(filters: WorkerRestartDeliveryJournalFilters): Promise<WorkerRestartDeliveryJournalResult> {
+    const normalized = normalizeDeliveryFilters(filters);
+    const params: unknown[] = [];
+    const whereClause = this.buildDeliveryWhereClause(normalized, params);
+    const result = await this.withClient((client) =>
+      client.query(
+        `
+          WITH filtered AS (
+            SELECT
+              e.id AS event_id,
+              e.environment,
+              e.alert_id,
+              a.restart_request_id,
+              e.notification_destination_name AS destination_name,
+              e.notification_destination_type AS destination_type,
+              e.notification_sink_type AS sink_type,
+              e.notification_formatter_profile AS formatter_profile,
+              e.notification_event_type AS event_type,
+              e.notification_status AS delivery_status,
+              a.severity,
+              a.status AS alert_status,
+              a.source_category,
+              e.notification_route_reason AS route_reason,
+              e.notification_dedupe_key AS dedupe_key,
+              e.notification_payload_fingerprint AS payload_fingerprint,
+              e.notification_attempt_count AS attempt_count,
+              e.notification_failure_reason AS failure_reason,
+              e.notification_suppression_reason AS suppression_reason,
+              e.summary,
+              e.created_at AS attempted_at,
+              COUNT(*) OVER() AS total_count
+            FROM worker_restart_alert_events e
+            JOIN worker_restart_alerts a ON a.id = e.alert_id AND a.environment = e.environment
+            WHERE ${whereClause}
+          )
+          SELECT *
+          FROM filtered
+          ORDER BY attempted_at DESC, event_id DESC
+          LIMIT $${params.length + 1}
+          OFFSET $${params.length + 2}
+        `,
+        [...params, normalized.limit, normalized.offset]
+      )
+    );
+    const rows = result.rows.map((row) => this.mapDeliveryJournalRow(row as Record<string, unknown>));
+    const totalCount = rows.length > 0 ? Number((result.rows[0] as Record<string, unknown>).total_count ?? 0) : 0;
+    return {
+      windowStartAt: normalized.windowStartAt,
+      windowEndAt: normalized.windowEndAt,
+      limit: normalized.limit,
+      offset: normalized.offset,
+      totalCount,
+      hasMore: normalized.offset + normalized.limit < totalCount,
+      deliveries: rows,
+    };
+  }
+
+  async summarizeDeliveryJournal(filters: WorkerRestartDeliveryJournalFilters): Promise<WorkerRestartDeliverySummaryResult> {
+    const normalized = normalizeDeliveryFilters(filters);
+    const params: unknown[] = [];
+    const whereClause = this.buildDeliveryWhereClause(normalized, params);
+    const result = await this.withClient((client) =>
+      client.query(
+        `
+          WITH filtered AS (
+            SELECT
+              e.environment,
+              e.alert_id,
+              a.status AS alert_status,
+              e.notification_destination_name AS destination_name,
+              e.notification_destination_type AS destination_type,
+              e.notification_sink_type AS sink_type,
+              e.notification_formatter_profile AS formatter_profile,
+              e.notification_event_type AS event_type,
+              e.notification_status AS delivery_status,
+              e.notification_route_reason AS route_reason,
+              e.notification_failure_reason AS failure_reason,
+              e.created_at AS attempted_at
+            FROM worker_restart_alert_events e
+            JOIN worker_restart_alerts a ON a.id = e.alert_id AND a.environment = e.environment
+            WHERE ${whereClause}
+          )
+          SELECT
+            destination_name,
+            MAX(destination_type) AS destination_type,
+            MAX(sink_type) AS sink_type,
+            MAX(formatter_profile) AS formatter_profile,
+            COUNT(*) AS total_count,
+            COUNT(*) FILTER (WHERE delivery_status = 'sent') AS sent_count,
+            COUNT(*) FILTER (WHERE delivery_status = 'failed') AS failed_count,
+            COUNT(*) FILTER (WHERE delivery_status = 'suppressed') AS suppressed_count,
+            COUNT(*) FILTER (WHERE delivery_status = 'skipped') AS skipped_count,
+            COUNT(DISTINCT alert_id) FILTER (WHERE alert_status <> 'resolved') AS open_alert_count,
+            ARRAY_AGG(DISTINCT environment) AS recent_environments,
+            ARRAY_AGG(DISTINCT event_type) AS recent_event_types,
+            MAX(attempted_at) AS last_activity_at,
+            MAX(attempted_at) FILTER (WHERE delivery_status = 'sent') AS last_sent_at,
+            MAX(attempted_at) FILTER (WHERE delivery_status = 'failed') AS last_failed_at,
+            MAX(attempted_at) FILTER (WHERE delivery_status = 'suppressed') AS last_suppressed_at,
+            MAX(attempted_at) FILTER (WHERE delivery_status = 'skipped') AS last_skipped_at,
+            (ARRAY_AGG(failure_reason ORDER BY attempted_at DESC) FILTER (WHERE delivery_status = 'failed'))[1] AS last_failure_reason,
+            (ARRAY_AGG(route_reason ORDER BY attempted_at DESC))[1] AS latest_route_reason
+          FROM filtered
+          GROUP BY destination_name
+          ORDER BY MAX(attempted_at) DESC, destination_name ASC
+        `,
+        params
+      )
+    );
+
+    const destinations = result.rows.map((row) => this.mapDeliverySummaryRow(row as Record<string, unknown>));
+    return {
+      windowStartAt: normalized.windowStartAt,
+      windowEndAt: normalized.windowEndAt,
+      totalCount: destinations.reduce((total, destination) => total + destination.totalCount, 0),
+      destinations,
+    };
   }
 }
 

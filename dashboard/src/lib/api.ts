@@ -6,9 +6,12 @@ import type {
   MetricsResponse,
   ControlStatusResponse,
   EmergencyStopResponse,
+  WorkerRestartDeliveryQuery,
   RestartAlertActionRequest,
   RestartAlertActionResponse,
   RestartAlertListResponse,
+  WorkerRestartDeliveryJournalResponse,
+  WorkerRestartDeliverySummaryResponse,
   RestartWorkerRequest,
   RestartWorkerResponse,
   ResetResponse,
@@ -23,6 +26,8 @@ import {
   mockControlStatus,
   mockRestartAlerts,
   mockRestartWorker,
+  mockRestartAlertDeliveries,
+  mockRestartAlertDeliverySummary,
 } from './mock-data';
 
 class ApiError extends Error {
@@ -30,6 +35,18 @@ class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+function buildDeliveryQueryString(query: WorkerRestartDeliveryQuery = {}): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value == null || value === '') {
+      continue;
+    }
+    params.set(key, String(value));
+  }
+  const encoded = params.toString();
+  return encoded ? `?${encoded}` : '';
 }
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
@@ -109,6 +126,16 @@ export const api = {
 
   restartAlerts: (): Promise<RestartAlertListResponse> =>
     USE_MOCK ? Promise.resolve(mockRestartAlerts()) : fetchProxyApi('/restart-alerts'),
+
+  restartAlertDeliveries: (query: WorkerRestartDeliveryQuery = {}): Promise<WorkerRestartDeliveryJournalResponse> =>
+    USE_MOCK
+      ? Promise.resolve(mockRestartAlertDeliveries(query))
+      : fetchProxyApi(`/restart-alert-deliveries${buildDeliveryQueryString(query)}`),
+
+  restartAlertDeliverySummary: (query: WorkerRestartDeliveryQuery = {}): Promise<WorkerRestartDeliverySummaryResponse> =>
+    USE_MOCK
+      ? Promise.resolve(mockRestartAlertDeliverySummary(query))
+      : fetchProxyApi(`/restart-alert-deliveries/summary${buildDeliveryQueryString(query)}`),
 
   emergencyStop: (): Promise<EmergencyStopResponse> =>
     fetchProxyApi('/emergency-stop', { method: 'POST' }),

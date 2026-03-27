@@ -103,6 +103,10 @@ Selected restart alerts can also notify an external server-side webhook through 
 
 Notification policy is intentionally narrow: critical alert openings, critical escalations, repeated-failure summaries, and recovery notifications after a previously notified alert resolves can leave the control plane. Warning-only alerts stay local by default, acknowledgements remain local-only, and the webhook sink is deduped per alert/event/sink with a cooldown window so retries and poll loops do not spam downstream receivers. The payload is compact and structured: environment, worker target, severity, reason code, summary, restart request id, requested/applied versions, worker heartbeat age, recommended action, and an operator path hint.
 
+The notification layer now supports multiple server-side destinations. The routing policy can target primary, secondary, and staging webhooks with destination-specific cooldowns, recovery flags, and formatter profiles. Generic JSON remains the base payload, while Slack-compatible formatting is only a thin presentation layer on top of the same generic webhook transport. Operators can inspect destination-level status, failure reasons, and suppression reasons in the private control plane; browser clients still never see notification secrets.
+
+The private control plane also exposes a read-only delivery journal and compact destination summary at `GET /control/restart-alert-deliveries` and `GET /control/restart-alert-deliveries/summary`. These views are derived from the durable restart-alert event stream and are intended for troubleshooting destination outages, cooldown behavior, and flapping or misconfigured webhooks.
+
 ## Repo Layout
 
 ```text

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type {
   WorkerRestartAlertNotificationEventType,
   WorkerRestartAlertNotificationStatus,
+  WorkerRestartAlertNotificationDestinationSummary,
   WorkerRestartAlertNotificationSummary,
   WorkerRestartAlertEventRecord,
   WorkerRestartAlertRecord,
@@ -11,6 +12,10 @@ import type {
 } from "../persistence/worker-restart-alert-repository.js";
 import type { RuntimeWorkerVisibility } from "../persistence/runtime-visibility-repository.js";
 import type { RuntimeConfigStatus } from "../config/runtime-config-schema.js";
+import {
+  type WorkerRestartNotificationDestinationConfig,
+  resolveNotificationRoutes,
+} from "./worker-restart-notification-routing.js";
 
 export interface WorkerRestartNotificationPayload {
   alertId: string;
@@ -65,7 +70,9 @@ export interface WorkerRestartNotificationServiceOptions {
   workerServiceName: string;
   alertRepository: WorkerRestartAlertRepository;
   sinks: WorkerRestartNotificationSink[];
+  destinations?: WorkerRestartNotificationDestinationConfig[];
   notificationCooldownMs?: number;
+  notificationTimeoutMs?: number;
   logger?: Pick<Console, "info" | "warn" | "error">;
 }
 
@@ -143,6 +150,126 @@ function buildPayload(
   };
 }
 
+type FormattedNotificationPayload = WorkerRestartNotificationPayload & {
+  text?: string;
+  blocks?: Array<Record<string, unknown>>;
+  attachments?: Array<Record<string, unknown>>;
+};
+
+function destinationKey(event: WorkerRestartAlertEventRecord): string {
+  return safeString(event.notificationDestinationName ?? event.notificationSinkName, "external");
+}
+
+function latestNotificationEvents(events: WorkerRestartAlertEventRecord[]): WorkerRestartAlertEventRecord[] {
+  return events
+    .filter((event) => Boolean(event.notificationEventType) && event.notificationScope === "external")
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+}
+
+function formatPayloadForDestination(
+  destination: WorkerRestartNotificationDestinationConfig | undefined,
+  payload: WorkerRestartNotificationPayload
+): FormattedNotificationPayload {
+  if (!destination || destination.formatterProfile !== "slack") {
+    return payload;
+  }
+
+  const title = `${payload.eventType.replaceAll("_", " ")} · ${payload.severity.toUpperCase()}`;
+  const text = [
+    `${payload.environment} ${payload.workerService}`,
+    payload.summary,
+    `Reason: ${payload.reasonCode}`,
+    `Action: ${payload.recommendedAction}`,
+  ].join("\n");
+
+  return {
+    ...payload,
+    text,
+    blocks: [
+      {
+        type: "header",
+        text: {
+          type: "plain_text",
+          text: title,
+          emoji: true,
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text,
+        },
+      },
+      {
+        type: "section",
+        fields: [
+          { type: "mrkdwn", text: `*Alert*\n${payload.alertId}` },
+          { type: "mrkdwn", text: `*Environment*\n${payload.environment}` },
+          { type: "mrkdwn", text: `*Severity*\n${payload.severity}` },
+          { type: "mrkdwn", text: `*Request*\n${payload.restartRequestId ?? "—"}` },
+        ],
+      },
+    ],
+    attachments: [
+      {
+        color: payload.severity === "critical" ? "danger" : "warning",
+        footer: payload.operatorPathHint,
+        ts: Math.floor(Date.now() / 1000),
+      },
+    ],
+  };
+}
+
+function buildDestinationSummary(events: WorkerRestartAlertEventRecord[]): WorkerRestartAlertNotificationDestinationSummary[] {
+  const groups = new Map<string, WorkerRestartAlertEventRecord[]>();
+  for (const event of events) {
+    if (event.notificationScope !== "external" || !event.notificationEventType) {
+      continue;
+    }
+    const key = destinationKey(event);
+    const group = groups.get(key);
+    if (group) {
+      group.push(event);
+    } else {
+      groups.set(key, [event]);
+    }
+  }
+
+  return [...groups.entries()]
+    .map(([name, groupedEvents]) => {
+      const sorted = [...groupedEvents].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+      const latest = sorted[0];
+      const resolvedEvent = sorted.find(
+        (event) => event.notificationEventType === "alert_resolved" && event.notificationStatus === "sent"
+      );
+      return {
+        name,
+        sinkType: latest?.notificationSinkType,
+        formatterProfile: latest?.notificationFormatterProfile,
+        priority: latest?.notificationDestinationPriority,
+        selected: groupedEvents.some((event) => Boolean(event.notificationStatus)),
+        latestDeliveryStatus: latest?.notificationStatus,
+        attemptCount: groupedEvents.length,
+        lastAttemptedAt: latest?.createdAt,
+        lastFailureReason: latest?.notificationFailureReason,
+        suppressionReason: latest?.notificationSuppressionReason,
+        routeReason: latest?.notificationRouteReason,
+        dedupeKey: latest?.notificationDedupeKey,
+        payloadFingerprint: latest?.notificationPayloadFingerprint,
+        recoveryNotificationSent: Boolean(resolvedEvent),
+        recoveryNotificationAt: resolvedEvent?.createdAt,
+      } satisfies WorkerRestartAlertNotificationDestinationSummary;
+    })
+    .sort((left, right) => {
+      const priorityDiff = (left.priority ?? Number.MAX_SAFE_INTEGER) - (right.priority ?? Number.MAX_SAFE_INTEGER);
+      if (priorityDiff !== 0) {
+        return priorityDiff;
+      }
+      return left.name.localeCompare(right.name);
+    });
+}
+
 function shouldNotifyExternally(
   eventType: WorkerRestartAlertNotificationEventType,
   alert: WorkerRestartAlertRecord,
@@ -182,33 +309,33 @@ function mapDeliveryAction(status: WorkerRestartAlertNotificationStatus): Worker
 }
 
 function buildNotificationSummary(events: WorkerRestartAlertEventRecord[]): WorkerRestartAlertNotificationSummary {
-  const notificationEvents = events
-    .filter((event) => Boolean(event.notificationEventType))
-    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
-  const latestExternal = notificationEvents.find((event) => event.notificationScope === "external");
+  const notificationEvents = latestNotificationEvents(events);
+  const latestExternal = notificationEvents[0];
   const latest = latestExternal ?? notificationEvents[0];
-  const externallyNotified = notificationEvents.some((event) => event.notificationScope === "external" && event.notificationStatus === "sent");
-  const latestResolution = notificationEvents.find(
-    (event) =>
-      event.notificationScope === "external" &&
-      event.notificationEventType === "alert_resolved"
-  );
+  const destinations = buildDestinationSummary(notificationEvents);
+  const externallyNotified = destinations.some((destination) => destination.latestDeliveryStatus === "sent");
+  const latestResolution = notificationEvents.find((event) => event.notificationEventType === "alert_resolved" && event.notificationStatus === "sent");
 
   return {
     externallyNotified,
     sinkName: latest?.notificationSinkName,
     sinkType: latest?.notificationSinkType,
+    latestDestinationName: latest?.notificationDestinationName,
+    latestDestinationType: latest?.notificationDestinationType,
+    latestFormatterProfile: latest?.notificationFormatterProfile,
     eventType: latest?.notificationEventType,
     latestDeliveryStatus: latest?.notificationStatus,
-    attemptCount: notificationEvents.filter((event) => event.notificationScope === "external").length,
+    attemptCount: notificationEvents.length,
     lastAttemptedAt: latest?.createdAt,
     lastFailureReason: latest?.notificationFailureReason,
     suppressionReason: latest?.notificationSuppressionReason,
     dedupeKey: latest?.notificationDedupeKey,
     payloadFingerprint: latest?.notificationPayloadFingerprint,
-    resolutionNotificationSent:
-      latestResolution?.notificationStatus == null ? undefined : latestResolution.notificationStatus === "sent",
+    resolutionNotificationSent: latestResolution ? true : false,
     resolutionNotificationAt: latestResolution?.createdAt,
+    selectedDestinationCount: destinations.length,
+    selectedDestinationNames: destinations.map((destination) => destination.name),
+    destinations,
   };
 }
 
@@ -217,6 +344,10 @@ export class WorkerRestartNotificationService {
 
   private get cooldownMs(): number {
     return this.deps.notificationCooldownMs ?? 5 * 60 * 1000;
+  }
+
+  private get timeoutMs(): number {
+    return this.deps.notificationTimeoutMs ?? 5000;
   }
 
   private async loadEvents(alertId: string): Promise<WorkerRestartAlertEventRecord[]> {
@@ -249,13 +380,18 @@ export class WorkerRestartNotificationService {
     status: WorkerRestartAlertNotificationStatus;
     actor: string;
     sink: WorkerRestartNotificationSink;
+    destination?: WorkerRestartNotificationDestinationConfig;
     note?: string;
     reason?: string;
+    routeReason?: string;
     responseStatus?: number;
     responseBody?: string;
     attemptCount?: number;
     scope: "internal" | "external";
   }): Promise<void> {
+    const destinationName = input.destination?.name;
+    const dedupeSource = destinationName ?? input.sink.name;
+    const payloadFingerprint = hashPayload(input.payload);
     await this.deps.alertRepository.recordEvent({
       id: randomUUID(),
       environment: input.alert.environment,
@@ -272,20 +408,34 @@ export class WorkerRestartNotificationService {
         payload: clone(input.payload),
         sinkName: input.sink.name,
         sinkType: input.sink.kind,
+        destinationName,
+        destinationType: input.destination?.slot,
+        formatterProfile: input.destination?.formatterProfile,
+        destinationPriority: input.destination?.priority,
+        destinationTags: input.destination?.tags,
         deliveryStatus: input.status,
         reason: input.reason,
+        routeReason: input.routeReason,
         responseStatus: input.responseStatus,
         responseBody: input.responseBody,
         attemptCount: input.attemptCount ?? 1,
       },
       notificationSinkName: input.sink.name,
       notificationSinkType: input.sink.kind,
+      notificationDestinationName: destinationName,
+      notificationDestinationType: input.destination?.slot,
+      notificationFormatterProfile: input.destination?.formatterProfile,
+      notificationDestinationPriority: input.destination?.priority,
+      notificationDestinationTags: input.destination?.tags,
       notificationEventType: input.payload.eventType,
       notificationStatus: input.status,
-      notificationDedupeKey: `${input.alert.id}:${input.sink.name}:${input.payload.eventType}:${hashPayload(input.payload)}`,
-      notificationPayloadFingerprint: hashPayload(input.payload),
+      notificationDedupeKey: `${input.alert.id}:${dedupeSource}:${input.payload.eventType}:${payloadFingerprint}`,
+      notificationPayloadFingerprint: payloadFingerprint,
       notificationAttemptCount: input.attemptCount ?? 1,
       notificationFailureReason: input.reason,
+      notificationSuppressionReason:
+        input.status === "skipped" || input.status === "suppressed" ? input.reason : undefined,
+      notificationRouteReason: input.routeReason,
       notificationResponseStatus: input.responseStatus,
       notificationResponseBody: input.responseBody,
       notificationScope: input.scope,
@@ -293,14 +443,24 @@ export class WorkerRestartNotificationService {
     });
   }
 
-  async dispatch(context: WorkerRestartNotificationDispatchContext): Promise<WorkerRestartAlertNotificationSummary> {
-    const payload = buildPayload(context.alert, context.eventType, context.worker, context.runtimeConfig);
-    const events = await this.loadEvents(context.alert.id);
-    const summary = buildNotificationSummary(events);
-    const now = Date.now();
+  private buildTransportSink(destination: WorkerRestartNotificationDestinationConfig): WorkerRestartNotificationSink {
+    return createGenericWebhookNotificationSink({
+      name: `generic-webhook:${destination.name}`,
+      url: destination.url,
+      token: destination.token,
+      headerName: destination.headerName,
+      timeoutMs: this.timeoutMs,
+      required: destination.required,
+      logger: this.deps.logger,
+    });
+  }
 
-    for (const sink of this.deps.sinks) {
-      if (sink.scope === "internal" && !shouldNotifyInternally(context.eventType)) {
+  private async dispatchInternalSinks(
+    context: WorkerRestartNotificationDispatchContext,
+    payload: WorkerRestartNotificationPayload
+  ): Promise<void> {
+    for (const sink of this.deps.sinks.filter((candidate) => candidate.scope === "internal")) {
+      if (!shouldNotifyInternally(context.eventType)) {
         await this.recordNotificationEvent({
           alert: context.alert,
           payload,
@@ -309,13 +469,53 @@ export class WorkerRestartNotificationService {
           sink,
           note: context.note,
           reason: "internal notification policy skipped",
+          routeReason: "internal notification policy skipped",
           attemptCount: 1,
           scope: sink.scope,
         });
         continue;
       }
 
-      if (sink.scope === "external" && !shouldNotifyExternally(context.eventType, context.alert, summary)) {
+      try {
+        const delivery = await sink.notify(payload);
+        await this.recordNotificationEvent({
+          alert: context.alert,
+          payload,
+          status: delivery.status,
+          actor: context.actor,
+          sink,
+          note: context.note,
+          reason: delivery.reason,
+          responseStatus: delivery.responseStatus,
+          responseBody: delivery.responseBody,
+          attemptCount: 1,
+          scope: sink.scope,
+        });
+      } catch (error) {
+        await this.recordNotificationEvent({
+          alert: context.alert,
+          payload,
+          status: "failed",
+          actor: context.actor,
+          sink,
+          note: context.note,
+          reason: error instanceof Error ? error.message : String(error),
+          attemptCount: 1,
+          scope: sink.scope,
+        });
+      }
+    }
+  }
+
+  private async dispatchLegacyExternalSinks(
+    context: WorkerRestartNotificationDispatchContext,
+    payload: WorkerRestartNotificationPayload,
+    summary: WorkerRestartAlertNotificationSummary,
+    events: WorkerRestartAlertEventRecord[],
+  ): Promise<void> {
+    const now = Date.now();
+    for (const sink of this.deps.sinks.filter((candidate) => candidate.scope === "external")) {
+      if (!shouldNotifyExternally(context.eventType, context.alert, summary)) {
         await this.recordNotificationEvent({
           alert: context.alert,
           payload,
@@ -324,13 +524,16 @@ export class WorkerRestartNotificationService {
           sink,
           note: context.note,
           reason: "policy is local-only for this event",
+          routeReason: "legacy policy local-only",
           attemptCount: 1,
           scope: sink.scope,
         });
         continue;
       }
 
-      const sinkEvents = events.filter((event) => event.notificationSinkName === sink.name && event.notificationEventType === context.eventType);
+      const sinkEvents = events.filter(
+        (event) => event.notificationSinkName === sink.name && event.notificationEventType === context.eventType
+      );
       const latestSinkEvent = sinkEvents[0];
       if (latestSinkEvent && now - Date.parse(latestSinkEvent.createdAt) < this.cooldownMs) {
         await this.recordNotificationEvent({
@@ -341,6 +544,7 @@ export class WorkerRestartNotificationService {
           sink,
           note: context.note,
           reason: `cooldown active for ${sink.name}`,
+          routeReason: `cooldown active for ${sink.name}`,
           attemptCount: sinkEvents.length + 1,
           scope: sink.scope,
         });
@@ -356,6 +560,7 @@ export class WorkerRestartNotificationService {
           sink,
           note: context.note,
           reason: `${sink.kind} sink is not configured`,
+          routeReason: `${sink.kind} sink is not configured`,
           attemptCount: sinkEvents.length + 1,
           scope: sink.scope,
         });
@@ -390,6 +595,98 @@ export class WorkerRestartNotificationService {
           scope: sink.scope,
         });
       }
+    }
+  }
+
+  private async dispatchRoutedDestinations(
+    context: WorkerRestartNotificationDispatchContext,
+    payload: WorkerRestartNotificationPayload,
+    summary: WorkerRestartAlertNotificationSummary,
+    events: WorkerRestartAlertEventRecord[]
+  ): Promise<void> {
+    const routes = resolveNotificationRoutes(
+      {
+        environment: context.alert.environment,
+        alert: context.alert,
+        eventType: context.eventType,
+        previousSummary: summary,
+      },
+      this.deps.destinations ?? []
+    );
+
+    for (const route of routes) {
+      const destinationEvents = events.filter(
+        (event) =>
+          event.notificationScope === "external" &&
+          event.notificationEventType === context.eventType &&
+          (event.notificationDestinationName ?? event.notificationSinkName) === route.destination.name
+      );
+      const sink = this.buildTransportSink(route.destination);
+      const destinationPayload = formatPayloadForDestination(route.destination, payload);
+
+      if (route.status === "skipped" || route.status === "suppressed" || route.status === "failed") {
+        await this.recordNotificationEvent({
+          alert: context.alert,
+          payload: destinationPayload,
+          status: route.status,
+          actor: context.actor,
+          sink,
+          destination: route.destination,
+          note: context.note,
+          reason: route.reason,
+          routeReason: route.reason,
+          attemptCount: destinationEvents.length + 1,
+          scope: "external",
+        });
+        continue;
+      }
+
+      try {
+        const delivery = await sink.notify(destinationPayload);
+        await this.recordNotificationEvent({
+          alert: context.alert,
+          payload: destinationPayload,
+          status: delivery.status,
+          actor: context.actor,
+          sink,
+          destination: route.destination,
+          note: context.note,
+          reason: delivery.reason,
+          routeReason: route.reason,
+          responseStatus: delivery.responseStatus,
+          responseBody: delivery.responseBody,
+          attemptCount: destinationEvents.length + 1,
+          scope: "external",
+        });
+      } catch (error) {
+        await this.recordNotificationEvent({
+          alert: context.alert,
+          payload: destinationPayload,
+          status: "failed",
+          actor: context.actor,
+          sink,
+          destination: route.destination,
+          note: context.note,
+          reason: error instanceof Error ? error.message : String(error),
+          routeReason: route.reason,
+          attemptCount: destinationEvents.length + 1,
+          scope: "external",
+        });
+      }
+    }
+  }
+
+  async dispatch(context: WorkerRestartNotificationDispatchContext): Promise<WorkerRestartAlertNotificationSummary> {
+    const payload = buildPayload(context.alert, context.eventType, context.worker, context.runtimeConfig);
+    const events = await this.loadEvents(context.alert.id);
+    const summary = buildNotificationSummary(events);
+
+    await this.dispatchInternalSinks(context, payload);
+
+    if (this.deps.destinations && this.deps.destinations.length > 0) {
+      await this.dispatchRoutedDestinations(context, payload, summary, events);
+    } else {
+      await this.dispatchLegacyExternalSinks(context, payload, summary, events);
     }
 
     return this.summarize(context.alert.id);

@@ -61,6 +61,8 @@ Every major event should carry:
 - `GET /control/history`
 - `POST /control/restart-worker`
 - `GET /control/restart-alerts`
+- `GET /control/restart-alert-deliveries`
+- `GET /control/restart-alert-deliveries/summary`
 - `POST /control/restart-alerts/:id/acknowledge`
 - `POST /control/restart-alerts/:id/resolve`
 
@@ -78,6 +80,7 @@ Every major event should carry:
 - last applied and requested runtime config versions
 - restart-required state, restart request status, and convergence outcome
 - open restart alerts, severity, acknowledgement state, and recommended action
+- filtered delivery journal rows and compact per-destination delivery summaries
 
 ## Persistence Expectations
 
@@ -100,6 +103,20 @@ Restart alerts open when convergence stalls or fails. `acknowledge` records that
 Critical restart alerts may also emit a server-side notification through the private control plane. The notification bridge is advisory only: alert persistence happens first, delivery is rate-limited, and delivery failures are recorded without changing the canonical restart state. Operators should inspect `/control/restart-alerts` and `/control/status` if an alert remains open after a notification attempt.
 
 The delivery payload is intentionally small and stable. It includes the environment, worker target, severity, reason code, summary, restart request id, requested and applied version ids when known, worker heartbeat age or timestamp when available, the recommended operator action, and a path hint for the control surface. Recovery notifications are emitted only after a previously notified alert resolves, so the bridge stays an escalation path rather than a parallel restart authority.
+
+The bridge can fan out by destination. Routing is configured on the private control service, with explicit destination names, cooldown windows, recovery flags, and formatter profiles. Generic JSON is the transport base; Slack-compatible payloads are a presentation profile layered on top of the same webhook transport. Destination-level status, suppression, and failure reasons are visible in the restart alert event history, but no external provider response is treated as restart truth.
+
+To verify the sink in staging, point `NOTIFY_WEBHOOK_STAGING_URL` at a test webhook, trigger a restart alert, and confirm the destination row on `/control/restart-alerts` shows `sent` or `suppressed` with the expected route reason. If the destination is misconfigured, the alert remains open and the failure is recorded instead of being hidden.
+
+For destination troubleshooting, use the read-only reporting views on the private control plane. `GET /control/restart-alert-deliveries` returns the newest-first delivery journal with filters for environment, destination, status, event type, severity, alert id, restart request id, formatter profile, and time window. `GET /control/restart-alert-deliveries/summary` returns compact per-destination aggregates with sent, failed, suppressed, and skipped counts plus a derived health hint:
+
+- `healthy` means recent successful sends and no recent failures
+- `degraded` means recent successes and failures mixed together
+- `failing` means repeated recent failures without success
+- `idle` means no meaningful recent activity or only suppressed/skipped traffic
+- `unknown` is the fallback when the counts do not map cleanly
+
+Suppressed events remain first-class rows in the journal, so operators can distinguish policy skips from cooldown suppression and provider failures. These reporting views are read-only and are derived from the durable restart-alert event history; they never mutate canonical alert state.
 
 ## Alert Triggers
 

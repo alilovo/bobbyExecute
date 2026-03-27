@@ -88,6 +88,9 @@ npm run live:test
 - `/control/restart-alerts` exposes durable restart incidents, severity, acknowledgement state, and recommended operator actions.
 - The private control plane can also forward selected restart-alert events to a server-side webhook sink. The browser never receives the webhook URL or token, and notification delivery failures do not change canonical alert state.
 - External notification is an escalation bridge, not the source of truth: critical alert openings and escalations notify, repeated failure summaries can notify after cooldown, and a recovery notification is sent when a previously notified alert resolves. Acknowledgements stay local-only. Operators can inspect notification status, last attempt time, failure reason, suppression reason, and recovery-send status through `/control/restart-alerts` and `/control/status`.
+- Routing is destination-based, not provider-based: the private control plane can fan out to primary, secondary, and staging webhook destinations with explicit per-destination cooldown and recovery flags. Generic JSON is the transport base, while Slack-compatible formatting is just a payload profile on top of the same webhook transport.
+- Notification secrets stay server-side only in the control-plane environment. If a destination is missing or malformed, the control plane records the failure and keeps restart alert state authoritative.
+- Read-only delivery reporting lives on the private control plane too: `GET /control/restart-alert-deliveries` returns the filtered delivery journal and `GET /control/restart-alert-deliveries/summary` returns compact destination aggregates. Both are derived from the same durable event history and are meant for troubleshooting, not mutation.
 - If the control token is missing, the protected routes fail closed.
 
 ## Related Docs

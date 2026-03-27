@@ -9,6 +9,9 @@ import type {
   RestartAlertListResponse,
   RestartWorkerRequest,
   RestartWorkerResponse,
+  WorkerRestartDeliveryQuery,
+  WorkerRestartDeliveryJournalResponse,
+  WorkerRestartDeliverySummaryResponse,
 } from '@/types/api';
 
 export function useEmergencyStop() {
@@ -60,6 +63,8 @@ export function useRestartWorker() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['control-status'] });
       queryClient.invalidateQueries({ queryKey: ['restart-alerts'] });
+      queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries'] });
+      queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries-summary'] });
       queryClient.invalidateQueries({ queryKey: ['health'] });
       queryClient.invalidateQueries({ queryKey: ['summary'] });
     },
@@ -73,6 +78,8 @@ export function useAcknowledgeRestartAlert() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['control-status'] });
       queryClient.invalidateQueries({ queryKey: ['restart-alerts'] });
+      queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries'] });
+      queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries-summary'] });
     },
   });
 }
@@ -84,6 +91,26 @@ export function useResolveRestartAlert() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['control-status'] });
       queryClient.invalidateQueries({ queryKey: ['restart-alerts'] });
+      queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries'] });
+      queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries-summary'] });
     },
+  });
+}
+
+export function useRestartAlertDeliveries(filters: WorkerRestartDeliveryQuery = {}) {
+  return useQuery<WorkerRestartDeliveryJournalResponse>({
+    queryKey: ['restart-alert-deliveries', filters],
+    queryFn: () => api.restartAlertDeliveries(filters),
+    refetchInterval: POLLING.CONTROL_STATUS,
+    staleTime: POLLING.CONTROL_STATUS,
+  });
+}
+
+export function useRestartAlertDeliverySummary(filters: WorkerRestartDeliveryQuery = {}) {
+  return useQuery<WorkerRestartDeliverySummaryResponse>({
+    queryKey: ['restart-alert-deliveries-summary', filters],
+    queryFn: () => api.restartAlertDeliverySummary(filters),
+    refetchInterval: POLLING.CONTROL_STATUS,
+    staleTime: POLLING.CONTROL_STATUS,
   });
 }

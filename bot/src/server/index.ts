@@ -14,6 +14,7 @@ import type { RuntimeSnapshot } from "../runtime/dry-run-runtime.js";
 import type { RuntimeConfigManager } from "../runtime/runtime-config-manager.js";
 import type { RuntimeVisibilityRepository } from "../persistence/runtime-visibility-repository.js";
 import type { WorkerRestartService } from "../control/worker-restart-service.js";
+import type { WorkerRestartAlertRepository } from "../persistence/worker-restart-alert-repository.js";
 
 export interface ServerConfig {
   port?: number;
@@ -30,6 +31,7 @@ export interface ServerConfig {
   runtimeConfigManager?: RuntimeConfigManager;
   runtimeVisibilityRepository?: RuntimeVisibilityRepository;
   restartService?: WorkerRestartService;
+  restartAlertRepository?: WorkerRestartAlertRepository;
   runtimeEnvironment?: string;
   controlAuthToken?: string;
 }
@@ -125,6 +127,7 @@ async function createVisibilityServer(
         requiredToken: config.controlAuthToken,
         runtimeVisibilityRepository: config.runtimeVisibilityRepository,
         restartService: config.restartService,
+        restartAlertRepository: config.restartAlertRepository,
         runtimeEnvironment: config.runtimeEnvironment,
       })
     );

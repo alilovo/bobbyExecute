@@ -6,6 +6,8 @@ import type {
   MetricsResponse,
   ControlStatusResponse,
   RestartAlertListResponse,
+  WorkerRestartDeliveryJournalResponse,
+  WorkerRestartDeliverySummaryResponse,
   RestartWorkerRequest,
   RestartWorkerResponse,
   WorkerRestartAlertRecord,
@@ -250,6 +252,9 @@ export function mockRestartAlerts(): RestartAlertListResponse {
       externallyNotified: true,
       sinkName: 'restart-alert-webhook',
       sinkType: 'generic_webhook',
+      latestDestinationName: 'primary',
+      latestDestinationType: 'primary',
+      latestFormatterProfile: 'generic',
       eventType: 'alert_opened',
       latestDeliveryStatus: 'sent',
       attemptCount: 1,
@@ -257,6 +262,24 @@ export function mockRestartAlerts(): RestartAlertListResponse {
       dedupeKey: `notification-${requestId}`,
       payloadFingerprint: `payload-${requestId}`,
       resolutionNotificationSent: false,
+      resolutionNotificationAt: undefined,
+      selectedDestinationCount: 1,
+      selectedDestinationNames: ['primary'],
+      destinations: [
+        {
+          name: 'primary',
+          sinkType: 'generic_webhook',
+          formatterProfile: 'generic',
+          priority: 10,
+          selected: true,
+          latestDeliveryStatus: 'sent',
+          attemptCount: 1,
+          lastAttemptedAt: heartbeat,
+          dedupeKey: `notification-${requestId}`,
+          payloadFingerprint: `payload-${requestId}`,
+          recoveryNotificationSent: false,
+        },
+      ],
     },
     createdAt: ago(120000),
     updatedAt: heartbeat,
@@ -287,6 +310,186 @@ export function mockRestartAlerts(): RestartAlertListResponse {
       lastEvaluatedAt: heartbeat,
     },
     alerts: [alert],
+  };
+}
+
+type DeliveryMockQuery = {
+  environment?: string;
+  destinationName?: string;
+  status?: string;
+  eventType?: string;
+  severity?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+  alertId?: string;
+  restartRequestId?: string;
+  formatterProfile?: string;
+};
+
+function buildMockDeliveryRows(): WorkerRestartDeliveryJournalResponse['deliveries'] {
+  const base = now();
+  return [
+    {
+      eventId: 'event-primary-sent',
+      alertId: 'alert-primary',
+      restartRequestId: 'restart-primary',
+      environment: 'production',
+      destinationName: 'primary',
+      destinationType: 'primary',
+      sinkType: 'generic_webhook',
+      formatterProfile: 'generic',
+      eventType: 'alert_opened',
+      deliveryStatus: 'sent',
+      severity: 'critical',
+      alertStatus: 'open',
+      sourceCategory: 'convergence_timeout',
+      routeReason: 'destination selected by routing policy',
+      dedupeKey: 'dedupe-primary-sent',
+      attemptedAt: base,
+      attemptCount: 1,
+      summary: 'Primary destination received the alert',
+    },
+    {
+      eventId: 'event-secondary-failed',
+      alertId: 'alert-secondary',
+      restartRequestId: 'restart-secondary',
+      environment: 'production',
+      destinationName: 'secondary',
+      destinationType: 'secondary',
+      sinkType: 'generic_webhook',
+      formatterProfile: 'slack',
+      eventType: 'alert_escalated',
+      deliveryStatus: 'failed',
+      severity: 'critical',
+      alertStatus: 'open',
+      sourceCategory: 'repeated_restart_failures',
+      routeReason: 'destination selected by routing policy',
+      dedupeKey: 'dedupe-secondary-failed',
+      payloadFingerprint: 'payload-secondary',
+      attemptedAt: ago(60_000),
+      attemptCount: 2,
+      failureReason: 'webhook responded with 503',
+      summary: 'Secondary destination failed',
+    },
+    {
+      eventId: 'event-staging-suppressed',
+      alertId: 'alert-staging',
+      restartRequestId: 'restart-staging',
+      environment: 'staging',
+      destinationName: 'staging',
+      destinationType: 'staging',
+      sinkType: 'generic_webhook',
+      formatterProfile: 'generic',
+      eventType: 'alert_resolved',
+      deliveryStatus: 'suppressed',
+      severity: 'warning',
+      alertStatus: 'resolved',
+      sourceCategory: 'restart_timeout',
+      routeReason: 'cooldown active for staging',
+      dedupeKey: 'dedupe-staging-suppressed',
+      attemptedAt: ago(120_000),
+      attemptCount: 1,
+      suppressionReason: 'cooldown active for staging',
+      summary: 'Staging destination suppressed',
+    },
+  ];
+}
+
+function matchesDeliveryMockQuery(row: WorkerRestartDeliveryJournalResponse['deliveries'][number], query: DeliveryMockQuery): boolean {
+  if (query.environment && row.environment !== query.environment) return false;
+  if (query.destinationName && row.destinationName !== query.destinationName) return false;
+  if (query.status && row.deliveryStatus !== query.status) return false;
+  if (query.eventType && row.eventType !== query.eventType) return false;
+  if (query.severity && row.severity !== query.severity) return false;
+  if (query.alertId && row.alertId !== query.alertId) return false;
+  if (query.restartRequestId && row.restartRequestId !== query.restartRequestId) return false;
+  if (query.formatterProfile && row.formatterProfile !== query.formatterProfile) return false;
+  if (query.from && Date.parse(row.attemptedAt) < Date.parse(query.from)) return false;
+  if (query.to && Date.parse(row.attemptedAt) > Date.parse(query.to)) return false;
+  return true;
+}
+
+function buildMockDeliverySummary(rows: WorkerRestartDeliveryJournalResponse['deliveries']): WorkerRestartDeliverySummaryResponse {
+  const byDestination = new Map<string, WorkerRestartDeliverySummaryResponse['destinations'][number]>();
+  for (const row of rows) {
+    const key = row.destinationName ?? 'unknown';
+    const current = byDestination.get(key) ?? {
+      destinationName: key,
+      destinationType: row.destinationType,
+      sinkType: row.sinkType,
+      formatterProfile: row.formatterProfile,
+      totalCount: 0,
+      sentCount: 0,
+      failedCount: 0,
+      suppressedCount: 0,
+      skippedCount: 0,
+      openAlertCount: row.alertStatus !== 'resolved' ? 1 : 0,
+      recentEnvironments: [],
+      recentEventTypes: [],
+      healthHint: 'idle',
+    };
+    current.totalCount += 1;
+    if (row.deliveryStatus === 'sent') current.sentCount += 1;
+    if (row.deliveryStatus === 'failed') current.failedCount += 1;
+    if (row.deliveryStatus === 'suppressed') current.suppressedCount += 1;
+    if (row.deliveryStatus === 'skipped') current.skippedCount += 1;
+    current.lastActivityAt = row.attemptedAt;
+    if (row.deliveryStatus === 'sent') current.lastSentAt = row.attemptedAt;
+    if (row.deliveryStatus === 'failed') {
+      current.lastFailedAt = row.attemptedAt;
+      current.lastFailureReason = row.failureReason;
+    }
+    if (row.deliveryStatus === 'suppressed') current.lastSuppressedAt = row.attemptedAt;
+    if (row.deliveryStatus === 'skipped') current.lastSkippedAt = row.attemptedAt;
+    current.latestRouteReason = row.routeReason;
+    if (!current.recentEnvironments.includes(row.environment)) current.recentEnvironments.push(row.environment);
+    if (row.eventType && !current.recentEventTypes.includes(row.eventType)) current.recentEventTypes.push(row.eventType);
+    current.healthHint =
+      current.failedCount > 0 && current.sentCount === 0
+        ? 'failing'
+        : current.failedCount > 0 && current.sentCount > 0
+          ? 'degraded'
+          : current.sentCount > 0
+            ? 'healthy'
+            : 'idle';
+    byDestination.set(key, current);
+  }
+
+  return {
+    success: true,
+    windowStartAt: ago(24 * 60 * 60 * 1000),
+    windowEndAt: now(),
+    totalCount: rows.length,
+    destinations: [...byDestination.values()],
+  };
+}
+
+export function mockRestartAlertDeliveries(query: DeliveryMockQuery = {}): WorkerRestartDeliveryJournalResponse {
+  const rows = buildMockDeliveryRows().filter((row) => matchesDeliveryMockQuery(row, query)).sort((left, right) => Date.parse(right.attemptedAt) - Date.parse(left.attemptedAt));
+  const limit = query.limit ?? 50;
+  const offset = query.offset ?? 0;
+  const paged = rows.slice(offset, offset + limit);
+  return {
+    success: true,
+    windowStartAt: query.from ?? ago(7 * 24 * 60 * 60 * 1000),
+    windowEndAt: query.to ?? now(),
+    limit,
+    offset,
+    totalCount: rows.length,
+    hasMore: offset + limit < rows.length,
+    deliveries: paged,
+  };
+}
+
+export function mockRestartAlertDeliverySummary(query: DeliveryMockQuery = {}): WorkerRestartDeliverySummaryResponse {
+  const rows = buildMockDeliveryRows().filter((row) => matchesDeliveryMockQuery(row, query)).sort((left, right) => Date.parse(right.attemptedAt) - Date.parse(left.attemptedAt));
+  const summary = buildMockDeliverySummary(rows);
+  return {
+    ...summary,
+    windowStartAt: query.from ?? ago(24 * 60 * 60 * 1000),
+    windowEndAt: query.to ?? now(),
   };
 }
 

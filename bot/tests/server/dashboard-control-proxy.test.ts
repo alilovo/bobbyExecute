@@ -49,6 +49,51 @@ describe("dashboard control proxy", () => {
     expect(JSON.stringify(fetchMock.mock.calls)).not.toContain(CONTROL_SECRET);
   });
 
+  it("keeps browser-facing delivery reporting reads on the dashboard proxy without exposing the control secret", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          success: true,
+          windowStartAt: "2026-03-27T00:00:00.000Z",
+          windowEndAt: "2026-03-28T00:00:00.000Z",
+          limit: 50,
+          offset: 0,
+          totalCount: 1,
+          hasMore: false,
+          deliveries: [
+            {
+              eventId: "event-1",
+              alertId: "alert-1",
+              environment: "production",
+              destinationName: "primary",
+              deliveryStatus: "sent",
+              attemptedAt: "2026-03-27T11:00:00.000Z",
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    const { api } = await import("../../../dashboard/src/lib/api.ts");
+
+    await api.restartAlertDeliveries({ environment: "production", destinationName: "primary" });
+    await api.restartAlertDeliverySummary({ environment: "production", destinationName: "primary" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0][0])).toBe("/api/control/restart-alert-deliveries?environment=production&destinationName=primary");
+    expect(String(fetchMock.mock.calls[1][0])).toBe("/api/control/restart-alert-deliveries/summary?environment=production&destinationName=primary");
+    const firstHeaders = new Headers(fetchMock.mock.calls[0][1] as RequestInit | undefined);
+    const secondHeaders = new Headers(fetchMock.mock.calls[1][1] as RequestInit | undefined);
+    expect(firstHeaders.get("authorization")).toBeNull();
+    expect(secondHeaders.get("authorization")).toBeNull();
+    expect(JSON.stringify(fetchMock.mock.calls)).not.toContain(CONTROL_SECRET);
+  });
+
   it("forwards server-side dashboard control requests with bearer auth to the private control service", async () => {
     const fetchMock = vi.fn(async () =>
       new Response(JSON.stringify({ success: true, accepted: true }), {

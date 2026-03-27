@@ -13,8 +13,8 @@ import { WorkerRestartAlertService } from "./worker-restart-alert-service.js";
 import {
   WorkerRestartNotificationService,
   createStructuredWorkerRestartNotificationSink,
-  createGenericWebhookNotificationSink,
 } from "./worker-restart-notification-service.js";
+import { buildNotificationDestinationsFromEnv } from "./worker-restart-notification-routing.js";
 
 const entryConfig = loadConfig();
 if (!entryConfig.controlToken) {
@@ -38,7 +38,6 @@ const restartAlertWebhookTimeoutMs = (() => {
   const parsed = Number.parseInt(process.env.CONTROL_RESTART_ALERT_WEBHOOK_TIMEOUT_MS ?? "5000", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 5000;
 })();
-const restartAlertWebhookRequired = (process.env.CONTROL_RESTART_ALERT_WEBHOOK_REQUIRED ?? "false").trim().toLowerCase() === "true";
 
 console.log(
   "[control] Starting BobbyExecute control plane",
@@ -69,21 +68,15 @@ console.log(
   await restartAlertRepository.ensureSchema();
 
   const structuredNotificationSink = createStructuredWorkerRestartNotificationSink(console);
-  const webhookNotificationSink = createGenericWebhookNotificationSink({
-    name: "restart-alert-webhook",
-    url: process.env.CONTROL_RESTART_ALERT_WEBHOOK_URL,
-    token: process.env.CONTROL_RESTART_ALERT_WEBHOOK_TOKEN,
-    headerName: process.env.CONTROL_RESTART_ALERT_WEBHOOK_HEADER,
-    timeoutMs: restartAlertWebhookTimeoutMs,
-    required: restartAlertWebhookRequired,
-    logger: console,
-  });
+  const notificationDestinations = buildNotificationDestinationsFromEnv(process.env);
   const notificationService = new WorkerRestartNotificationService({
     environment: runtimeEnvironment,
     workerServiceName,
     alertRepository: restartAlertRepository,
-    sinks: [structuredNotificationSink, webhookNotificationSink],
+    sinks: [structuredNotificationSink],
+    destinations: notificationDestinations.destinations,
     notificationCooldownMs: restartNotificationCooldownMs,
+    notificationTimeoutMs: restartAlertWebhookTimeoutMs,
     logger: console,
   });
 
@@ -118,6 +111,7 @@ console.log(
     runtimeEnvironment,
     controlAuthToken: entryConfig.controlToken,
     restartService,
+    restartAlertRepository: restartAlertRepository,
   });
 
   const address = server.server.address();
@@ -126,7 +120,7 @@ console.log(
       ? `${String(address.address)}:${String(address.port)}`
       : `${host}:${port}`;
   console.log(`[control] Control plane listening on ${bound}`);
-  console.log("Endpoints: GET /health, GET /kpi/summary, GET /control/status, GET /control/runtime-config, GET /control/history, GET /control/restart-alerts, POST /control/restart-worker, POST /control/restart-alerts/:id/acknowledge, POST /control/restart-alerts/:id/resolve");
+  console.log("Endpoints: GET /health, GET /kpi/summary, GET /control/status, GET /control/runtime-config, GET /control/history, GET /control/restart-alerts, GET /control/restart-alert-deliveries, GET /control/restart-alert-deliveries/summary, POST /control/restart-worker, POST /control/restart-alerts/:id/acknowledge, POST /control/restart-alerts/:id/resolve");
 
   const shutdown = async () => {
     await server.close();

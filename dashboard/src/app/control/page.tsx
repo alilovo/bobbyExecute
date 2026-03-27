@@ -5,6 +5,8 @@ import {
   useAcknowledgeRestartAlert,
   useControlStatus,
   useEmergencyStop,
+  useRestartAlertDeliveries,
+  useRestartAlertDeliverySummary,
   useResetKillSwitch,
   useRestartAlerts,
   useRestartWorker,
@@ -17,7 +19,14 @@ import { Badge } from '@/components/ui/badge';
 import { LoadingCard } from '@/components/shared/loading-card';
 import { ErrorCard } from '@/components/shared/error-card';
 import { formatTimestampFull, relativeTime } from '@/lib/utils';
-import type { WorkerRestartAlertRecord, WorkerRestartStatus } from '@/types/api';
+import type {
+  WorkerRestartAlertRecord,
+  WorkerRestartDeliveryHealthHint,
+  WorkerRestartDeliveryJournalRow,
+  WorkerRestartDeliveryQuery,
+  WorkerRestartDeliverySummaryRow,
+  WorkerRestartStatus,
+} from '@/types/api';
 import { ShieldAlert, ShieldCheck, OctagonX, RotateCcw, AlertTriangle, Clock, Server } from 'lucide-react';
 
 const CONFIRM_TEXT = 'HALT';
@@ -118,6 +127,52 @@ function alertBadgeLabel(alert?: WorkerRestartAlertRecord): string {
   return `${alert.status.toUpperCase()} · ${alert.severity.toUpperCase()}`;
 }
 
+function deliveryStatusLabel(status?: string): string {
+  return status ? status.toUpperCase() : 'NONE';
+}
+
+function deliveryStatusVariant(
+  status?: string
+): 'default' | 'success' | 'warning' | 'danger' | 'info' {
+  switch (status) {
+    case 'sent':
+      return 'success';
+    case 'failed':
+      return 'danger';
+    case 'suppressed':
+      return 'warning';
+    case 'skipped':
+      return 'info';
+    default:
+      return 'default';
+  }
+}
+
+function deliveryHealthVariant(
+  hint?: WorkerRestartDeliveryHealthHint
+): 'default' | 'success' | 'warning' | 'danger' | 'info' {
+  switch (hint) {
+    case 'healthy':
+      return 'success';
+    case 'degraded':
+      return 'warning';
+    case 'failing':
+      return 'danger';
+    case 'idle':
+      return 'info';
+    default:
+      return 'default';
+  }
+}
+
+function deliveryHealthLabel(hint?: WorkerRestartDeliveryHealthHint): string {
+  return hint ? hint.toUpperCase() : 'UNKNOWN';
+}
+
+function compactValue(value?: string): string {
+  return value && value.trim().length > 0 ? value : '—';
+}
+
 export default function ControlPage() {
   const { data: status, isLoading, error, refetch } = useControlStatus();
   const { data: restartAlerts, isLoading: alertsLoading, error: alertsError, refetch: refetchAlerts } = useRestartAlerts();
@@ -126,6 +181,27 @@ export default function ControlPage() {
   const restartWorker = useRestartWorker();
   const acknowledgeRestartAlert = useAcknowledgeRestartAlert();
   const resolveRestartAlert = useResolveRestartAlert();
+  const [deliveryDraft, setDeliveryDraft] = useState({
+    environment: '',
+    destinationName: '',
+    status: '',
+    eventType: '',
+    severity: '',
+    from: '',
+    to: '',
+    alertId: '',
+    restartRequestId: '',
+    formatterProfile: '',
+  });
+  const [deliveryFilters, setDeliveryFilters] = useState<WorkerRestartDeliveryQuery>({});
+  const { data: deliveryJournal, isLoading: deliveriesLoading, error: deliveriesError, refetch: refetchDeliveries } =
+    useRestartAlertDeliveries(deliveryFilters);
+  const {
+    data: deliverySummary,
+    isLoading: deliverySummaryLoading,
+    error: deliverySummaryError,
+    refetch: refetchDeliverySummary,
+  } = useRestartAlertDeliverySummary(deliveryFilters);
 
   const [haltInput, setHaltInput] = useState('');
   const [resetInput, setResetInput] = useState('');
@@ -141,6 +217,25 @@ export default function ControlPage() {
   const restartAlertItems = restartAlerts?.alerts ?? [];
   const worker = status?.worker;
   const runtimeConfig = status?.runtimeConfig;
+  const deliveryRows = deliveryJournal?.deliveries ?? [];
+  const deliveryDestinations = deliverySummary?.destinations ?? [];
+  const deliveryTotals = deliveryDestinations.reduce(
+    (totals, destination) => {
+      totals.totalCount += destination.totalCount;
+      totals.sentCount += destination.sentCount;
+      totals.failedCount += destination.failedCount;
+      totals.suppressedCount += destination.suppressedCount;
+      totals.skippedCount += destination.skippedCount;
+      return totals;
+    },
+    {
+      totalCount: 0,
+      sentCount: 0,
+      failedCount: 0,
+      suppressedCount: 0,
+      skippedCount: 0,
+    }
+  );
   const restartActionEnabled = Boolean(restart?.required || restart?.requested) && restart?.inProgress !== true;
   const restartActionLabel = restart?.inProgress
     ? 'Restart In Progress'
@@ -155,6 +250,47 @@ export default function ControlPage() {
       ? 'This worker still has a restart-required config pending. Request the redeploy from the private control plane.'
       : 'No restart-required config is pending, so the control plane will reject restart requests until one appears.';
   const activeRestartAlerts = restartAlertItems.filter((alert) => alert.status !== 'resolved');
+
+  const applyDeliveryFilters = () => {
+    const next: WorkerRestartDeliveryQuery = {};
+    const environment = deliveryDraft.environment.trim();
+    const destinationName = deliveryDraft.destinationName.trim();
+    const status = deliveryDraft.status.trim();
+    const eventType = deliveryDraft.eventType.trim();
+    const severity = deliveryDraft.severity.trim();
+    const from = deliveryDraft.from.trim();
+    const to = deliveryDraft.to.trim();
+    const alertId = deliveryDraft.alertId.trim();
+    const restartRequestId = deliveryDraft.restartRequestId.trim();
+    const formatterProfile = deliveryDraft.formatterProfile.trim();
+    if (environment) next.environment = environment;
+    if (destinationName) next.destinationName = destinationName;
+    if (status) next.status = status;
+    if (eventType) next.eventType = eventType;
+    if (severity) next.severity = severity;
+    if (from) next.from = from;
+    if (to) next.to = to;
+    if (alertId) next.alertId = alertId;
+    if (restartRequestId) next.restartRequestId = restartRequestId;
+    if (formatterProfile) next.formatterProfile = formatterProfile;
+    setDeliveryFilters(next);
+  };
+
+  const resetDeliveryFilters = () => {
+    setDeliveryDraft({
+      environment: '',
+      destinationName: '',
+      status: '',
+      eventType: '',
+      severity: '',
+      from: '',
+      to: '',
+      alertId: '',
+      restartRequestId: '',
+      formatterProfile: '',
+    });
+    setDeliveryFilters({});
+  };
 
   const handleEmergencyStop = () => {
     if (haltInput !== CONFIRM_TEXT) return;
@@ -502,6 +638,26 @@ export default function ControlPage() {
                       {' · '}
                       Attempts: {alert.notification?.attemptCount ?? 0}
                     </p>
+                    <p>
+                      Selected destinations: {alert.notification?.selectedDestinationNames?.length ? alert.notification.selectedDestinationNames.join(', ') : '—'}
+                    </p>
+                    {alert.notification?.destinations?.length ? (
+                      <div className="space-y-1">
+                        {alert.notification.destinations.map((destination) => (
+                          <p key={destination.name}>
+                            Destination {destination.name}
+                            {destination.sinkType ? ` (${destination.sinkType})` : ''}
+                            {' · '}
+                            {destination.latestDeliveryStatus?.toUpperCase() ?? 'NONE'}
+                            {' · '}
+                            Attempts: {destination.attemptCount}
+                            {destination.recoveryNotificationSent ? ' · recovery sent' : ''}
+                            {destination.suppressionReason ? ` · suppressed: ${destination.suppressionReason}` : ''}
+                            {destination.lastFailureReason ? ` · failure: ${destination.lastFailureReason}` : ''}
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
                     {alert.status === 'resolved' && (
                       <p>
                         Recovery notification: {alert.notification?.resolutionNotificationSent ? 'sent' : 'not sent'}
@@ -547,6 +703,275 @@ export default function ControlPage() {
           <div className="text-xs text-text-muted flex items-center gap-1.5">
             <Clock className="h-3 w-3" />
             Source: Control /control/restart-alerts
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border-default">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <Clock className="h-5 w-5 text-accent-cyan" />
+            <div>
+              <CardTitle className="text-text-primary font-semibold text-base">
+                Delivery Journal
+              </CardTitle>
+              <p className="text-xs text-text-muted mt-0.5">
+                Filtered delivery history and compact destination health reporting derived from the alert-event stream.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form
+            className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              applyDeliveryFilters();
+            }}
+          >
+            <Input
+              value={deliveryDraft.environment}
+              onChange={(event) => setDeliveryDraft((current) => ({ ...current, environment: event.target.value }))}
+              placeholder="Environment"
+            />
+            <Input
+              value={deliveryDraft.destinationName}
+              onChange={(event) => setDeliveryDraft((current) => ({ ...current, destinationName: event.target.value }))}
+              placeholder="Destination name"
+            />
+            <Input
+              value={deliveryDraft.status}
+              onChange={(event) => setDeliveryDraft((current) => ({ ...current, status: event.target.value }))}
+              placeholder="Status: sent, failed, suppressed, skipped"
+            />
+            <Input
+              value={deliveryDraft.eventType}
+              onChange={(event) => setDeliveryDraft((current) => ({ ...current, eventType: event.target.value }))}
+              placeholder="Event type"
+            />
+            <Input
+              value={deliveryDraft.severity}
+              onChange={(event) => setDeliveryDraft((current) => ({ ...current, severity: event.target.value }))}
+              placeholder="Severity: info, warning, critical"
+            />
+            <Input
+              value={deliveryDraft.formatterProfile}
+              onChange={(event) => setDeliveryDraft((current) => ({ ...current, formatterProfile: event.target.value }))}
+              placeholder="Formatter profile"
+            />
+            <Input
+              value={deliveryDraft.alertId}
+              onChange={(event) => setDeliveryDraft((current) => ({ ...current, alertId: event.target.value }))}
+              placeholder="Alert id"
+            />
+            <Input
+              value={deliveryDraft.restartRequestId}
+              onChange={(event) => setDeliveryDraft((current) => ({ ...current, restartRequestId: event.target.value }))}
+              placeholder="Restart request id"
+            />
+            <Input
+              value={deliveryDraft.from}
+              onChange={(event) => setDeliveryDraft((current) => ({ ...current, from: event.target.value }))}
+              placeholder="From ISO timestamp"
+            />
+            <Input
+              value={deliveryDraft.to}
+              onChange={(event) => setDeliveryDraft((current) => ({ ...current, to: event.target.value }))}
+              placeholder="To ISO timestamp"
+            />
+            <div className="flex items-end gap-2 xl:col-span-3">
+              <Button type="submit" variant="default">
+                Apply filters
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  resetDeliveryFilters();
+                }}
+              >
+                Reset
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  refetchDeliveries();
+                  refetchDeliverySummary();
+                }}
+              >
+                Refresh
+              </Button>
+              <p className="text-xs text-text-muted">
+                Blank fields use the server default window and no extra filters.
+              </p>
+            </div>
+          </form>
+
+          {deliverySummaryLoading && !deliverySummaryError && (
+            <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-3 text-sm text-text-muted">
+              Loading delivery summary...
+            </div>
+          )}
+
+          {deliverySummaryError && (
+            <div className="rounded border border-accent-danger/30 bg-accent-danger/5 p-3">
+              <p className="text-sm font-medium text-accent-danger">Delivery summary failed</p>
+              <p className="mt-1 text-sm text-text-secondary">
+                {deliverySummaryError instanceof Error ? deliverySummaryError.message : 'Unable to load delivery summary'}
+              </p>
+            </div>
+          )}
+
+          {!deliverySummaryError && !deliverySummaryLoading && (
+            <>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-3">
+                  <p className="text-xs uppercase tracking-wide text-text-muted">Events</p>
+                  <p className="mt-1 text-sm text-text-primary">{deliverySummary?.totalCount ?? 0}</p>
+                </div>
+                <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-3">
+                  <p className="text-xs uppercase tracking-wide text-text-muted">Sent</p>
+                  <p className="mt-1 text-sm text-text-primary">{deliveryTotals.sentCount}</p>
+                </div>
+                <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-3">
+                  <p className="text-xs uppercase tracking-wide text-text-muted">Failed</p>
+                  <p className="mt-1 text-sm text-text-primary">{deliveryTotals.failedCount}</p>
+                </div>
+                <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-3">
+                  <p className="text-xs uppercase tracking-wide text-text-muted">Suppressed</p>
+                  <p className="mt-1 text-sm text-text-primary">{deliveryTotals.suppressedCount}</p>
+                </div>
+                <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-3">
+                  <p className="text-xs uppercase tracking-wide text-text-muted">Skipped</p>
+                  <p className="mt-1 text-sm text-text-primary">{deliveryTotals.skippedCount}</p>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded border border-border-subtle">
+                <div className="grid gap-2 border-b border-border-subtle bg-bg-surface-hover/40 px-3 py-2 text-xs uppercase tracking-wide text-text-muted md:grid-cols-6">
+                  <span>Destination</span>
+                  <span>Health</span>
+                  <span>Sent / Failed</span>
+                  <span>Suppressed / Skipped</span>
+                  <span>Last activity</span>
+                  <span>Recent envs</span>
+                </div>
+                {deliveryDestinations.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-text-muted">No destination summary matches the current filters.</div>
+                ) : (
+                  <div className="divide-y divide-border-subtle">
+                    {deliveryDestinations.map((destination: WorkerRestartDeliverySummaryRow) => (
+                      <div key={destination.destinationName} className="grid gap-2 px-3 py-3 text-sm md:grid-cols-6">
+                        <div className="space-y-1">
+                          <p className="font-medium text-text-primary">{destination.destinationName}</p>
+                          <p className="text-xs text-text-muted">
+                            {compactValue(destination.destinationType ?? destination.sinkType)}
+                            {destination.formatterProfile ? ` · ${destination.formatterProfile}` : ''}
+                          </p>
+                        </div>
+                        <div>
+                          <Badge variant={deliveryHealthVariant(destination.healthHint)} className="text-xs px-2 py-0.5">
+                            {deliveryHealthLabel(destination.healthHint)}
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-text-muted">
+                          <div>Sent: {destination.sentCount}</div>
+                          <div>Failed: {destination.failedCount}</div>
+                        </div>
+                        <div className="text-xs text-text-muted">
+                          <div>Suppressed: {destination.suppressedCount}</div>
+                          <div>Skipped: {destination.skippedCount}</div>
+                        </div>
+                        <div className="text-xs text-text-muted">
+                          <div>{safeRelative(destination.lastActivityAt)}</div>
+                          <div>{safeTimestamp(destination.lastActivityAt)}</div>
+                          {destination.lastFailureReason && <div className="text-accent-danger">Failure: {destination.lastFailureReason}</div>}
+                        </div>
+                        <div className="text-xs text-text-muted">
+                          {destination.recentEnvironments.length > 0 ? destination.recentEnvironments.join(', ') : '—'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {deliveriesLoading && !deliveriesError && (
+            <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-3 text-sm text-text-muted">
+              Loading delivery journal...
+            </div>
+          )}
+
+          {deliveriesError && (
+            <div className="rounded border border-accent-danger/30 bg-accent-danger/5 p-3">
+              <p className="text-sm font-medium text-accent-danger">Delivery journal failed</p>
+              <p className="mt-1 text-sm text-text-secondary">
+                {deliveriesError instanceof Error ? deliveriesError.message : 'Unable to load delivery journal'}
+              </p>
+            </div>
+          )}
+
+          {!deliveriesError && !deliveriesLoading && (
+            <div className="space-y-3">
+              {deliveryRows.length === 0 ? (
+                <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-4 text-sm text-text-muted">
+                  No delivery history matches the current filters.
+                </div>
+              ) : (
+                deliveryRows.map((row: WorkerRestartDeliveryJournalRow) => (
+                  <div key={row.eventId} className="rounded border border-border-subtle bg-bg-surface-hover/40 p-4 space-y-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={deliveryStatusVariant(row.deliveryStatus)} className="text-xs px-2 py-0.5">
+                            {deliveryStatusLabel(row.deliveryStatus)}
+                          </Badge>
+                          <span className="text-xs text-text-muted">
+                            {row.eventType ?? 'unknown event'}
+                          </span>
+                          <span className="text-xs text-text-muted">
+                            {row.environment}
+                          </span>
+                        </div>
+                        <p className="text-sm font-medium text-text-primary">
+                          {compactValue(row.destinationName)}{row.destinationType ? ` · ${row.destinationType}` : ''}
+                        </p>
+                        <p className="text-xs text-text-muted">
+                          {row.summary ?? 'No summary available'}
+                        </p>
+                      </div>
+                      <div className="text-right text-xs text-text-muted space-y-1">
+                        <div>Alert: {row.alertId}</div>
+                        <div>Restart request: {row.restartRequestId ?? '—'}</div>
+                        <div>Attempt count: {row.attemptCount ?? 1}</div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4 text-xs text-text-muted">
+                      <div>Attempted: {safeTimestamp(row.attemptedAt)}</div>
+                      <div>Route: {row.routeReason ?? '—'}</div>
+                      <div>Dedupe: {row.dedupeKey ?? '—'}</div>
+                      <div>Formatter: {row.formatterProfile ?? '—'}</div>
+                    </div>
+
+                    <div className="rounded border border-border-subtle bg-bg-surface-hover/30 p-3 text-xs text-text-muted space-y-1">
+                      <p>Severity: {row.severity?.toUpperCase() ?? '—'} · Alert status: {row.alertStatus?.toUpperCase() ?? '—'}</p>
+                      {row.payloadFingerprint && <p>Payload fingerprint: {row.payloadFingerprint}</p>}
+                      {row.failureReason && <p className="text-accent-danger">Failure: {row.failureReason}</p>}
+                      {row.suppressionReason && <p>Suppressed: {row.suppressionReason}</p>}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          <div className="text-xs text-text-muted flex items-center gap-1.5">
+            <Clock className="h-3 w-3" />
+            Source: Control /control/restart-alert-deliveries and /control/restart-alert-deliveries/summary
           </div>
         </CardContent>
       </Card>

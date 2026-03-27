@@ -72,11 +72,33 @@ export type WorkerRestartAlertNotificationEventType =
   | 'alert_resolved'
   | 'alert_repeated_failure_summary';
 export type WorkerRestartAlertNotificationStatus = 'pending' | 'sent' | 'skipped' | 'suppressed' | 'failed';
+export type WorkerRestartDeliveryHealthHint = 'healthy' | 'degraded' | 'failing' | 'idle' | 'unknown';
+
+export interface WorkerRestartAlertNotificationDestinationSummary {
+  name: string;
+  sinkType?: string;
+  formatterProfile?: string;
+  priority?: number;
+  selected: boolean;
+  latestDeliveryStatus?: WorkerRestartAlertNotificationStatus;
+  attemptCount: number;
+  lastAttemptedAt?: string;
+  lastFailureReason?: string;
+  suppressionReason?: string;
+  routeReason?: string;
+  dedupeKey?: string;
+  payloadFingerprint?: string;
+  recoveryNotificationSent?: boolean;
+  recoveryNotificationAt?: string;
+}
 
 export interface WorkerRestartAlertNotificationSummary {
   externallyNotified: boolean;
   sinkName?: string;
   sinkType?: string;
+  latestDestinationName?: string;
+  latestDestinationType?: string;
+  latestFormatterProfile?: string;
   eventType?: WorkerRestartAlertNotificationEventType;
   latestDeliveryStatus?: WorkerRestartAlertNotificationStatus;
   attemptCount: number;
@@ -87,6 +109,90 @@ export interface WorkerRestartAlertNotificationSummary {
   payloadFingerprint?: string;
   resolutionNotificationSent?: boolean;
   resolutionNotificationAt?: string;
+  selectedDestinationCount: number;
+  selectedDestinationNames: string[];
+  destinations: WorkerRestartAlertNotificationDestinationSummary[];
+}
+
+export interface WorkerRestartDeliveryJournalRow {
+  eventId: string;
+  alertId: string;
+  restartRequestId?: string;
+  environment: string;
+  destinationName?: string;
+  destinationType?: string;
+  sinkType?: string;
+  formatterProfile?: string;
+  eventType?: WorkerRestartAlertNotificationEventType;
+  deliveryStatus?: WorkerRestartAlertNotificationStatus;
+  severity?: WorkerRestartAlertSeverity;
+  alertStatus?: WorkerRestartAlertStatus;
+  sourceCategory?: WorkerRestartAlertSourceCategory;
+  routeReason?: string;
+  dedupeKey?: string;
+  payloadFingerprint?: string;
+  attemptedAt: string;
+  attemptCount?: number;
+  failureReason?: string;
+  suppressionReason?: string;
+  summary?: string;
+}
+
+export interface WorkerRestartDeliveryJournalResponse {
+  success: true;
+  windowStartAt: string;
+  windowEndAt: string;
+  limit: number;
+  offset: number;
+  totalCount: number;
+  hasMore: boolean;
+  deliveries: WorkerRestartDeliveryJournalRow[];
+}
+
+export interface WorkerRestartDeliverySummaryRow {
+  destinationName: string;
+  destinationType?: string;
+  sinkType?: string;
+  formatterProfile?: string;
+  totalCount: number;
+  sentCount: number;
+  failedCount: number;
+  suppressedCount: number;
+  skippedCount: number;
+  openAlertCount: number;
+  recentEnvironments: string[];
+  recentEventTypes: WorkerRestartAlertNotificationEventType[];
+  lastActivityAt?: string;
+  lastSentAt?: string;
+  lastFailedAt?: string;
+  lastSuppressedAt?: string;
+  lastSkippedAt?: string;
+  lastFailureReason?: string;
+  latestRouteReason?: string;
+  healthHint: WorkerRestartDeliveryHealthHint;
+}
+
+export interface WorkerRestartDeliverySummaryResponse {
+  success: true;
+  windowStartAt: string;
+  windowEndAt: string;
+  totalCount: number;
+  destinations: WorkerRestartDeliverySummaryRow[];
+}
+
+export interface WorkerRestartDeliveryQuery {
+  environment?: string;
+  destinationName?: string;
+  status?: string;
+  eventType?: string;
+  severity?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+  alertId?: string;
+  restartRequestId?: string;
+  formatterProfile?: string;
 }
 
 export interface WorkerRestartStatus {
