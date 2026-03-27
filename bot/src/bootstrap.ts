@@ -9,6 +9,7 @@ import { getKillSwitchState } from "./governance/kill-switch.js";
 import type { RuntimeController } from "./runtime/controller.js";
 import type { Config } from "./config/config-schema.js";
 import { createDecisionCoordinator } from "./core/decision/index.js";
+import { RuntimeConfigManager } from "./runtime/runtime-config-manager.js";
 
 /**
  * Bootstrap the application: validate config, start runtime, start server.
@@ -25,8 +26,19 @@ export async function bootstrap(options?: {
   const port = options?.port ?? parseInt(process.env.PORT ?? "3333", 10);
   const host = options?.host ?? process.env.HOST ?? "0.0.0.0";
   const runtimeDeps: RuntimeDeps = options?.runtimeDeps ?? {};
+  const runtimeConfigManager =
+    runtimeDeps.runtimeConfigManager ??
+    (await RuntimeConfigManager.create(config, {
+      environment: process.env.RUNTIME_CONFIG_ENV?.trim() ?? process.env.RENDER_SERVICE_NAME?.trim() ?? config.nodeEnv,
+      databaseUrl: process.env.DATABASE_URL,
+      redisUrl: process.env.REDIS_URL,
+      env: process.env,
+      bootstrapActor: "bootstrap",
+    }));
+  await runtimeConfigManager.initialize();
   const runtime = await createRuntime(config, {
     ...runtimeDeps,
+    runtimeConfigManager,
     decisionCoordinator: runtimeDeps.decisionCoordinator ?? createDecisionCoordinator(),
   });
 
@@ -59,9 +71,11 @@ export async function bootstrap(options?: {
       host,
       getBotStatus,
       getRuntimeSnapshot,
+      runtimeConfigManager,
       runtime,
       controlAuthToken: config.controlToken,
       operatorReadAuthToken: config.operatorReadToken,
+      dashboardOrigin: config.dashboardOrigin,
     });
   } catch (error) {
     await runtime.stop();

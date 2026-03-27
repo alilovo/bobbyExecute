@@ -195,7 +195,7 @@ export default function ControlPage() {
           <CardFooter>
             <p className="text-xs text-text-muted flex items-center gap-1.5">
               <Clock className="h-3 w-3" />
-              POST /emergency-stop
+              POST /api/control/emergency-stop
             </p>
           </CardFooter>
         </Card>
@@ -271,7 +271,7 @@ export default function ControlPage() {
           <CardFooter>
             <p className="text-xs text-text-muted flex items-center gap-1.5">
               <Clock className="h-3 w-3" />
-              POST /control/reset
+              POST /api/control/reset
             </p>
           </CardFooter>
         </Card>

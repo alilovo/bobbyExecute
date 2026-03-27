@@ -6,7 +6,7 @@ import type {
   MetricsResponse,
   EmergencyStopResponse,
   ResetResponse,
-} from '@/types/api';
+} from '../types/api';
 import { API_BASE, USE_MOCK } from './constants';
 import { mockHealth, mockSummary, mockAdapters, mockDecisions, mockMetrics } from './mock-data';
 
@@ -19,6 +19,22 @@ class ApiError extends Error {
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  });
+
+  if (!response.ok) {
+    throw new ApiError(response.status, `${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+async function fetchProxyApi<T>(path: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`/api/control${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -50,8 +66,8 @@ export const api = {
     USE_MOCK ? Promise.resolve(mockMetrics()) : fetchApi('/kpi/metrics'),
 
   emergencyStop: (): Promise<EmergencyStopResponse> =>
-    fetchApi('/emergency-stop', { method: 'POST' }),
+    fetchProxyApi('/emergency-stop', { method: 'POST' }),
 
   reset: (): Promise<ResetResponse> =>
-    fetchApi('/control/reset', { method: 'POST' }),
+    fetchProxyApi('/reset', { method: 'POST' }),
 };

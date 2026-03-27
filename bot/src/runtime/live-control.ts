@@ -1,4 +1,5 @@
 import type { TradeIntent } from "../core/contracts/trade.js";
+import type { RuntimeConfigControlView } from "../config/runtime-config-schema.js";
 import { getKillSwitchState, isKillSwitchHalted, triggerKillSwitch } from "../governance/kill-switch.js";
 import { getDailyLossState } from "../governance/daily-loss-tracker.js";
 import type {
@@ -90,7 +91,17 @@ export interface MicroLiveControlSnapshot {
   reasonCode?: LiveControlReasonCode;
   reasonDetail?: string;
   lastReasonAt?: string;
-  lastOperatorAction?: "arm" | "disarm" | "kill" | "reset_kill";
+  lastOperatorAction?:
+    | "arm"
+    | "disarm"
+    | "kill"
+    | "reset_kill"
+    | "mode"
+    | "pause"
+    | "resume"
+    | "kill_switch"
+    | "reload"
+    | "runtime_config";
   lastOperatorActionAt?: string;
   lastGuardrailRefusal?: {
     code: LiveControlReasonCode;
@@ -148,7 +159,7 @@ interface MutableControlState {
   reasonCode?: LiveControlReasonCode;
   reasonDetail?: string;
   lastReasonAt?: string;
-  lastOperatorAction?: "arm" | "disarm" | "kill" | "reset_kill";
+  lastOperatorAction?: MicroLiveControlSnapshot["lastOperatorAction"];
   lastOperatorActionAt?: string;
   lastGuardrailRefusal?: {
     code: LiveControlReasonCode;
@@ -193,9 +204,28 @@ const state: MutableControlState = {
   dailyKey: toDayKey(Date.now()),
 };
 let repository: LiveControlRepository | undefined;
+let runtimeControlViewProvider: (() => RuntimeConfigControlView | undefined) | undefined;
 
 export function configureLiveControlRepository(nextRepository?: LiveControlRepository): void {
   repository = nextRepository;
+}
+
+export function configureRuntimeControlViewProvider(
+  nextProvider?: (() => RuntimeConfigControlView | undefined)
+): void {
+  runtimeControlViewProvider = nextProvider;
+}
+
+function readRuntimeControlView(): RuntimeConfigControlView | undefined {
+  if (!runtimeControlViewProvider) {
+    return undefined;
+  }
+
+  try {
+    return runtimeControlViewProvider();
+  } catch {
+    return undefined;
+  }
 }
 
 export async function loadLiveControlState(nextRepository?: LiveControlRepository): Promise<void> {
@@ -338,6 +368,10 @@ function parseAllowlist(raw: string | undefined): string[] {
 }
 
 function isLiveTestModeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const view = readRuntimeControlView();
+  if (view) {
+    return view.liveTestMode;
+  }
   return String(env.LIVE_TEST_MODE).toLowerCase() === "true";
 }
 
@@ -435,6 +469,10 @@ function refuseRoundTransition(
 }
 
 function readExecutionMode(env: NodeJS.ProcessEnv): ExecutionMode {
+  const view = readRuntimeControlView();
+  if (view) {
+    return view.appliedExecutionMode;
+  }
   if (String(env.LIVE_TRADING).toLowerCase() === "true") {
     return "live";
   }
@@ -444,9 +482,21 @@ function readExecutionMode(env: NodeJS.ProcessEnv): ExecutionMode {
   return "dry";
 }
 
-function readRolloutPosture(
-  executionMode: ExecutionMode
-): RolloutSnapshot {
+function readRolloutPosture(executionMode: ExecutionMode): RolloutSnapshot {
+  const view = readRuntimeControlView();
+  if (view) {
+    const paused = view.paused || view.killSwitch;
+    const invalid = view.reasonCode === "micro_live_config_invalid";
+    return {
+      posture: paused ? "paused_or_rolled_back" : view.rolloutPosture,
+      configured: true,
+      valid: !invalid,
+      reasonCode: invalid ? "micro_live_config_invalid" : undefined,
+      reasonDetail: invalid ? view.degradedReason ?? view.reasonDetail : undefined,
+      lastReasonAt: view.lastReasonAt,
+    };
+  }
+
   const raw = process.env.ROLLOUT_POSTURE?.trim();
   const configured = raw != null && raw.length > 0;
 
@@ -483,6 +533,25 @@ function readRolloutPosture(
 }
 
 function readCaps(env: NodeJS.ProcessEnv): { valid: true; caps: MicroLiveCaps } | { valid: false; error: string } {
+  const view = readRuntimeControlView();
+  if (view) {
+    return {
+      valid: true,
+      caps: {
+        requireArm: view.rateCaps.requireArm,
+        maxNotionalPerTrade: view.rateCaps.maxNotionalPerTrade,
+        maxTradesPerWindow: view.rateCaps.maxTradesPerWindow,
+        windowMs: view.rateCaps.windowMs,
+        cooldownMs: view.rateCaps.cooldownMs,
+        maxInFlight: view.rateCaps.maxInFlight,
+        failuresToBlock: view.rateCaps.failuresToBlock,
+        failureWindowMs: view.rateCaps.failureWindowMs,
+        maxDailyNotional: view.rateCaps.maxDailyNotional,
+        allowlistTokens: [...view.filters.allowlistTokens],
+      },
+    };
+  }
+
   try {
     const caps: MicroLiveCaps = {
       requireArm: parseBool(env.MICRO_LIVE_REQUIRE_ARM, DEFAULT_CAPS.requireArm),
@@ -605,6 +674,7 @@ function parseIntentNotional(intent: TradeIntent): number | null {
 }
 
 export function getMicroLiveControlSnapshot(): MicroLiveControlSnapshot {
+  const runtimeControlView = readRuntimeControlView();
   const executionMode = readExecutionMode(process.env);
   const liveEnabled = executionMode === "live";
   const liveTestMode = isLiveTestModeEnabled();
@@ -638,16 +708,20 @@ export function getMicroLiveControlSnapshot(): MicroLiveControlSnapshot {
     liveEnabled,
     armed: state.armed,
     killSwitchActive: killSwitch.halted,
-    blocked: state.blocked || isTerminalRoundStatus(state.roundStatus),
+    blocked:
+      state.blocked ||
+      isTerminalRoundStatus(state.roundStatus) ||
+      killSwitch.halted ||
+      rollout.posture === "paused_or_rolled_back",
     disarmed: !state.armed,
     stopped: state.roundStatus === "stopped" || state.roundStatus === "completed" || state.roundStatus === "failed",
     degraded: state.degraded,
     manualRearmRequired: state.manualRearmRequired,
-    reasonCode: state.reasonCode,
-    reasonDetail: state.reasonDetail,
-    lastReasonAt: state.lastReasonAt,
-    lastOperatorAction: state.lastOperatorAction,
-    lastOperatorActionAt: state.lastOperatorActionAt,
+    reasonCode: (runtimeControlView?.reasonCode ?? state.reasonCode) as LiveControlReasonCode | undefined,
+    reasonDetail: runtimeControlView?.reasonDetail ?? state.reasonDetail,
+    lastReasonAt: runtimeControlView?.lastReasonAt ?? state.lastReasonAt,
+    lastOperatorAction: runtimeControlView?.lastOperatorAction ?? state.lastOperatorAction,
+    lastOperatorActionAt: runtimeControlView?.lastOperatorActionAt ?? state.lastOperatorActionAt,
     lastGuardrailRefusal: state.lastGuardrailRefusal,
     caps,
     counters: {

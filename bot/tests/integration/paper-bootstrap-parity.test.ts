@@ -246,7 +246,7 @@ describe("paper bootstrap integration parity (phase-6)", () => {
       message: "Rollout posture evaluated at runtime start",
       details: {
         rolloutPosture: "paper_only",
-        rolloutConfigured: false,
+        rolloutConfigured: true,
         rolloutConfigValid: true,
       },
     });

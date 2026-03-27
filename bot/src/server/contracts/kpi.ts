@@ -67,7 +67,17 @@ export interface RuntimeLiveControl {
   stopped: boolean;
   reasonCode?: string;
   reasonDetail?: string;
-  lastOperatorAction?: "arm" | "disarm" | "kill" | "reset_kill";
+  lastOperatorAction?:
+    | "arm"
+    | "disarm"
+    | "kill"
+    | "reset_kill"
+    | "mode"
+    | "pause"
+    | "resume"
+    | "kill_switch"
+    | "reload"
+    | "runtime_config";
   lastOperatorActionAt?: string;
   lastGuardrailRefusal?: {
     code: string;
@@ -168,6 +178,7 @@ export interface HealthResponse {
     lastEngineStage?: string;
     lastIntakeOutcome?: "ok" | "stale" | "adapter_error" | "invalid" | "kill_switch_halted";
     liveControl?: RuntimeLiveControl;
+    runtimeConfig?: import("../../config/runtime-config-schema.js").RuntimeConfigStatus;
     degraded?: {
       active: boolean;
       consecutiveCycles: number;
@@ -227,6 +238,7 @@ export interface KpiSummaryResponse {
     lastDecisionAt?: string;
     lastIntakeOutcome?: "ok" | "stale" | "adapter_error" | "invalid" | "kill_switch_halted";
     liveControl?: RuntimeLiveControl;
+    runtimeConfig?: import("../../config/runtime-config-schema.js").RuntimeConfigStatus;
     degraded?: {
       active: boolean;
       consecutiveCycles: number;

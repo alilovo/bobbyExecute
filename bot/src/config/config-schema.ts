@@ -57,6 +57,7 @@ export const ConfigSchema = z
 
     // Journal
     journalPath: z.string().optional().default("data/journal.jsonl"),
+    dashboardOrigin: z.string().url().optional(),
 
     // Circuit breaker
     circuitBreakerFailureThreshold: z.coerce.number().int().min(1).default(5),
@@ -159,6 +160,7 @@ export function parseConfig(env: Record<string, string | undefined>): Config {
     controlToken: env.CONTROL_TOKEN,
     operatorReadToken: env.OPERATOR_READ_TOKEN,
     journalPath: env.JOURNAL_PATH,
+    dashboardOrigin: env.DASHBOARD_ORIGIN,
     circuitBreakerFailureThreshold: env.CIRCUIT_BREAKER_FAILURE_THRESHOLD,
     circuitBreakerRecoveryMs: env.CIRCUIT_BREAKER_RECOVERY_MS,
     maxSlippagePercent: env.MAX_SLIPPAGE_PERCENT,

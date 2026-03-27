@@ -33,7 +33,17 @@ export interface PersistedLiveControlState {
   reasonCode?: LiveControlReasonCode;
   reasonDetail?: string;
   lastReasonAt?: string;
-  lastOperatorAction?: "arm" | "disarm" | "kill" | "reset_kill";
+  lastOperatorAction?:
+    | "arm"
+    | "disarm"
+    | "kill"
+    | "reset_kill"
+    | "mode"
+    | "pause"
+    | "resume"
+    | "kill_switch"
+    | "reload"
+    | "runtime_config";
   lastOperatorActionAt?: string;
   lastGuardrailRefusal?: {
     code: LiveControlReasonCode;

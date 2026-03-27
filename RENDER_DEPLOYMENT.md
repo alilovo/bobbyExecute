@@ -1,107 +1,122 @@
 # Render Deployment Guide
 
-Use this guide for the current bot API on Render.
+This repo now ships a Render Blueprint at [`render.yaml`](render.yaml).
+The Blueprint is the source of truth for the current deployment baseline.
 
-## What Runs on Render
+## Current Render Topology
 
-- `bot/` is the active TypeScript service.
-- Build command: `cd bot && npm install && npm run build`
-- Start command: `cd bot && npm run start:server`
-- Default listen address: `0.0.0.0:3333`
+The deployed baseline is intentionally transitional:
 
-## Recommended Service Settings
+- `bobbyexecute-bot-{staging,production}` runs the existing TypeScript bot runtime
+- `bobbyexecute-control-{staging,production}` runs the private control plane for authenticated mutations
+- `bobbyexecute-dashboard-{staging,production}` runs the Next.js dashboard
+- `bobbyexecute-postgres-{staging,production}` provides durable config/audit storage for the target model
+- `bobbyexecute-kv-{staging,production}` provides the fast override layer for the target model
 
-- Service type: Web Service
-- Runtime: Node
-- Root directory: repository root
-- Auto deploy: enabled on `main`
-- Persistent disk: recommended for `JOURNAL_PATH` and the adjacent runtime state files
+The public bot service now exposes read surfaces only. Mutations moved to the private control service, and the dashboard now proxies privileged calls through server-side routes instead of calling the bot directly from the browser.
 
-## Paper-Safe Production Environment
+## Build And Start
 
-Recommended for a deployed dashboard/back-end pair that should expose real runtime truth without enabling swaps:
+Bot service:
 
-```bash
-NODE_ENV=production
-LIVE_TRADING=false
-DRY_RUN=false
-RPC_MODE=real
-RPC_URL=<real solana rpc endpoint>
-TRADING_ENABLED=false
-RUNTIME_POLICY_AUTHORITY=ts-env
-PORT=3333
-HOST=0.0.0.0
-JOURNAL_PATH=/var/data/journal.jsonl
-```
+- Build: `cd bot && npm ci && npm run build`
+- Start: `cd bot && npm run start:server`
+- Listen address: `0.0.0.0:$PORT`
+- Persistent state: mounted at `/var/data`
 
-Optional hardening:
+Control service:
 
-```bash
-MAX_SLIPPAGE_PERCENT=5
-CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
-CIRCUIT_BREAKER_RECOVERY_MS=60000
-REVIEW_POLICY_MODE=required
-```
+- Build: `cd bot && npm ci && npm run build`
+- Start: `cd bot && npm run start:control`
+- Listen address: `0.0.0.0:$PORT`
+- Persistent state: no disk required; control state persists in Postgres and Key Value
 
-If you want a fully offline rehearsal, use:
+Dashboard service:
 
-```bash
-LIVE_TRADING=false
-DRY_RUN=true
-RPC_MODE=stub
-TRADING_ENABLED=false
-```
+- Build: `cd dashboard && npm ci && npm run build`
+- Start: `cd dashboard && npm run start`
+- Public API base: `NEXT_PUBLIC_API_URL` is injected from the bot service's `RENDER_EXTERNAL_URL`
+- Privileged control proxy: `CONTROL_SERVICE_HOSTNAME` and `CONTROL_SERVICE_PORT` are injected from the private control service, and `CONTROL_TOKEN` stays server-side only
 
-## Controlled Live-Test Environment
+## Environment Split
 
-Live-test mode is intentionally stricter:
+The Blueprint defines separate `staging` and `production` environments.
+The current repository does not yet have a dedicated staging branch, so both environments are anchored to the repo default branch for now.
 
-```bash
-NODE_ENV=production
-LIVE_TRADING=true
-DRY_RUN=false
-RPC_MODE=real
-RPC_URL=<real solana rpc endpoint>
-TRADING_ENABLED=true
-LIVE_TEST_MODE=true
-WALLET_ADDRESS=<wallet address>
-CONTROL_TOKEN=<control token>
-OPERATOR_READ_TOKEN=<operator read token>
-RUNTIME_POLICY_AUTHORITY=ts-env
-PORT=3333
-HOST=0.0.0.0
-JOURNAL_PATH=/var/data/journal.jsonl
-```
+Deployment behavior:
 
-- `CONTROL_TOKEN` and `OPERATOR_READ_TOKEN` must be distinct.
-- Startup fails closed if any live-test prerequisite is missing.
-- Keep the journal and control state on persistent storage.
+- Staging bot and dashboard auto-deploy on commit
+- Production dashboard and bot are manually promoted from Render for this baseline
 
-## Verification
+## Boot Configuration
 
-After deploy, verify these surfaces:
+These values remain boot-level configuration and are set in Render env vars:
 
-- `GET /health`
-- `GET /runtime/status`
-- `GET /kpi/summary`
-- `GET /kpi/decisions`
-- `GET /kpi/adapters`
-- `GET /kpi/metrics`
-- `GET /runtime/cycles`
-- `GET /runtime/cycles/:traceId/replay`
-- `GET /incidents`
+- `NODE_ENV=production`
+- `HOST=0.0.0.0`
+- `RUNTIME_CONFIG_ENV=staging|production`
+- `LIVE_TRADING=false`
+- `DRY_RUN=true`
+- `TRADING_ENABLED=false`
+- `LIVE_TEST_MODE=false`
+- `RPC_MODE=stub`
+- `RUNTIME_POLICY_AUTHORITY=ts-env`
+- `REVIEW_POLICY_MODE=required`
+- `MAX_SLIPPAGE_PERCENT=5`
+- `CIRCUIT_BREAKER_FAILURE_THRESHOLD=5`
+- `CIRCUIT_BREAKER_RECOVERY_MS=60000`
+- `JOURNAL_PATH=/var/data/journal.jsonl`
 
-If the service is in live-test mode, also verify:
+Secret placeholders are created with `sync: false` and must be filled in the Render dashboard:
 
-- `POST /emergency-stop`
-- `POST /control/live/arm`
-- `POST /control/live/disarm`
-- `POST /control/reset`
+- `CONTROL_TOKEN`
+- `OPERATOR_READ_TOKEN`
 
-## Deployment Loop
+The bot service also receives canonical datastore URLs from the Blueprint:
 
-1. Set the environment variables.
-2. Deploy the service.
-3. Verify the health and KPI endpoints.
-4. Confirm the runtime posture in `/runtime/status`.
-5. Test the control path before any live-test arming.
+- `DATABASE_URL` from the Render Postgres instance
+- `REDIS_URL` from the Render Key Value instance
+- `DASHBOARD_ORIGIN` from the dashboard service's external URL for browser CORS
+
+The private control service receives:
+
+- `CONTROL_TOKEN` as its mutation secret
+- `DATABASE_URL` from the same Render Postgres instance
+- `REDIS_URL` from the same Render Key Value instance
+- `RUNTIME_CONFIG_ENV` to keep the runtime namespace aligned with the bot service
+
+The dashboard server receives:
+
+- `CONTROL_TOKEN` as a server-only secret for the control proxy
+- `CONTROL_SERVICE_HOSTNAME` and `CONTROL_SERVICE_PORT` from the private control service
+- `NEXT_PUBLIC_API_URL` from the bot service's external URL for read-only browser fetches
+
+Runtime behavior is now controlled through the persisted runtime-config layer rather than by editing those env vars. The boot env values above act as seed defaults and fallback wiring only.
+
+The Key Value instance is a bootstrap resource in this wave.
+Before live control-plane state moves onto it, upgrade it to a paid persistent instance.
+The bot only emits CORS headers for the dashboard origin injected by the Blueprint, which keeps the browser fetch path explicit instead of globally open.
+
+## Persistent Storage
+
+The bot service owns the persistent disk mount.
+All file-backed runtime state derives from `JOURNAL_PATH`, so mounting the disk at `/var/data` keeps the journal, incidents, cycle summaries, idempotency state, kill switch state, and live-control state together.
+
+## Rollout Notes
+
+1. Deploy staging first.
+2. Verify the bot read surfaces: `/health`, `/kpi/summary`, `/kpi/decisions`, `/kpi/adapters`, `/kpi/metrics`, `/runtime/status`, `/runtime/cycles`, and `/incidents`.
+3. Verify the control surfaces: `/control/status`, `/control/runtime-config`, `/control/history`, `/control/mode`, `/control/pause`, `/control/resume`, `/control/kill-switch`, `/control/runtime-config`, and `/control/reload`.
+4. Fill the Render secrets for `CONTROL_TOKEN` and `OPERATOR_READ_TOKEN`.
+5. Confirm the dashboard proxy routes are using the private control service, not the public bot service.
+6. Promote the same commit to production only after staging is healthy.
+7. Treat `LIVE_TRADING`, `DRY_RUN`, `TRADING_ENABLED`, `LIVE_TEST_MODE`, `MAX_SLIPPAGE_PERCENT`, and the circuit breaker env values as boot-seed defaults only; runtime changes now go through the control API.
+
+## Current Gap
+
+The repository still needs the later waves from the target plan:
+
+- audit/history tables
+- server-side dashboard proxy for privileged control
+
+Those are not skipped; they are just intentionally not conflated with the first deployment baseline.

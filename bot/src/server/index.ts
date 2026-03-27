@@ -13,10 +13,12 @@ import type { KpiRouteDeps } from "./routes/kpi.js";
 import type { HealthRouteDeps } from "./routes/health.js";
 import type { RuntimeController } from "../runtime/controller.js";
 import type { RuntimeSnapshot } from "../runtime/dry-run-runtime.js";
+import type { RuntimeConfigManager } from "../runtime/runtime-config-manager.js";
 
 export interface ServerConfig {
   port?: number;
   host?: string;
+  dashboardOrigin?: string;
   circuitBreaker?: CircuitBreaker;
   actionLogger?: ActionLogger & { list?: () => import("../observability/action-log.js").ActionLogEntry[] };
   getP95?: (name: string) => number | undefined;
@@ -26,23 +28,81 @@ export interface ServerConfig {
   riskScore?: number;
   getRuntimeSnapshot?: () => RuntimeSnapshot;
   runtime?: RuntimeController;
+  runtimeConfigManager?: RuntimeConfigManager;
   controlAuthToken?: string;
   operatorReadAuthToken?: string;
 }
 
 const DEFAULT_PORT = 3333;
 const DEFAULT_HOST = "0.0.0.0";
+const LOCAL_ORIGINS = new Set([
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3001",
+]);
+
+function isAllowedOrigin(origin: string, dashboardOrigin?: string, allowLocalhost = false): boolean {
+  if (dashboardOrigin && origin === dashboardOrigin) {
+    return true;
+  }
+
+  if (!allowLocalhost) {
+    return false;
+  }
+
+  return LOCAL_ORIGINS.has(origin);
+}
 
 /**
  * Create and start the Fastify server.
  * Returns the server instance; call server.close() to stop.
  */
 export async function createServer(config: ServerConfig = {}) {
+  return createVisibilityServer(config, {
+    includeControlRoutes: false,
+    includeOperatorRoutes: true,
+  });
+}
+
+export async function createControlServer(config: ServerConfig = {}) {
+  return createVisibilityServer(config, {
+    includeControlRoutes: true,
+    includeOperatorRoutes: false,
+  });
+}
+
+async function createVisibilityServer(
+  config: ServerConfig,
+  options: {
+    includeControlRoutes: boolean;
+    includeOperatorRoutes: boolean;
+  }
+) {
   const port = config.port ?? DEFAULT_PORT;
   const host = config.host ?? DEFAULT_HOST;
   const startedAt = Date.now();
+  const allowLocalhostOrigins = process.env.NODE_ENV !== "production";
 
   const fastify = Fastify({ logger: true });
+  const allowedHeaders = options.includeControlRoutes
+    ? "Content-Type, Authorization, x-control-token, x-operator-token, x-idempotency-key, x-request-id"
+    : "Content-Type, Authorization, x-operator-token, x-idempotency-key, x-request-id";
+  fastify.addHook("onRequest", async (request, reply) => {
+    const origin = request.headers.origin;
+    if (origin && isAllowedOrigin(origin, config.dashboardOrigin, allowLocalhostOrigins)) {
+      reply.header("Access-Control-Allow-Origin", origin);
+      reply.header("Vary", "Origin");
+      reply.header("Access-Control-Allow-Credentials", "false");
+      reply.header("Access-Control-Allow-Headers", allowedHeaders);
+      reply.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+      reply.header("Access-Control-Max-Age", "86400");
+    }
+
+    if (request.method === "OPTIONS") {
+      return reply.code(204).send();
+    }
+  });
 
   await fastify.register(healthRoutes({
     circuitBreaker: config.circuitBreaker,
@@ -62,14 +122,24 @@ export async function createServer(config: ServerConfig = {}) {
     getRuntimeSnapshot: config.getRuntimeSnapshot,
   };
   await fastify.register(kpiRoutes(kpiDeps));
-  await fastify.register(controlRoutes({ runtime: config.runtime, requiredToken: config.controlAuthToken }));
-  await fastify.register(
-    operatorRoutes({
-      runtime: config.runtime,
-      getRuntimeSnapshot: config.getRuntimeSnapshot,
-      requiredToken: config.operatorReadAuthToken,
-    })
-  );
+  if (options.includeControlRoutes) {
+    await fastify.register(
+      controlRoutes({
+        runtime: config.runtime,
+        runtimeConfigManager: config.runtimeConfigManager,
+        requiredToken: config.controlAuthToken,
+      })
+    );
+  }
+  if (options.includeOperatorRoutes) {
+    await fastify.register(
+      operatorRoutes({
+        runtime: config.runtime,
+        getRuntimeSnapshot: config.getRuntimeSnapshot,
+        requiredToken: config.operatorReadAuthToken,
+      })
+    );
+  }
 
   await fastify.listen({ port, host });
   return fastify;

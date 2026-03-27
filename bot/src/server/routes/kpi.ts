@@ -124,6 +124,7 @@ export function kpiRoutes(deps: KpiRouteDeps): FastifyPluginAsync {
               errorCount: runtime.counters.errorCount,
               lastDecisionAt: runtime.lastDecisionAt,
               lastIntakeOutcome: runtime.lastCycleSummary?.intakeOutcome,
+              runtimeConfig: runtime.runtimeConfig,
               liveControl: runtime.liveControl
                 ? {
                     mode: runtime.liveControl.mode,

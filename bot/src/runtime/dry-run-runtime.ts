@@ -2,6 +2,7 @@ import { Engine, type EngineState } from "../core/engine.js";
 import type { Clock } from "../core/clock.js";
 import { SystemClock } from "../core/clock.js";
 import type { Config } from "../config/config-schema.js";
+import type { RuntimeConfigManager } from "./runtime-config-manager.js";
 import type { ExecutionReport, RpcVerificationReport, TradeIntent } from "../core/contracts/trade.js";
 import type { MarketSnapshot } from "../core/contracts/market.js";
 import type { WalletSnapshot } from "../core/contracts/wallet.js";
@@ -43,6 +44,7 @@ import {
   startLiveTestRound,
   stopLiveTestRound,
 } from "./live-control.js";
+import { resetKillSwitch } from "../governance/kill-switch.js";
 
 export type RuntimeStatus = "idle" | "running" | "paused" | "stopped" | "error";
 
@@ -138,6 +140,7 @@ export interface RuntimeSnapshot {
   paperModeActive: boolean;
   cycleInFlight: boolean;
   liveControl?: import("./live-control.js").MicroLiveControlSnapshot;
+  runtimeConfig?: import("../config/runtime-config-schema.js").RuntimeConfigStatus;
   counters: RuntimeCounters;
   lastCycleAt?: string;
   lastDecisionAt?: string;
@@ -160,6 +163,7 @@ export interface DryRunRuntimeDeps {
   actionLogger?: ActionLogger;
   clock?: Clock;
   decisionCoordinator?: DecisionCoordinator;
+  runtimeConfigManager?: RuntimeConfigManager;
   loopIntervalMs?: number;
   logger?: Pick<Console, "info" | "error">;
   fetchMarketDataFn?: typeof fetchMarketData;
@@ -195,6 +199,7 @@ export class DryRunRuntime {
   private readonly cycleSummaryWriter: RuntimeCycleSummaryWriter;
   private readonly incidentRecorder: IncidentRecorder;
   private readonly journalWriter: JournalWriter;
+  private readonly runtimeConfigManager?: RuntimeConfigManager;
   private intervalRef: NodeJS.Timeout | null = null;
   private status: RuntimeStatus = "idle";
   private lastState: EngineState | null = null;
@@ -242,6 +247,7 @@ export class DryRunRuntime {
     this.mode = config.executionMode;
     this.fetchMarketDataFn = deps.fetchMarketDataFn ?? fetchMarketData;
     this.paperMarketAdapters = deps.paperMarketAdapters ?? [];
+    this.runtimeConfigManager = deps.runtimeConfigManager;
     if (this.mode === "paper") {
       assertCanonicalPaperMarketAdapters(this.paperMarketAdapters);
     }
@@ -328,7 +334,20 @@ export class DryRunRuntime {
         message: control.message,
       };
     }
-    if (this.mode === "live" && this.config.liveTestMode) {
+    if (this.runtimeConfigManager) {
+      const mutation = await this.runtimeConfigManager.setKillSwitch({
+        action: "trigger",
+        actor: "runtime",
+        reason,
+      });
+      if (!mutation.accepted) {
+        return {
+          success: false,
+          status: this.status,
+          message: mutation.rejectionReason ?? mutation.message,
+        };
+      }
+    } else if (this.mode === "live" && this.config.liveTestMode) {
       void triggerKillSwitch(reason);
     }
     await this.recordIncident({
@@ -450,6 +469,7 @@ export class DryRunRuntime {
       paperModeActive: this.mode === "paper",
       cycleInFlight: this.cycleInFlight,
       liveControl: getMicroLiveControlSnapshot(),
+      runtimeConfig: this.runtimeConfigManager?.getRuntimeConfigStatus(),
       counters: { ...this.counters },
       lastCycleAt: this.lastCycleAt,
       lastDecisionAt: this.lastDecisionAt,
@@ -508,6 +528,22 @@ export class DryRunRuntime {
     const control = this.mode === "live" && this.config.liveTestMode ? resetLiveTestRound(reason) : resetKilledMicroLive(reason);
     if (this.mode === "live" && this.config.liveTestMode) {
       this.status = "paused";
+    }
+    if (this.runtimeConfigManager) {
+      const mutation = await this.runtimeConfigManager.setKillSwitch({
+        action: "reset",
+        actor: "runtime",
+        reason,
+      });
+      if (!mutation.accepted) {
+        return {
+          success: false,
+          status: this.status,
+          message: mutation.rejectionReason ?? mutation.message,
+        };
+      }
+    } else {
+      resetKillSwitch();
     }
     await this.recordIncident({
       severity: "info",
@@ -776,56 +812,59 @@ export class DryRunRuntime {
       return;
     }
 
+    this.cycleInFlight = true;
     let currentCycleIntakeOutcome: RuntimeCycleIntakeOutcome = "invalid";
     let currentCycleTimestamp = this.clock.now().toISOString();
     let currentCycleTraceId = `runtime-${currentCycleTimestamp}`;
 
-    if (isKillSwitchHalted()) {
-      const now = currentCycleTimestamp;
-      const traceId = `runtime-${now}`;
-      this.status = "paused";
-      this.lastState = {
-        stage: "risk",
-        traceId,
-        timestamp: now,
-        blocked: true,
-        blockedReason: "RUNTIME_PHASE2_KILL_SWITCH_HALTED",
-      };
-      this.lastCycleAt = now;
-      this.counters.blockedCount += 1;
-      const incident = await this.recordIncident({
-        severity: "critical",
-        type: "runtime_paused",
-        message: "Runtime paused because kill switch is active",
-        details: { reason: "kill_switch_halted", intakeOutcome: "kill_switch_halted", traceId },
-      });
-      await this.persistCycleSummary({
-        cycleTimestamp: now,
-        traceId,
-        mode: this.mode,
-        outcome: "blocked",
-        intakeOutcome: "kill_switch_halted",
-        advanced: false,
-        stage: "risk",
-        blocked: true,
-        blockedReason: "RUNTIME_PHASE2_KILL_SWITCH_HALTED",
-        decisionOccurred: false,
-        signalOccurred: false,
-        riskOccurred: false,
-        chaosOccurred: false,
-        executionOccurred: false,
-        verificationOccurred: false,
-        paperExecutionProduced: false,
-        errorOccurred: false,
-        degradedState: this.getCycleDegradedStateSummary(),
-        adapterHealth: this.getCycleAdapterHealthSummary(),
-        incidentIds: [incident.id],
-      });
-      return;
-    }
-
-    this.cycleInFlight = true;
     try {
+      await this.runtimeConfigManager?.refresh();
+
+      if (isKillSwitchHalted()) {
+        const now = currentCycleTimestamp;
+        const traceId = `runtime-${now}`;
+        this.status = "paused";
+        this.lastState = {
+          stage: "risk",
+          traceId,
+          timestamp: now,
+          blocked: true,
+          blockedReason: "RUNTIME_PHASE2_KILL_SWITCH_HALTED",
+        };
+        this.lastCycleAt = now;
+        this.counters.blockedCount += 1;
+        const incident = await this.recordIncident({
+          severity: "critical",
+          type: "runtime_paused",
+          message: "Runtime paused because kill switch is active",
+          details: { reason: "kill_switch_halted", intakeOutcome: "kill_switch_halted", traceId },
+        });
+        await this.persistCycleSummary({
+          cycleTimestamp: now,
+          traceId,
+          mode: this.mode,
+          outcome: "blocked",
+          intakeOutcome: "kill_switch_halted",
+          advanced: false,
+          stage: "risk",
+          blocked: true,
+          blockedReason: "RUNTIME_PHASE2_KILL_SWITCH_HALTED",
+          decisionOccurred: false,
+          signalOccurred: false,
+          riskOccurred: false,
+          chaosOccurred: false,
+          executionOccurred: false,
+          verificationOccurred: false,
+          paperExecutionProduced: false,
+          errorOccurred: false,
+          degradedState: this.getCycleDegradedStateSummary(),
+          adapterHealth: this.getCycleAdapterHealthSummary(),
+          incidentIds: [incident.id],
+        });
+        return;
+      }
+
+      this.runtimeConfigManager?.beginCycle();
       const now = currentCycleTimestamp;
       this.recoveredThisCycle = false;
       this.counters.cycleCount += 1;
@@ -1061,6 +1100,7 @@ export class DryRunRuntime {
         throw error instanceof Error ? error : new Error(String(error));
       }
     } finally {
+      await this.runtimeConfigManager?.endCycle();
       this.cycleInFlight = false;
     }
   }

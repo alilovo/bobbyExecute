@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  turbopack: {
+    // Keep Next rooted at the dashboard package instead of the repo root.
+    root: process.cwd(),
+  },
 };
 
 export default nextConfig;

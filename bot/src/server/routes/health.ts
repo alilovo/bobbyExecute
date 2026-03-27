@@ -47,6 +47,7 @@ export function healthRoutes(deps: HealthRouteDeps): FastifyPluginAsync {
               lastBlockedReason: runtimeSnapshot.lastState?.blockedReason,
               lastEngineStage: runtimeSnapshot.lastState?.stage,
               lastIntakeOutcome: runtimeSnapshot.lastCycleSummary?.intakeOutcome,
+              runtimeConfig: runtimeSnapshot.runtimeConfig,
               liveControl: runtimeSnapshot.liveControl
                 ? {
                     mode: runtimeSnapshot.liveControl.mode,

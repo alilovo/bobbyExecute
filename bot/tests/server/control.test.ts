@@ -5,15 +5,16 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createServer } from "../../src/server/index.js";
+import { createControlServer } from "../../src/server/index.js";
 import { resetKillSwitch } from "../../src/governance/kill-switch.js";
 import type { DryRunRuntime } from "../../src/runtime/dry-run-runtime.js";
 import { resetMicroLiveControlForTests } from "../../src/runtime/live-control.js";
+import { createRuntimeConfigTestManager } from "../helpers/runtime-config-test-kit.js";
 
 const CONTROL_TOKEN = "phase10-control-token";
 
-async function createBoundServer(config: Parameters<typeof createServer>[0]) {
-  const server = await createServer({
+async function createBoundServer(config: Parameters<typeof createControlServer>[0]) {
+  const server = await createControlServer({
     ...config,
     port: 0,
     host: "127.0.0.1",
@@ -351,8 +352,10 @@ describe("Control routes", () => {
     }
   });
 
-  it("POST /emergency-stop fails closed when runtime control is unavailable", async () => {
+  it("POST /emergency-stop persists kill-switch state even when runtime is not wired", async () => {
+    const { manager } = await createRuntimeConfigTestManager();
     const { server: runtimeLessServer, baseUrl: runtimeLessBaseUrl } = await createBoundServer({
+      runtimeConfigManager: manager,
       controlAuthToken: CONTROL_TOKEN,
     });
 
@@ -361,13 +364,12 @@ describe("Control routes", () => {
         method: "POST",
         headers: authHeaders(),
       });
-      expect(res.status).toBe(503);
+      expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.success).toBe(false);
-      expect(body.code).toBe("runtime_control_unavailable");
+      expect(body.success).toBe(true);
       expect(body.runtimeStatus).toBeUndefined();
-      expect(body.message).toContain("runtime control is unavailable");
       expect(body.killSwitch.halted).toBe(true);
+      expect(body.controlView.killSwitch).toBe(true);
     } finally {
       await runtimeLessServer.close();
       resetKillSwitch();

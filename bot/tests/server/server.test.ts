@@ -67,6 +67,40 @@ describe("Server (Wave 3)", () => {
     }
   });
 
+  it("emits CORS headers for the configured dashboard origin", async () => {
+    const dashboardOrigin = "https://dashboard.example.com";
+    const srv = await createServer({
+      port: PORT + 9,
+      host: "127.0.0.1",
+      dashboardOrigin,
+    });
+
+    try {
+      const preflight = await fetch(`http://127.0.0.1:${PORT + 9}/health`, {
+        method: "OPTIONS",
+        headers: {
+          Origin: dashboardOrigin,
+          "Access-Control-Request-Method": "GET",
+          "Access-Control-Request-Headers": "content-type",
+        },
+      });
+
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("access-control-allow-origin")).toBe(dashboardOrigin);
+      expect(preflight.headers.get("access-control-allow-methods")).toContain("GET");
+      expect(preflight.headers.get("access-control-allow-headers")).toContain("x-operator-token");
+      expect(preflight.headers.get("access-control-allow-headers")).not.toContain("x-control-token");
+
+      const health = await fetch(`http://127.0.0.1:${PORT + 9}/health`, {
+        headers: { Origin: dashboardOrigin },
+      });
+      expect(health.status).toBe(200);
+      expect(health.headers.get("access-control-allow-origin")).toBe(dashboardOrigin);
+    } finally {
+      await srv.close();
+    }
+  });
+
   it("GET /kpi/summary uses dynamic bot status resolver", async () => {
     let status: "running" | "paused" | "stopped" = "running";
     const srv = await createServer({
@@ -347,6 +381,33 @@ describe("Server (Wave 3)", () => {
       tradesToday: expect.any(Number),
     });
     expect(typeof body.lastDecisionAt === "string" || body.lastDecisionAt === null).toBe(true);
+  });
+
+  it("does not expose control mutations on the public bot surface", async () => {
+    const controlRes = await fetch(`${baseUrl}/control/runtime-config`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        patch: {
+          filters: {
+            allowlistTokens: ["SOL"],
+          },
+        },
+      }),
+    });
+
+    expect(controlRes.status).toBe(404);
+
+    const emergencyRes = await fetch(`${baseUrl}/emergency-stop`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+    });
+
+    expect([400, 404]).toContain(emergencyRes.status);
   });
 
   it("derives lastDecisionAt from runtime snapshot when action logger has no entries", async () => {

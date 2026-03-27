@@ -1,4 +1,5 @@
 import type { Config } from "../config/config-schema.js";
+import type { RuntimeConfigManager } from "./runtime-config-manager.js";
 import type { Clock } from "../core/clock.js";
 import { SystemClock } from "../core/clock.js";
 import type { MarketSnapshot } from "../core/contracts/market.js";
@@ -93,6 +94,7 @@ export interface LiveRuntimeDeps {
   executionHandlerFactory?: typeof createExecutionHandler;
   clock?: Clock;
   decisionCoordinator?: DecisionCoordinator;
+  runtimeConfigManager?: RuntimeConfigManager;
   rpcClient?: RpcClient;
   signTransaction?: ExecutionHandlerDeps["signTransaction"];
   buildSwapTransaction?: ExecutionHandlerDeps["buildSwapTransaction"];
@@ -122,6 +124,7 @@ interface LiveRuntimeResolvedDeps {
   idempotencyRepository: IdempotencyRepository;
   clock: Clock;
   decisionCoordinator: DecisionCoordinator;
+  runtimeConfigManager?: RuntimeConfigManager;
   logger: Pick<Console, "info" | "error">;
   loopIntervalMs: number;
 }
@@ -344,6 +347,7 @@ export async function createLiveRuntime(config: Config, runtimeDeps: LiveRuntime
 export class LiveRuntime implements RuntimeController {
   private readonly clock: Clock;
   private readonly decisionCoordinator: DecisionCoordinator;
+  private readonly runtimeConfigManager?: RuntimeConfigManager;
   private intervalRef: NodeJS.Timeout | null = null;
   private status: RuntimeStatus = "idle";
   private cycleInFlight = false;
@@ -367,6 +371,7 @@ export class LiveRuntime implements RuntimeController {
   ) {
     this.clock = deps.clock;
     this.decisionCoordinator = deps.decisionCoordinator;
+    this.runtimeConfigManager = deps.runtimeConfigManager;
   }
 
   async start(): Promise<void> {
@@ -410,7 +415,22 @@ export class LiveRuntime implements RuntimeController {
     if (this.config.liveTestMode) {
       stopLiveTestRound(reason, "api_emergency_stop");
     }
-    triggerKillSwitch(reason);
+    if (this.runtimeConfigManager) {
+      const mutation = await this.runtimeConfigManager.setKillSwitch({
+        action: "trigger",
+        actor: "runtime",
+        reason,
+      });
+      if (!mutation.accepted) {
+        return {
+          success: false,
+          status: this.status,
+          message: mutation.rejectionReason ?? mutation.message,
+        };
+      }
+    } else {
+      triggerKillSwitch(reason);
+    }
     await this.recordIncident({
       severity: "critical",
       type: "emergency_stop",
@@ -517,7 +537,22 @@ export class LiveRuntime implements RuntimeController {
 
   async resetLiveKill(reason = "operator_reset_kill"): Promise<RuntimeControlResult> {
     const control = this.config.liveTestMode ? resetLiveTestRound(reason) : resetKilledMicroLive(reason);
-    resetKillSwitch();
+    if (this.runtimeConfigManager) {
+      const mutation = await this.runtimeConfigManager.setKillSwitch({
+        action: "reset",
+        actor: "runtime",
+        reason,
+      });
+      if (!mutation.accepted) {
+        return {
+          success: false,
+          status: this.status,
+          message: mutation.rejectionReason ?? mutation.message,
+        };
+      }
+    } else {
+      resetKillSwitch();
+    }
     await this.recordIncident({
       severity: "info",
       type: "live_control_disarmed",
@@ -538,6 +573,7 @@ export class LiveRuntime implements RuntimeController {
       paperModeActive: false,
       cycleInFlight: this.cycleInFlight,
       liveControl: getMicroLiveControlSnapshot(),
+      runtimeConfig: this.runtimeConfigManager?.getRuntimeConfigStatus(),
       counters: { ...this.counters },
       lastCycleAt: this.lastCycleAt,
       lastDecisionAt: this.lastDecisionAt,
@@ -578,50 +614,53 @@ export class LiveRuntime implements RuntimeController {
       return;
     }
 
+    this.cycleInFlight = true;
     let currentCycleTimestamp = this.clock.now().toISOString();
     let currentCycleTraceId = `runtime-${currentCycleTimestamp}`;
     let currentCycleIntakeOutcome: "ok" | "stale" | "adapter_error" | "invalid" | "kill_switch_halted" = "invalid";
 
-    if (isKillSwitchHalted()) {
-      this.status = "paused";
-      this.lastState = {
-        stage: "risk",
-        traceId: currentCycleTraceId,
-        timestamp: currentCycleTimestamp,
-        blocked: true,
-        blockedReason: "RUNTIME_PHASE2_KILL_SWITCH_HALTED",
-      };
-      this.counters.blockedCount += 1;
-      const incident = await this.recordIncident({
-        severity: "critical",
-        type: "runtime_paused",
-        message: "Runtime paused because kill switch is active",
-        details: { reason: "kill_switch_halted", traceId: currentCycleTraceId },
-      });
-      await this.persistCycleSummary(
-        toCycleSummary({
-          cycleTimestamp: currentCycleTimestamp,
-          traceId: currentCycleTraceId,
-          mode: "live",
-          outcome: "blocked",
-          intakeOutcome: "kill_switch_halted",
+    try {
+      await this.runtimeConfigManager?.refresh();
+
+      if (isKillSwitchHalted()) {
+        this.status = "paused";
+        this.lastState = {
           stage: "risk",
+          traceId: currentCycleTraceId,
+          timestamp: currentCycleTimestamp,
           blocked: true,
           blockedReason: "RUNTIME_PHASE2_KILL_SWITCH_HALTED",
-          decisionOccurred: false,
-          signalOccurred: false,
-          riskOccurred: false,
-          executionOccurred: false,
-          verificationOccurred: false,
-          errorOccurred: false,
-          incidentIds: [incident.id],
-        })
-      );
-      return;
-    }
+        };
+        this.counters.blockedCount += 1;
+        const incident = await this.recordIncident({
+          severity: "critical",
+          type: "runtime_paused",
+          message: "Runtime paused because kill switch is active",
+          details: { reason: "kill_switch_halted", traceId: currentCycleTraceId },
+        });
+        await this.persistCycleSummary(
+          toCycleSummary({
+            cycleTimestamp: currentCycleTimestamp,
+            traceId: currentCycleTraceId,
+            mode: "live",
+            outcome: "blocked",
+            intakeOutcome: "kill_switch_halted",
+            stage: "risk",
+            blocked: true,
+            blockedReason: "RUNTIME_PHASE2_KILL_SWITCH_HALTED",
+            decisionOccurred: false,
+            signalOccurred: false,
+            riskOccurred: false,
+            executionOccurred: false,
+            verificationOccurred: false,
+            errorOccurred: false,
+            incidentIds: [incident.id],
+          })
+        );
+        return;
+      }
 
-    this.cycleInFlight = true;
-    try {
+      this.runtimeConfigManager?.beginCycle();
       currentCycleTimestamp = this.clock.now().toISOString();
       currentCycleTraceId = `runtime-${currentCycleTimestamp}`;
       this.counters.cycleCount += 1;
@@ -1002,6 +1041,7 @@ export class LiveRuntime implements RuntimeController {
         throw error instanceof Error ? error : new Error(String(error));
       }
     } finally {
+      await this.runtimeConfigManager?.endCycle();
       this.cycleInFlight = false;
     }
   }
