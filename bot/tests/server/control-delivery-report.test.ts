@@ -443,4 +443,59 @@ describe("control delivery reporting routes", () => {
       message: "delivery window start must be before the end",
     });
   }, 15000);
+
+  it("returns compact delivery trend rows and empty results through the control plane", async () => {
+    const harness = await createHarness();
+    harnesses.push(harness);
+
+    const trendResponse = await fetch(
+      `${harness.baseUrl}/control/restart-alert-deliveries/trends?environment=production&destinationName=secondary`,
+      {
+        headers: controlHeaders(),
+      }
+    );
+    expect(trendResponse.status).toBe(200);
+    await expect(trendResponse.json()).resolves.toMatchObject({
+      success: true,
+      totalCount: 1,
+      destinations: [
+        expect.objectContaining({
+          destinationName: "secondary",
+          currentWindow: expect.objectContaining({
+            totalCount: 1,
+            failedCount: 1,
+          }),
+          comparisonWindow: expect.objectContaining({
+            totalCount: 1,
+          }),
+          currentHealthHint: "failing",
+          trendHint: "insufficient_data",
+        }),
+      ],
+    });
+
+    const emptyResponse = await fetch(`${harness.baseUrl}/control/restart-alert-deliveries/trends?environment=qa`, {
+      headers: controlHeaders(),
+    });
+    expect(emptyResponse.status).toBe(200);
+    await expect(emptyResponse.json()).resolves.toMatchObject({
+      success: true,
+      totalCount: 0,
+      destinations: [],
+    });
+  }, 15000);
+
+  it("rejects invalid delivery trend query params cleanly", async () => {
+    const harness = await createHarness();
+    harnesses.push(harness);
+
+    const response = await fetch(`${harness.baseUrl}/control/restart-alert-deliveries/trends?foo=bar`, {
+      headers: controlHeaders(),
+    });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      message: "invalid trend query parameter: foo",
+    });
+  }, 15000);
 });

@@ -8,9 +8,14 @@ import type {
   RestartAlertListResponse,
   WorkerRestartDeliveryJournalResponse,
   WorkerRestartDeliverySummaryResponse,
+  WorkerRestartDeliveryTrendQuery,
+  WorkerRestartDeliveryTrendResponse,
+  WorkerRestartDeliveryTrendRow,
+  WorkerRestartDeliveryTrendWindowSummary,
   RestartWorkerRequest,
   RestartWorkerResponse,
   WorkerRestartAlertRecord,
+  WorkerRestartAlertNotificationEventType,
   WorkerRestartStatus,
 } from '@/types/api';
 
@@ -490,6 +495,206 @@ export function mockRestartAlertDeliverySummary(query: DeliveryMockQuery = {}): 
     ...summary,
     windowStartAt: query.from ?? ago(24 * 60 * 60 * 1000),
     windowEndAt: query.to ?? now(),
+  };
+}
+
+function buildMockTrendWindowSummary(
+  windowStartAt: string,
+  windowEndAt: string,
+  counts: Pick<WorkerRestartDeliveryTrendWindowSummary, 'totalCount' | 'sentCount' | 'failedCount' | 'suppressedCount' | 'skippedCount'>,
+  recentEnvironments: string[],
+  recentEventTypes: WorkerRestartDeliveryTrendWindowSummary['recentEventTypes'],
+  healthHint: WorkerRestartDeliveryTrendWindowSummary['healthHint'],
+  lastActivityAt?: string,
+  lastSentAt?: string,
+  lastFailedAt?: string,
+  lastSuppressedAt?: string,
+  lastSkippedAt?: string
+): WorkerRestartDeliveryTrendWindowSummary {
+  const failureRate = counts.totalCount > 0 ? counts.failedCount / counts.totalCount : 0;
+  const suppressionRate = counts.totalCount > 0 ? counts.suppressedCount / counts.totalCount : 0;
+  return {
+    windowStartAt,
+    windowEndAt,
+    ...counts,
+    failureRate,
+    suppressionRate,
+    healthHint,
+    recentEnvironments,
+    recentEventTypes,
+    lastActivityAt,
+    lastSentAt,
+    lastFailedAt,
+    lastSuppressedAt,
+    lastSkippedAt,
+  };
+}
+
+function buildMockTrendRows(referenceEndAt: string): WorkerRestartDeliveryTrendRow[] {
+  const currentWindowStartAt = new Date(Date.parse(referenceEndAt) - 24 * 60 * 60 * 1000).toISOString();
+  const comparisonWindowStartAt = new Date(Date.parse(referenceEndAt) - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  return [
+    {
+      destinationName: 'primary',
+      destinationType: 'primary',
+      sinkType: 'generic_webhook',
+      formatterProfile: 'generic',
+      currentWindow: buildMockTrendWindowSummary(
+        currentWindowStartAt,
+        referenceEndAt,
+        { totalCount: 13, sentCount: 12, failedCount: 1, suppressedCount: 0, skippedCount: 0 },
+        ['production'],
+        ['alert_opened'],
+        'healthy',
+        ago(3_600_000),
+        ago(3_600_000),
+        ago(2 * 3_600_000)
+      ),
+      comparisonWindow: buildMockTrendWindowSummary(
+        comparisonWindowStartAt,
+        referenceEndAt,
+        { totalCount: 78, sentCount: 72, failedCount: 4, suppressedCount: 1, skippedCount: 1 },
+        ['production'],
+        ['alert_opened', 'alert_escalated'],
+        'healthy',
+        ago(3_600_000),
+        ago(3_600_000),
+        ago(2 * 3_600_000),
+        ago(4 * 3_600_000),
+        ago(5 * 3_600_000)
+      ),
+      currentHealthHint: 'healthy',
+      comparisonHealthHint: 'healthy',
+      trendHint: 'stable',
+      recentFailureDelta: 0,
+      recentSuppressionDelta: 0,
+      recentVolumeDelta: 2,
+      lastSentAt: ago(3_600_000),
+      lastFailedAt: ago(2 * 3_600_000),
+      summaryText: 'Delivery behavior is stable: 24h activity stays close to the 7d baseline.',
+    },
+    {
+      destinationName: 'secondary',
+      destinationType: 'secondary',
+      sinkType: 'generic_webhook',
+      formatterProfile: 'slack',
+      currentWindow: buildMockTrendWindowSummary(
+        currentWindowStartAt,
+        referenceEndAt,
+        { totalCount: 5, sentCount: 1, failedCount: 4, suppressedCount: 0, skippedCount: 0 },
+        ['production'],
+        ['alert_escalated'],
+        'failing',
+        ago(30 * 60 * 1000),
+        ago(45 * 60 * 1000),
+        ago(15 * 60 * 1000)
+      ),
+      comparisonWindow: buildMockTrendWindowSummary(
+        comparisonWindowStartAt,
+        referenceEndAt,
+        { totalCount: 28, sentCount: 18, failedCount: 5, suppressedCount: 2, skippedCount: 3 },
+        ['production'],
+        ['alert_opened', 'alert_escalated', 'alert_repeated_failure_summary'],
+        'degraded',
+        ago(30 * 60 * 1000),
+        ago(45 * 60 * 1000),
+        ago(15 * 60 * 1000),
+        ago(5 * 60 * 1000),
+        ago(90 * 60 * 1000)
+      ),
+      currentHealthHint: 'failing',
+      comparisonHealthHint: 'degraded',
+      trendHint: 'worsening',
+      recentFailureDelta: 3,
+      recentSuppressionDelta: -1,
+      recentVolumeDelta: 1,
+      lastSentAt: ago(30 * 60 * 1000),
+      lastFailedAt: ago(15 * 60 * 1000),
+      summaryText: 'Delivery behavior is worsening: +3 failure delta, -1 suppression delta, health degraded -> failing.',
+    },
+    {
+      destinationName: 'staging',
+      destinationType: 'staging',
+      sinkType: 'generic_webhook',
+      formatterProfile: 'generic',
+      currentWindow: buildMockTrendWindowSummary(
+        currentWindowStartAt,
+        referenceEndAt,
+        { totalCount: 0, sentCount: 0, failedCount: 0, suppressedCount: 0, skippedCount: 0 },
+        [],
+        [],
+        'idle'
+      ),
+      comparisonWindow: buildMockTrendWindowSummary(
+        comparisonWindowStartAt,
+        referenceEndAt,
+        { totalCount: 6, sentCount: 4, failedCount: 0, suppressedCount: 1, skippedCount: 1 },
+        ['staging'],
+        ['alert_opened', 'alert_resolved'],
+        'healthy',
+        ago(2 * 24 * 60 * 60 * 1000),
+        ago(2 * 24 * 60 * 60 * 1000),
+        undefined,
+        ago(3 * 24 * 60 * 60 * 1000),
+        ago(4 * 24 * 60 * 60 * 1000)
+      ),
+      currentHealthHint: 'idle',
+      comparisonHealthHint: 'healthy',
+      trendHint: 'inactive',
+      recentFailureDelta: 0,
+      recentSuppressionDelta: 0,
+      recentVolumeDelta: -1,
+      lastSentAt: ago(2 * 24 * 60 * 60 * 1000),
+      lastFailedAt: undefined,
+      summaryText: 'No delivery activity in the last 24h after 6 events across 7d.',
+    },
+  ];
+}
+
+export function mockRestartAlertDeliveryTrends(query: WorkerRestartDeliveryTrendQuery = {}): WorkerRestartDeliveryTrendResponse {
+  const referenceEndAt = query.referenceEndAt ?? now();
+  const rows = buildMockTrendRows(referenceEndAt).filter((row) => {
+    if (query.environment && !row.currentWindow.recentEnvironments.includes(query.environment) && !row.comparisonWindow.recentEnvironments.includes(query.environment)) {
+      return false;
+    }
+    if (query.destinationName && row.destinationName !== query.destinationName) {
+      return false;
+    }
+    if (query.formatterProfile && row.formatterProfile !== query.formatterProfile) {
+      return false;
+    }
+    if (
+      query.eventType &&
+      !row.currentWindow.recentEventTypes.includes(query.eventType as WorkerRestartAlertNotificationEventType) &&
+      !row.comparisonWindow.recentEventTypes.includes(query.eventType as WorkerRestartAlertNotificationEventType)
+    ) {
+      return false;
+    }
+    if (query.severity) {
+      const severityBucket = row.currentHealthHint === 'failing' || row.comparisonHealthHint === 'failing'
+        ? 'critical'
+        : row.currentHealthHint === 'degraded' || row.comparisonHealthHint === 'degraded'
+          ? 'warning'
+          : 'info';
+      if (severityBucket !== query.severity) {
+        return false;
+      }
+    }
+    return true;
+  });
+  const limit = query.limit ?? 50;
+  const currentWindowStartAt = new Date(Date.parse(referenceEndAt) - 24 * 60 * 60 * 1000).toISOString();
+  const comparisonWindowStartAt = new Date(Date.parse(referenceEndAt) - 7 * 24 * 60 * 60 * 1000).toISOString();
+  return {
+    success: true,
+    referenceEndAt,
+    currentWindowStartAt,
+    comparisonWindowStartAt,
+    limit,
+    totalCount: rows.length,
+    hasMore: rows.length > limit,
+    destinations: rows.slice(0, limit),
   };
 }
 

@@ -7,6 +7,7 @@ import {
   useEmergencyStop,
   useRestartAlertDeliveries,
   useRestartAlertDeliverySummary,
+  useRestartAlertDeliveryTrends,
   useResetKillSwitch,
   useRestartAlerts,
   useRestartWorker,
@@ -18,6 +19,19 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { LoadingCard } from '@/components/shared/loading-card';
 import { ErrorCard } from '@/components/shared/error-card';
+import {
+  buildDeliveryQueryFromDraft,
+  buildTrendDrilldown,
+  captureDeliveryJournalSnapshot,
+  createEmptyDeliveryJournalDraft,
+  drilldownLabel,
+  drilldownWindowRangeLabel,
+  restoreDeliveryJournalSnapshot,
+  type DeliveryDrilldownWindow,
+  type DeliveryJournalDraft,
+  type DeliveryJournalSnapshot,
+  type DeliveryTrendDrilldownState,
+} from '@/lib/delivery-drilldown';
 import { formatTimestampFull, relativeTime } from '@/lib/utils';
 import type {
   WorkerRestartAlertRecord,
@@ -25,6 +39,9 @@ import type {
   WorkerRestartDeliveryJournalRow,
   WorkerRestartDeliveryQuery,
   WorkerRestartDeliverySummaryRow,
+  WorkerRestartDeliveryTrendHint,
+  WorkerRestartDeliveryTrendQuery,
+  WorkerRestartDeliveryTrendRow,
   WorkerRestartStatus,
 } from '@/types/api';
 import { ShieldAlert, ShieldCheck, OctagonX, RotateCcw, AlertTriangle, Clock, Server } from 'lucide-react';
@@ -169,6 +186,35 @@ function deliveryHealthLabel(hint?: WorkerRestartDeliveryHealthHint): string {
   return hint ? hint.toUpperCase() : 'UNKNOWN';
 }
 
+function trendHintVariant(
+  hint?: WorkerRestartDeliveryTrendHint
+): 'default' | 'success' | 'warning' | 'danger' | 'info' {
+  switch (hint) {
+    case 'improving':
+      return 'success';
+    case 'worsening':
+      return 'danger';
+    case 'inactive':
+      return 'info';
+    case 'insufficient_data':
+      return 'warning';
+    default:
+      return 'default';
+  }
+}
+
+function trendHintLabel(hint?: WorkerRestartDeliveryTrendHint): string {
+  return hint ? hint.replace(/_/g, ' ').toUpperCase() : 'UNKNOWN';
+}
+
+function signedDelta(value: number): string {
+  return `${value > 0 ? '+' : ''}${value}`;
+}
+
+function percent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
 function compactValue(value?: string): string {
   return value && value.trim().length > 0 ? value : '—';
 }
@@ -181,18 +227,9 @@ export default function ControlPage() {
   const restartWorker = useRestartWorker();
   const acknowledgeRestartAlert = useAcknowledgeRestartAlert();
   const resolveRestartAlert = useResolveRestartAlert();
-  const [deliveryDraft, setDeliveryDraft] = useState({
-    environment: '',
-    destinationName: '',
-    status: '',
-    eventType: '',
-    severity: '',
-    from: '',
-    to: '',
-    alertId: '',
-    restartRequestId: '',
-    formatterProfile: '',
-  });
+  const [deliveryDraft, setDeliveryDraft] = useState<DeliveryJournalDraft>(createEmptyDeliveryJournalDraft());
+  const [deliverySnapshot, setDeliverySnapshot] = useState<DeliveryJournalSnapshot | null>(null);
+  const [activeDrilldown, setActiveDrilldown] = useState<DeliveryTrendDrilldownState | null>(null);
   const [deliveryFilters, setDeliveryFilters] = useState<WorkerRestartDeliveryQuery>({});
   const { data: deliveryJournal, isLoading: deliveriesLoading, error: deliveriesError, refetch: refetchDeliveries } =
     useRestartAlertDeliveries(deliveryFilters);
@@ -202,6 +239,23 @@ export default function ControlPage() {
     error: deliverySummaryError,
     refetch: refetchDeliverySummary,
   } = useRestartAlertDeliverySummary(deliveryFilters);
+  const trendFilters: WorkerRestartDeliveryTrendQuery = {};
+  const trendEnvironment = deliveryFilters.environment?.trim();
+  const trendDestinationName = deliveryFilters.destinationName?.trim();
+  const trendEventType = deliveryFilters.eventType?.trim();
+  const trendSeverity = deliveryFilters.severity?.trim();
+  const trendFormatterProfile = deliveryFilters.formatterProfile?.trim();
+  if (trendEnvironment) trendFilters.environment = trendEnvironment;
+  if (trendDestinationName) trendFilters.destinationName = trendDestinationName;
+  if (trendEventType) trendFilters.eventType = trendEventType;
+  if (trendSeverity) trendFilters.severity = trendSeverity;
+  if (trendFormatterProfile) trendFilters.formatterProfile = trendFormatterProfile;
+  const {
+    data: deliveryTrends,
+    isLoading: deliveryTrendsLoading,
+    error: deliveryTrendsError,
+    refetch: refetchDeliveryTrends,
+  } = useRestartAlertDeliveryTrends(trendFilters);
 
   const [haltInput, setHaltInput] = useState('');
   const [resetInput, setResetInput] = useState('');
@@ -219,6 +273,7 @@ export default function ControlPage() {
   const runtimeConfig = status?.runtimeConfig;
   const deliveryRows = deliveryJournal?.deliveries ?? [];
   const deliveryDestinations = deliverySummary?.destinations ?? [];
+  const deliveryTrendRows = deliveryTrends?.destinations ?? [];
   const deliveryTotals = deliveryDestinations.reduce(
     (totals, destination) => {
       totals.totalCount += destination.totalCount;
@@ -252,44 +307,38 @@ export default function ControlPage() {
   const activeRestartAlerts = restartAlertItems.filter((alert) => alert.status !== 'resolved');
 
   const applyDeliveryFilters = () => {
-    const next: WorkerRestartDeliveryQuery = {};
-    const environment = deliveryDraft.environment.trim();
-    const destinationName = deliveryDraft.destinationName.trim();
-    const status = deliveryDraft.status.trim();
-    const eventType = deliveryDraft.eventType.trim();
-    const severity = deliveryDraft.severity.trim();
-    const from = deliveryDraft.from.trim();
-    const to = deliveryDraft.to.trim();
-    const alertId = deliveryDraft.alertId.trim();
-    const restartRequestId = deliveryDraft.restartRequestId.trim();
-    const formatterProfile = deliveryDraft.formatterProfile.trim();
-    if (environment) next.environment = environment;
-    if (destinationName) next.destinationName = destinationName;
-    if (status) next.status = status;
-    if (eventType) next.eventType = eventType;
-    if (severity) next.severity = severity;
-    if (from) next.from = from;
-    if (to) next.to = to;
-    if (alertId) next.alertId = alertId;
-    if (restartRequestId) next.restartRequestId = restartRequestId;
-    if (formatterProfile) next.formatterProfile = formatterProfile;
-    setDeliveryFilters(next);
+    setDeliveryFilters(buildDeliveryQueryFromDraft(deliveryDraft));
+    setDeliverySnapshot(null);
+    setActiveDrilldown(null);
   };
 
   const resetDeliveryFilters = () => {
-    setDeliveryDraft({
-      environment: '',
-      destinationName: '',
-      status: '',
-      eventType: '',
-      severity: '',
-      from: '',
-      to: '',
-      alertId: '',
-      restartRequestId: '',
-      formatterProfile: '',
-    });
+    setDeliveryDraft(createEmptyDeliveryJournalDraft());
     setDeliveryFilters({});
+    setDeliverySnapshot(null);
+    setActiveDrilldown(null);
+  };
+
+  const applyTrendDrilldown = (row: WorkerRestartDeliveryTrendRow, window: DeliveryDrilldownWindow) => {
+    const snapshot = deliverySnapshot ?? captureDeliveryJournalSnapshot(deliveryDraft);
+    const next = buildTrendDrilldown(deliveryDraft, row, window);
+    setDeliverySnapshot(snapshot);
+    setDeliveryDraft(next.draft);
+    setDeliveryFilters(next.query);
+    setActiveDrilldown(next.drilldown);
+  };
+
+  const clearTrendDrilldown = () => {
+    if (!deliverySnapshot) {
+      setActiveDrilldown(null);
+      return;
+    }
+
+    const restored = restoreDeliveryJournalSnapshot(deliverySnapshot);
+    setDeliveryDraft(restored.draft);
+    setDeliveryFilters(restored.query);
+    setDeliverySnapshot(null);
+    setActiveDrilldown(null);
   };
 
   const handleEmergencyStop = () => {
@@ -808,6 +857,36 @@ export default function ControlPage() {
             </div>
           </form>
 
+          {activeDrilldown && (
+            <div className="rounded border border-accent-cyan/25 bg-accent-cyan/5 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-text-primary">Journal drilldown active</p>
+                  <p className="text-xs text-text-secondary">{drilldownLabel(activeDrilldown)}</p>
+                  <p className="text-xs text-text-muted">Window: {drilldownWindowRangeLabel(activeDrilldown)}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const trendRow = deliveryTrendRows.find((row) => row.destinationName === activeDrilldown.destinationName);
+                      if (trendRow) {
+                        applyTrendDrilldown(trendRow, '7d');
+                      }
+                    }}
+                  >
+                    Widen to 7d
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={clearTrendDrilldown}>
+                    Clear drilldown
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {deliverySummaryLoading && !deliverySummaryError && (
             <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-3 text-sm text-text-muted">
               Loading delivery summary...
@@ -846,6 +925,126 @@ export default function ControlPage() {
                   <p className="text-xs uppercase tracking-wide text-text-muted">Skipped</p>
                   <p className="mt-1 text-sm text-text-primary">{deliveryTotals.skippedCount}</p>
                 </div>
+              </div>
+
+              <div className="space-y-3 rounded border border-border-subtle bg-bg-surface-hover/30 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">Delivery trends</p>
+                    <p className="text-xs text-text-muted">
+                      24h vs 7d movement derived from the same durable alert-event history.
+                    </p>
+                  </div>
+                  <p className="text-xs text-text-muted">
+                    Reference end: {safeTimestamp(deliveryTrends?.referenceEndAt)}
+                  </p>
+                </div>
+
+                {deliveryTrendsLoading && !deliveryTrendsError && (
+                  <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-3 text-sm text-text-muted">
+                    Loading delivery trends...
+                  </div>
+                )}
+
+                {deliveryTrendsError && (
+                  <div className="rounded border border-accent-danger/30 bg-accent-danger/5 p-3">
+                    <p className="text-sm font-medium text-accent-danger">Delivery trends failed</p>
+                    <p className="mt-1 text-sm text-text-secondary">
+                      {deliveryTrendsError instanceof Error ? deliveryTrendsError.message : 'Unable to load delivery trends'}
+                    </p>
+                    <Button type="button" variant="ghost" className="mt-3" onClick={() => refetchDeliveryTrends()}>
+                      Retry
+                    </Button>
+                  </div>
+                )}
+
+                {!deliveryTrendsError && !deliveryTrendsLoading && (
+                  <div className="overflow-hidden rounded border border-border-subtle">
+                    <div className="grid gap-2 border-b border-border-subtle bg-bg-surface-hover/40 px-3 py-2 text-xs uppercase tracking-wide text-text-muted md:grid-cols-6">
+                      <span>Destination</span>
+                      <span>Health</span>
+                      <span>Trend</span>
+                      <span>24h</span>
+                      <span>7d</span>
+                      <span>Movement</span>
+                    </div>
+                    {deliveryTrendRows.length === 0 ? (
+                      <div className="px-3 py-4 text-sm text-text-muted">No trend data matches the current filters.</div>
+                    ) : (
+                      <div className="divide-y divide-border-subtle">
+                        {deliveryTrendRows.map((row: WorkerRestartDeliveryTrendRow) => (
+                          <div
+                            key={row.destinationName}
+                            className={`grid gap-2 px-3 py-3 text-sm md:grid-cols-6 ${
+                              activeDrilldown?.destinationName === row.destinationName
+                                ? 'bg-accent-cyan/5 ring-1 ring-inset ring-accent-cyan/20'
+                                : ''
+                            }`}
+                          >
+                            <div className="space-y-1">
+                              <p className="font-medium text-text-primary">{row.destinationName}</p>
+                              <p className="text-xs text-text-muted">
+                                {compactValue(row.destinationType ?? row.sinkType)}
+                                {row.formatterProfile ? ` · ${row.formatterProfile}` : ''}
+                              </p>
+                            </div>
+                            <div>
+                              <Badge variant={deliveryHealthVariant(row.currentHealthHint)} className="text-xs px-2 py-0.5">
+                                {deliveryHealthLabel(row.currentHealthHint)}
+                              </Badge>
+                              {row.comparisonHealthHint !== row.currentHealthHint && (
+                                <p className="mt-1 text-xs text-text-muted">7d: {deliveryHealthLabel(row.comparisonHealthHint)}</p>
+                              )}
+                            </div>
+                            <div>
+                              <Badge variant={trendHintVariant(row.trendHint)} className="text-xs px-2 py-0.5">
+                                {trendHintLabel(row.trendHint)}
+                              </Badge>
+                              <p className="mt-1 text-xs text-text-muted">{row.summaryText}</p>
+                            </div>
+                            <div className="text-xs text-text-muted">
+                              <div>
+                                S {row.currentWindow.sentCount} / F {row.currentWindow.failedCount}
+                              </div>
+                              <div>
+                                P {row.currentWindow.suppressedCount} / K {row.currentWindow.skippedCount}
+                              </div>
+                              <div className="mt-1 text-[11px]">
+                                Fail {percent(row.currentWindow.failureRate)} · Supp {percent(row.currentWindow.suppressionRate)}
+                              </div>
+                            </div>
+                            <div className="text-xs text-text-muted">
+                              <div>
+                                S {row.comparisonWindow.sentCount} / F {row.comparisonWindow.failedCount}
+                              </div>
+                              <div>
+                                P {row.comparisonWindow.suppressedCount} / K {row.comparisonWindow.skippedCount}
+                              </div>
+                              <div className="mt-1 text-[11px]">
+                                Fail {percent(row.comparisonWindow.failureRate)} · Supp {percent(row.comparisonWindow.suppressionRate)}
+                              </div>
+                            </div>
+                            <div className="text-xs text-text-muted space-y-1">
+                              <div>Δ failures: {signedDelta(row.recentFailureDelta)}</div>
+                              <div>Δ suppression: {signedDelta(row.recentSuppressionDelta)}</div>
+                              <div>Δ volume: {signedDelta(row.recentVolumeDelta)}</div>
+                              <div>Last sent: {safeTimestamp(row.lastSentAt)}</div>
+                              <div>Last failed: {safeTimestamp(row.lastFailedAt)}</div>
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                <Button type="button" variant="outline" size="sm" onClick={() => applyTrendDrilldown(row, '24h')}>
+                                  Drill 24h
+                                </Button>
+                                <Button type="button" variant="ghost" size="sm" onClick={() => applyTrendDrilldown(row, '7d')}>
+                                  Widen 7d
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="overflow-hidden rounded border border-border-subtle">

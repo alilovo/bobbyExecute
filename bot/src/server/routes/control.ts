@@ -35,6 +35,8 @@ import type {
   WorkerRestartDeliveryJournalFilters,
   WorkerRestartDeliveryJournalResult,
   WorkerRestartDeliverySummaryResult,
+  WorkerRestartDeliveryTrendFilters,
+  WorkerRestartDeliveryTrendResult,
 } from "../../persistence/worker-restart-alert-repository.js";
 import type { RuntimeVisibilityRepository } from "../../persistence/runtime-visibility-repository.js";
 import type { RuntimeConfigManager } from "../../runtime/runtime-config-manager.js";
@@ -95,6 +97,10 @@ export interface RestartAlertDeliveriesResponse extends WorkerRestartDeliveryJou
 }
 
 export interface RestartAlertDeliveriesSummaryResponse extends WorkerRestartDeliverySummaryResult {
+  success: true;
+}
+
+export interface RestartAlertDeliveryTrendsResponse extends WorkerRestartDeliveryTrendResult {
   success: true;
 }
 
@@ -317,8 +323,13 @@ function buildDeliveryFilters(query: Record<string, unknown>, defaults: { window
   const restartRequestId = typeof query.restartRequestId === "string" ? query.restartRequestId.trim() : undefined;
   const formatterProfile = typeof query.formatterProfile === "string" ? query.formatterProfile.trim() : undefined;
   const statuses = parseDelimitedValues(typeof query.status === "string" ? query.status : undefined);
-  const eventTypes = parseDelimitedValues(typeof query.eventType === "string" ? query.eventType : undefined);
-  const severities = parseDelimitedValues(typeof query.severity === "string" ? query.severity : undefined);
+  const rawEventType = query.eventType == null ? undefined : typeof query.eventType === "string" ? query.eventType : null;
+  const rawSeverity = query.severity == null ? undefined : typeof query.severity === "string" ? query.severity : null;
+  if (rawEventType === null || rawSeverity === null) {
+    throw new Error("trend query parameters must be strings");
+  }
+  const eventTypes = parseDelimitedValues(rawEventType);
+  const severities = parseDelimitedValues(rawSeverity);
 
   if (statuses && statuses.some((status) => !DELIVERY_STATUSES.has(status as WorkerRestartAlertNotificationStatus))) {
     throw new Error("invalid delivery status filter");
@@ -358,6 +369,75 @@ function buildDeliveryFilters(query: Record<string, unknown>, defaults: { window
     windowEndAt: toAt,
     limit: parseBoundedInteger(typeof query.limit === "string" ? query.limit : undefined, defaults.limit, 1, 200),
     offset: parseBoundedInteger(typeof query.offset === "string" ? query.offset : undefined, 0, 0, 50_000),
+  };
+}
+
+function buildTrendFilters(query: Record<string, unknown>): WorkerRestartDeliveryTrendFilters {
+  const allowedKeys = new Set([
+    "environment",
+    "destinationName",
+    "eventType",
+    "severity",
+    "formatterProfile",
+    "referenceEndAt",
+    "limit",
+  ]);
+  for (const key of Object.keys(query)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`invalid trend query parameter: ${key}`);
+    }
+  }
+
+  const environment =
+    query.environment == null ? undefined : typeof query.environment === "string" ? query.environment.trim() : null;
+  const destinationName =
+    query.destinationName == null ? undefined : typeof query.destinationName === "string" ? query.destinationName.trim() : null;
+  const formatterProfile =
+    query.formatterProfile == null ? undefined : typeof query.formatterProfile === "string" ? query.formatterProfile.trim() : null;
+  if (environment === null || destinationName === null || formatterProfile === null) {
+    throw new Error("trend query parameters must be strings");
+  }
+  const eventTypes = parseDelimitedValues(typeof query.eventType === "string" ? query.eventType : undefined);
+  const severities = parseDelimitedValues(typeof query.severity === "string" ? query.severity : undefined);
+
+  if (eventTypes && eventTypes.some((eventType) => !DELIVERY_EVENT_TYPES.has(eventType as WorkerRestartAlertNotificationEventType))) {
+    throw new Error("invalid trend event type filter");
+  }
+  if (severities && severities.some((severity) => !DELIVERY_SEVERITIES.has(severity as WorkerRestartAlertSeverity))) {
+    throw new Error("invalid trend severity filter");
+  }
+
+  const rawReferenceEndAt =
+    query.referenceEndAt == null ? undefined : typeof query.referenceEndAt === "string" ? query.referenceEndAt : null;
+  if (rawReferenceEndAt === null) {
+    throw new Error("trend query parameters must be strings");
+  }
+  const referenceEndAt = parseIsoTimestamp(rawReferenceEndAt);
+  if (rawReferenceEndAt && !referenceEndAt) {
+    throw new Error("trend reference end must be a valid ISO timestamp");
+  }
+
+  const rawLimit = query.limit == null ? undefined : typeof query.limit === "string" ? query.limit : null;
+  if (rawLimit === null) {
+    throw new Error("trend query parameters must be strings");
+  }
+  let limit = 50;
+  if (rawLimit) {
+    const parsedLimit = Number.parseInt(rawLimit, 10);
+    if (!Number.isFinite(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+      throw new Error("trend limit must be an integer between 1 and 100");
+    }
+    limit = parsedLimit;
+  }
+
+  return {
+    environment: environment || undefined,
+    destinationName: destinationName || undefined,
+    eventTypes: eventTypes as WorkerRestartAlertNotificationEventType[] | undefined,
+    severities: severities as WorkerRestartAlertSeverity[] | undefined,
+    formatterProfile: formatterProfile || undefined,
+    referenceEndAt: referenceEndAt ?? undefined,
+    limit,
   };
 }
 
@@ -741,6 +821,36 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
         return reply.status(400).send({
           success: false,
           message: error instanceof Error ? error.message : "invalid delivery summary query",
+          killSwitch: getKillSwitchState(),
+          liveControl: getMicroLiveControlSnapshot(),
+        });
+      }
+    });
+
+    fastify.get<{
+      Querystring: Record<string, string | undefined>;
+      Reply: RestartAlertDeliveryTrendsResponse | ControlResponse;
+    }>("/control/restart-alert-deliveries/trends", async (request, reply) => {
+      if (!deps.restartAlertRepository) {
+        return reply.status(503).send({
+          success: false,
+          message: "Restart delivery trends unavailable: alert repository is not wired.",
+          killSwitch: getKillSwitchState(),
+          liveControl: getMicroLiveControlSnapshot(),
+        });
+      }
+
+      try {
+        const filters = buildTrendFilters(request.query);
+        const trends = await deps.restartAlertRepository.summarizeDeliveryTrends(filters);
+        return reply.status(200).send({
+          success: true,
+          ...trends,
+        });
+      } catch (error) {
+        return reply.status(400).send({
+          success: false,
+          message: error instanceof Error ? error.message : "invalid delivery trends query",
           killSwitch: getKillSwitchState(),
           liveControl: getMicroLiveControlSnapshot(),
         });

@@ -91,6 +91,7 @@ npm run live:test
 - Routing is destination-based, not provider-based: the private control plane can fan out to primary, secondary, and staging webhook destinations with explicit per-destination cooldown and recovery flags. Generic JSON is the transport base, while Slack-compatible formatting is just a payload profile on top of the same webhook transport.
 - Notification secrets stay server-side only in the control-plane environment. If a destination is missing or malformed, the control plane records the failure and keeps restart alert state authoritative.
 - Read-only delivery reporting lives on the private control plane too: `GET /control/restart-alert-deliveries` returns the filtered delivery journal and `GET /control/restart-alert-deliveries/summary` returns compact destination aggregates. Both are derived from the same durable event history and are meant for troubleshooting, not mutation.
+- `GET /control/restart-alert-deliveries/trends` adds a bounded 24h vs 7d trend view on top of the same event history. It surfaces compact per-destination deltas, current health hints, and trend hints so operators can spot flapping, worsening, or inactive destinations without reading the full journal. It is read-only and non-authoritative.
 - If the control token is missing, the protected routes fail closed.
 
 ## Related Docs

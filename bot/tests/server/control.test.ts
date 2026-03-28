@@ -208,6 +208,13 @@ describe("control routes", () => {
       body: JSON.stringify({ note: "unauthorized" }),
     });
     expect(acknowledgeResponse.status).toBe(403);
+
+    const trendsResponse = await fetch(`${harness.baseUrl}/control/restart-alert-deliveries/trends`, {
+      headers: {
+        "content-type": "application/json",
+      },
+    });
+    expect(trendsResponse.status).toBe(403);
   }, 15000);
 
   it("exposes worker heartbeat and canonical runtime config through control status", async () => {

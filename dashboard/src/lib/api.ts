@@ -12,6 +12,8 @@ import type {
   RestartAlertListResponse,
   WorkerRestartDeliveryJournalResponse,
   WorkerRestartDeliverySummaryResponse,
+  WorkerRestartDeliveryTrendQuery,
+  WorkerRestartDeliveryTrendResponse,
   RestartWorkerRequest,
   RestartWorkerResponse,
   ResetResponse,
@@ -28,6 +30,7 @@ import {
   mockRestartWorker,
   mockRestartAlertDeliveries,
   mockRestartAlertDeliverySummary,
+  mockRestartAlertDeliveryTrends,
 } from './mock-data';
 
 class ApiError extends Error {
@@ -136,6 +139,11 @@ export const api = {
     USE_MOCK
       ? Promise.resolve(mockRestartAlertDeliverySummary(query))
       : fetchProxyApi(`/restart-alert-deliveries/summary${buildDeliveryQueryString(query)}`),
+
+  restartAlertDeliveryTrends: (query: WorkerRestartDeliveryTrendQuery = {}): Promise<WorkerRestartDeliveryTrendResponse> =>
+    USE_MOCK
+      ? Promise.resolve(mockRestartAlertDeliveryTrends(query))
+      : fetchProxyApi(`/restart-alert-deliveries/trends${buildDeliveryQueryString(query)}`),
 
   emergencyStop: (): Promise<EmergencyStopResponse> =>
     fetchProxyApi('/emergency-stop', { method: 'POST' }),

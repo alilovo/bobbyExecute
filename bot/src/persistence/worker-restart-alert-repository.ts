@@ -224,6 +224,66 @@ export interface WorkerRestartDeliverySummaryResult {
   destinations: WorkerRestartDeliverySummaryRow[];
 }
 
+export type WorkerRestartDeliveryTrendHint = "improving" | "stable" | "worsening" | "inactive" | "insufficient_data";
+
+export interface WorkerRestartDeliveryTrendWindowSummary {
+  windowStartAt: string;
+  windowEndAt: string;
+  totalCount: number;
+  sentCount: number;
+  failedCount: number;
+  suppressedCount: number;
+  skippedCount: number;
+  failureRate: number;
+  suppressionRate: number;
+  healthHint: WorkerRestartDeliveryHealthHint;
+  recentEnvironments: string[];
+  recentEventTypes: WorkerRestartAlertNotificationEventType[];
+  lastActivityAt?: string;
+  lastSentAt?: string;
+  lastFailedAt?: string;
+  lastSuppressedAt?: string;
+  lastSkippedAt?: string;
+}
+
+export interface WorkerRestartDeliveryTrendRow {
+  destinationName: string;
+  destinationType?: string;
+  sinkType?: string;
+  formatterProfile?: string;
+  currentWindow: WorkerRestartDeliveryTrendWindowSummary;
+  comparisonWindow: WorkerRestartDeliveryTrendWindowSummary;
+  currentHealthHint: WorkerRestartDeliveryHealthHint;
+  comparisonHealthHint: WorkerRestartDeliveryHealthHint;
+  trendHint: WorkerRestartDeliveryTrendHint;
+  recentFailureDelta: number;
+  recentSuppressionDelta: number;
+  recentVolumeDelta: number;
+  lastSentAt?: string;
+  lastFailedAt?: string;
+  summaryText: string;
+}
+
+export interface WorkerRestartDeliveryTrendResult {
+  referenceEndAt: string;
+  currentWindowStartAt: string;
+  comparisonWindowStartAt: string;
+  limit: number;
+  totalCount: number;
+  hasMore: boolean;
+  destinations: WorkerRestartDeliveryTrendRow[];
+}
+
+export interface WorkerRestartDeliveryTrendFilters {
+  environment?: string;
+  destinationName?: string;
+  eventTypes?: WorkerRestartAlertNotificationEventType[];
+  severities?: WorkerRestartAlertSeverity[];
+  formatterProfile?: string;
+  referenceEndAt?: string;
+  limit?: number;
+}
+
 export interface WorkerRestartAlertRepository {
   kind: "postgres" | "memory";
   ensureSchema(): Promise<void>;
@@ -236,6 +296,7 @@ export interface WorkerRestartAlertRepository {
   listEvents(environment: string, alertId: string, limit?: number): Promise<WorkerRestartAlertEventRecord[]>;
   listDeliveryJournal(filters: WorkerRestartDeliveryJournalFilters): Promise<WorkerRestartDeliveryJournalResult>;
   summarizeDeliveryJournal(filters: WorkerRestartDeliveryJournalFilters): Promise<WorkerRestartDeliverySummaryResult>;
+  summarizeDeliveryTrends(filters: WorkerRestartDeliveryTrendFilters): Promise<WorkerRestartDeliveryTrendResult>;
 }
 
 function clone<T>(value: T): T {
@@ -432,6 +493,351 @@ function deriveDeliveryHealthHint(row: Pick<WorkerRestartDeliverySummaryRow, "to
     return "idle";
   }
   return "unknown";
+}
+
+interface DeliveryTrendWindowAggregate {
+  windowStartAt: string;
+  windowEndAt: string;
+  totalCount: number;
+  sentCount: number;
+  failedCount: number;
+  suppressedCount: number;
+  skippedCount: number;
+  recentEnvironments: string[];
+  recentEventTypes: WorkerRestartAlertNotificationEventType[];
+  lastActivityAt?: string;
+  lastSentAt?: string;
+  lastFailedAt?: string;
+  lastSuppressedAt?: string;
+  lastSkippedAt?: string;
+}
+
+interface DeliveryTrendAggregateRow {
+  destinationName: string;
+  destinationType?: string;
+  sinkType?: string;
+  formatterProfile?: string;
+  currentWindow: DeliveryTrendWindowAggregate;
+  comparisonWindow: DeliveryTrendWindowAggregate;
+}
+
+interface NormalizedDeliveryTrendFilters {
+  referenceEndAt: string;
+  currentWindowStartAt: string;
+  comparisonWindowStartAt: string;
+  limit: number;
+  deliveryFilters: WorkerRestartDeliveryJournalFilters;
+}
+
+function cloneStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((entry) => String(entry)).filter((entry) => entry.length > 0) : [];
+}
+
+function cloneEventTypeArray(value: unknown): WorkerRestartAlertNotificationEventType[] {
+  return cloneStringArray(value).filter((entry): entry is WorkerRestartAlertNotificationEventType =>
+    entry === "alert_opened" ||
+    entry === "alert_escalated" ||
+    entry === "alert_acknowledged" ||
+    entry === "alert_resolved" ||
+    entry === "alert_repeated_failure_summary"
+  );
+}
+
+function rateFromCount(count: number, total: number): number {
+  if (total <= 0) {
+    return 0;
+  }
+
+  return count / total;
+}
+
+function sortUniqueStrings(values: Iterable<string>): string[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+}
+
+function summarizeTrendWindow(
+  windowStartAt: string,
+  windowEndAt: string,
+  rows: WorkerRestartDeliveryJournalRow[]
+): DeliveryTrendWindowAggregate {
+  const recentEnvironments: string[] = [];
+  const recentEventTypes: WorkerRestartAlertNotificationEventType[] = [];
+  let totalCount = 0;
+  let sentCount = 0;
+  let failedCount = 0;
+  let suppressedCount = 0;
+  let skippedCount = 0;
+  let lastActivityAt: string | undefined;
+  let lastSentAt: string | undefined;
+  let lastFailedAt: string | undefined;
+  let lastSuppressedAt: string | undefined;
+  let lastSkippedAt: string | undefined;
+
+  for (const row of rows) {
+    totalCount += 1;
+    if (row.deliveryStatus === "sent") {
+      sentCount += 1;
+    } else if (row.deliveryStatus === "failed") {
+      failedCount += 1;
+    } else if (row.deliveryStatus === "suppressed") {
+      suppressedCount += 1;
+    } else if (row.deliveryStatus === "skipped") {
+      skippedCount += 1;
+    }
+
+    if (!lastActivityAt || Date.parse(row.attemptedAt) > Date.parse(lastActivityAt)) {
+      lastActivityAt = row.attemptedAt;
+    }
+    if (row.deliveryStatus === "sent" && (!lastSentAt || Date.parse(row.attemptedAt) > Date.parse(lastSentAt))) {
+      lastSentAt = row.attemptedAt;
+    }
+    if (row.deliveryStatus === "failed" && (!lastFailedAt || Date.parse(row.attemptedAt) > Date.parse(lastFailedAt))) {
+      lastFailedAt = row.attemptedAt;
+    }
+    if (row.deliveryStatus === "suppressed" && (!lastSuppressedAt || Date.parse(row.attemptedAt) > Date.parse(lastSuppressedAt))) {
+      lastSuppressedAt = row.attemptedAt;
+    }
+    if (row.deliveryStatus === "skipped" && (!lastSkippedAt || Date.parse(row.attemptedAt) > Date.parse(lastSkippedAt))) {
+      lastSkippedAt = row.attemptedAt;
+    }
+
+    if (row.environment) {
+      recentEnvironments.push(row.environment);
+    }
+    if (row.eventType) {
+      recentEventTypes.push(row.eventType);
+    }
+  }
+
+  return {
+    windowStartAt,
+    windowEndAt,
+    totalCount,
+    sentCount,
+    failedCount,
+    suppressedCount,
+    skippedCount,
+    recentEnvironments: sortUniqueStrings(recentEnvironments),
+    recentEventTypes: sortUniqueStrings(recentEventTypes) as WorkerRestartAlertNotificationEventType[],
+    lastActivityAt,
+    lastSentAt,
+    lastFailedAt,
+    lastSuppressedAt,
+    lastSkippedAt,
+  };
+}
+
+function buildTrendWindowSummary(aggregate: DeliveryTrendWindowAggregate): WorkerRestartDeliveryTrendWindowSummary {
+  const failureRate = rateFromCount(aggregate.failedCount, aggregate.totalCount);
+  const suppressionRate = rateFromCount(aggregate.suppressedCount, aggregate.totalCount);
+  const summary: WorkerRestartDeliveryTrendWindowSummary = {
+    ...aggregate,
+    failureRate,
+    suppressionRate,
+    healthHint: deriveDeliveryHealthHint(aggregate),
+  };
+
+  return summary;
+}
+
+function toDailyEquivalent(count: number): number {
+  return Math.round(count / 7);
+}
+
+function describeTrendHint(
+  currentWindow: WorkerRestartDeliveryTrendWindowSummary,
+  comparisonWindow: WorkerRestartDeliveryTrendWindowSummary
+): WorkerRestartDeliveryTrendHint {
+  if (comparisonWindow.totalCount < 5) {
+    return "insufficient_data";
+  }
+
+  if (currentWindow.totalCount === 0) {
+    return comparisonWindow.totalCount > 0 ? "inactive" : "insufficient_data";
+  }
+
+  const failureDelta = currentWindow.failedCount - toDailyEquivalent(comparisonWindow.failedCount);
+  const suppressionDelta = currentWindow.suppressedCount - toDailyEquivalent(comparisonWindow.suppressedCount);
+  const failureRateDelta = currentWindow.failureRate - comparisonWindow.failureRate;
+  const suppressionRateDelta = currentWindow.suppressionRate - comparisonWindow.suppressionRate;
+
+  if (
+    currentWindow.failedCount >= 2 &&
+    (failureDelta >= 2 || failureRateDelta >= 0.15 || currentWindow.healthHint === "failing")
+  ) {
+    return "worsening";
+  }
+
+  if (
+    currentWindow.sentCount > 0 &&
+    currentWindow.failedCount === 0 &&
+    (failureDelta <= -1 || failureRateDelta <= -0.05 || suppressionDelta < 0 || suppressionRateDelta < 0)
+  ) {
+    return "improving";
+  }
+
+  if (
+    currentWindow.sentCount > 0 &&
+    failureDelta <= -1 &&
+    failureRateDelta <= -0.05 &&
+    comparisonWindow.healthHint !== "healthy"
+  ) {
+    return "improving";
+  }
+
+  if (failureDelta >= 1 || suppressionDelta >= 1 || failureRateDelta >= 0.1 || suppressionRateDelta >= 0.1) {
+    return "worsening";
+  }
+
+  return "stable";
+}
+
+function buildTrendSummaryText(
+  currentWindow: WorkerRestartDeliveryTrendWindowSummary,
+  comparisonWindow: WorkerRestartDeliveryTrendWindowSummary,
+  trendHint: WorkerRestartDeliveryTrendHint,
+  recentFailureDelta: number,
+  recentSuppressionDelta: number
+): string {
+  const failureDeltaText = recentFailureDelta === 0 ? "flat failures" : `${recentFailureDelta > 0 ? "+" : ""}${recentFailureDelta} failure delta`;
+  const suppressionDeltaText =
+    recentSuppressionDelta === 0 ? "flat suppression" : `${recentSuppressionDelta > 0 ? "+" : ""}${recentSuppressionDelta} suppression delta`;
+
+  switch (trendHint) {
+    case "insufficient_data":
+      return `Not enough 7-day volume to compare safely (${comparisonWindow.totalCount} events).`;
+    case "inactive":
+      return `No delivery activity in the last 24h after ${comparisonWindow.totalCount} events across 7d.`;
+    case "worsening":
+      return `Delivery behavior is worsening: ${failureDeltaText}, ${suppressionDeltaText}, health ${comparisonWindow.healthHint} -> ${currentWindow.healthHint}.`;
+    case "improving":
+      return `Delivery behavior is improving: ${failureDeltaText}, ${suppressionDeltaText}, with successful sends still present.`;
+    case "stable":
+    default:
+      return `Delivery behavior is stable: 24h activity stays close to the 7d baseline.`;
+  }
+}
+
+function buildDeliveryTrendRow(
+  destinationName: string,
+  destinationType: string | undefined,
+  sinkType: string | undefined,
+  formatterProfile: string | undefined,
+  currentWindow: DeliveryTrendWindowAggregate,
+  comparisonWindow: DeliveryTrendWindowAggregate
+): WorkerRestartDeliveryTrendRow {
+  const current = buildTrendWindowSummary(currentWindow);
+  const comparison = buildTrendWindowSummary(comparisonWindow);
+  const recentFailureDelta = current.failedCount - toDailyEquivalent(comparison.failedCount);
+  const recentSuppressionDelta = current.suppressedCount - toDailyEquivalent(comparison.suppressedCount);
+  const recentVolumeDelta = current.totalCount - toDailyEquivalent(comparison.totalCount);
+  const trendHint = describeTrendHint(current, comparison);
+
+  return {
+    destinationName,
+    destinationType,
+    sinkType,
+    formatterProfile,
+    currentWindow: current,
+    comparisonWindow: comparison,
+    currentHealthHint: current.healthHint,
+    comparisonHealthHint: comparison.healthHint,
+    trendHint,
+    recentFailureDelta,
+    recentSuppressionDelta,
+    recentVolumeDelta,
+    lastSentAt: current.lastSentAt,
+    lastFailedAt: current.lastFailedAt,
+    summaryText: buildTrendSummaryText(current, comparison, trendHint, recentFailureDelta, recentSuppressionDelta),
+  };
+}
+
+function buildTrendRowsFromDeliveryRows(
+  rows: WorkerRestartDeliveryJournalRow[],
+  referenceEndAt: string,
+  currentWindowStartAt: string,
+  comparisonWindowStartAt: string
+): WorkerRestartDeliveryTrendRow[] {
+  const byDestination = new Map<
+    string,
+    {
+      destinationType?: string;
+      sinkType?: string;
+      formatterProfile?: string;
+      currentRows: WorkerRestartDeliveryJournalRow[];
+      comparisonRows: WorkerRestartDeliveryJournalRow[];
+    }
+  >();
+
+  for (const row of rows) {
+    const destinationName = row.destinationName ?? "unknown";
+    const bucket = byDestination.get(destinationName) ?? {
+      destinationType: row.destinationType,
+      sinkType: row.sinkType,
+      formatterProfile: row.formatterProfile,
+      currentRows: [],
+      comparisonRows: [],
+    };
+    bucket.destinationType = bucket.destinationType ?? row.destinationType;
+    bucket.sinkType = bucket.sinkType ?? row.sinkType;
+    bucket.formatterProfile = bucket.formatterProfile ?? row.formatterProfile;
+    if (Date.parse(row.attemptedAt) >= Date.parse(currentWindowStartAt)) {
+      bucket.currentRows.push(row);
+    }
+    bucket.comparisonRows.push(row);
+    byDestination.set(destinationName, bucket);
+  }
+
+  return [...byDestination.entries()]
+    .map(([destinationName, bucket]) =>
+      buildDeliveryTrendRow(
+        destinationName,
+        bucket.destinationType,
+        bucket.sinkType,
+        bucket.formatterProfile,
+        summarizeTrendWindow(currentWindowStartAt, referenceEndAt, bucket.currentRows),
+        summarizeTrendWindow(comparisonWindowStartAt, referenceEndAt, bucket.comparisonRows)
+      )
+    )
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.currentWindow.lastActivityAt ?? left.lastFailedAt ?? left.lastSentAt ?? "1970-01-01T00:00:00.000Z");
+      const rightTime = Date.parse(right.currentWindow.lastActivityAt ?? right.lastFailedAt ?? right.lastSentAt ?? "1970-01-01T00:00:00.000Z");
+      if (rightTime !== leftTime) {
+        return rightTime - leftTime;
+      }
+      return left.destinationName.localeCompare(right.destinationName);
+    });
+}
+
+function normalizeTrendFilters(filters: WorkerRestartDeliveryTrendFilters): NormalizedDeliveryTrendFilters {
+  const referenceEndAt = filters.referenceEndAt?.trim() ? filters.referenceEndAt.trim() : new Date().toISOString();
+  const parsedReference = Date.parse(referenceEndAt);
+  if (!Number.isFinite(parsedReference)) {
+    throw new Error("trend reference end must be a valid ISO timestamp");
+  }
+
+  const limit = Math.min(Math.max(Math.trunc(filters.limit ?? 50), 1), 100);
+  const currentWindowStartAt = new Date(parsedReference - 24 * 60 * 60 * 1000).toISOString();
+  const comparisonWindowStartAt = new Date(parsedReference - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const deliveryFilters: WorkerRestartDeliveryJournalFilters = {
+    environment: filters.environment,
+    destinationName: filters.destinationName,
+    eventTypes: filters.eventTypes,
+    severities: filters.severities,
+    formatterProfile: filters.formatterProfile,
+    windowStartAt: comparisonWindowStartAt,
+    windowEndAt: referenceEndAt,
+    limit,
+    offset: 0,
+  };
+
+  return {
+    referenceEndAt,
+    currentWindowStartAt,
+    comparisonWindowStartAt,
+    limit,
+    deliveryFilters,
+  };
 }
 
 export class InMemoryWorkerRestartAlertRepository implements WorkerRestartAlertRepository {
@@ -683,6 +1089,27 @@ export class InMemoryWorkerRestartAlertRepository implements WorkerRestartAlertR
       destinations,
     };
   }
+
+  async summarizeDeliveryTrends(filters: WorkerRestartDeliveryTrendFilters): Promise<WorkerRestartDeliveryTrendResult> {
+    const normalized = normalizeTrendFilters(filters);
+    const rows = this.collectDeliveryRows(normalized.deliveryFilters);
+    const destinations = buildTrendRowsFromDeliveryRows(
+      rows,
+      normalized.referenceEndAt,
+      normalized.currentWindowStartAt,
+      normalized.comparisonWindowStartAt
+    );
+    const limited = destinations.slice(0, normalized.limit);
+    return {
+      referenceEndAt: normalized.referenceEndAt,
+      currentWindowStartAt: normalized.currentWindowStartAt,
+      comparisonWindowStartAt: normalized.comparisonWindowStartAt,
+      limit: normalized.limit,
+      totalCount: destinations.length,
+      hasMore: destinations.length > normalized.limit,
+      destinations: limited,
+    };
+  }
 }
 
 export class PostgresWorkerRestartAlertRepository implements WorkerRestartAlertRepository {
@@ -802,6 +1229,70 @@ export class PostgresWorkerRestartAlertRepository implements WorkerRestartAlertR
     };
     summary.healthHint = deriveDeliveryHealthHint(summary);
     return summary;
+  }
+
+  private mapTrendWindowAggregate(
+    row: Record<string, unknown>,
+    prefix: "current" | "comparison",
+    windowStartAt: string,
+    windowEndAt: string
+  ): DeliveryTrendWindowAggregate {
+    const recentEnvironmentsKey = `${prefix}_recent_environments`;
+    const recentEventTypesKey = `${prefix}_recent_event_types`;
+    return {
+      windowStartAt,
+      windowEndAt,
+      totalCount: Number(row[`${prefix}_total_count`] ?? 0),
+      sentCount: Number(row[`${prefix}_sent_count`] ?? 0),
+      failedCount: Number(row[`${prefix}_failed_count`] ?? 0),
+      suppressedCount: Number(row[`${prefix}_suppressed_count`] ?? 0),
+      skippedCount: Number(row[`${prefix}_skipped_count`] ?? 0),
+      recentEnvironments: sortUniqueStrings(cloneStringArray(row[recentEnvironmentsKey])),
+      recentEventTypes: sortUniqueStrings(cloneEventTypeArray(row[recentEventTypesKey])) as WorkerRestartAlertNotificationEventType[],
+      lastActivityAt: row[`${prefix}_last_activity_at`] == null ? undefined : String(row[`${prefix}_last_activity_at`]),
+      lastSentAt: row[`${prefix}_last_sent_at`] == null ? undefined : String(row[`${prefix}_last_sent_at`]),
+      lastFailedAt: row[`${prefix}_last_failed_at`] == null ? undefined : String(row[`${prefix}_last_failed_at`]),
+      lastSuppressedAt: row[`${prefix}_last_suppressed_at`] == null ? undefined : String(row[`${prefix}_last_suppressed_at`]),
+      lastSkippedAt: row[`${prefix}_last_skipped_at`] == null ? undefined : String(row[`${prefix}_last_skipped_at`]),
+    };
+  }
+
+  private mapDeliveryTrendRow(
+    row: Record<string, unknown>,
+    normalized: NormalizedDeliveryTrendFilters
+  ): WorkerRestartDeliveryTrendRow {
+    const currentWindow = this.mapTrendWindowAggregate(row, "current", normalized.currentWindowStartAt, normalized.referenceEndAt);
+    const comparisonWindow = this.mapTrendWindowAggregate(
+      row,
+      "comparison",
+      normalized.comparisonWindowStartAt,
+      normalized.referenceEndAt
+    );
+    const current = buildTrendWindowSummary(currentWindow);
+    const comparison = buildTrendWindowSummary(comparisonWindow);
+    const trendHint = describeTrendHint(current, comparison);
+    const destinationName = String(row.destination_name ?? "unknown");
+    const recentFailureDelta = currentWindow.failedCount - toDailyEquivalent(comparisonWindow.failedCount);
+    const recentSuppressionDelta = currentWindow.suppressedCount - toDailyEquivalent(comparisonWindow.suppressedCount);
+    const recentVolumeDelta = currentWindow.totalCount - toDailyEquivalent(comparisonWindow.totalCount);
+
+    return {
+      destinationName,
+      destinationType: row.destination_type == null ? undefined : String(row.destination_type),
+      sinkType: row.sink_type == null ? undefined : String(row.sink_type),
+      formatterProfile: row.formatter_profile == null ? undefined : String(row.formatter_profile),
+      currentWindow: current,
+      comparisonWindow: comparison,
+      currentHealthHint: current.healthHint,
+      comparisonHealthHint: comparison.healthHint,
+      trendHint,
+      recentFailureDelta,
+      recentSuppressionDelta,
+      recentVolumeDelta,
+      lastSentAt: current.lastSentAt,
+      lastFailedAt: current.lastFailedAt,
+      summaryText: buildTrendSummaryText(current, comparison, trendHint, recentFailureDelta, recentSuppressionDelta),
+    };
   }
 
   async ensureSchema(): Promise<void> {
@@ -1271,6 +1762,90 @@ export class PostgresWorkerRestartAlertRepository implements WorkerRestartAlertR
       windowStartAt: normalized.windowStartAt,
       windowEndAt: normalized.windowEndAt,
       totalCount: destinations.reduce((total, destination) => total + destination.totalCount, 0),
+      destinations,
+    };
+  }
+
+  async summarizeDeliveryTrends(filters: WorkerRestartDeliveryTrendFilters): Promise<WorkerRestartDeliveryTrendResult> {
+    const normalized = normalizeTrendFilters(filters);
+    const params: unknown[] = [];
+    const whereClause = this.buildDeliveryWhereClause(normalized.deliveryFilters, params);
+    params.push(normalized.currentWindowStartAt);
+    const currentStartParam = `$${params.length}`;
+    const result = await this.withClient((client) =>
+      client.query(
+        `
+          WITH filtered AS (
+            SELECT
+              COALESCE(e.notification_destination_name, 'unknown') AS destination_name,
+              e.notification_destination_type AS destination_type,
+              e.notification_sink_type AS sink_type,
+              e.notification_formatter_profile AS formatter_profile,
+              e.notification_event_type AS event_type,
+              e.notification_status AS delivery_status,
+              e.environment,
+              e.created_at AS attempted_at
+            FROM worker_restart_alert_events e
+            JOIN worker_restart_alerts a ON a.id = e.alert_id AND a.environment = e.environment
+            WHERE ${whereClause}
+          ),
+          aggregated AS (
+            SELECT
+              destination_name,
+              MAX(destination_type) AS destination_type,
+              MAX(sink_type) AS sink_type,
+              MAX(formatter_profile) AS formatter_profile,
+              COUNT(*) FILTER (WHERE attempted_at >= ${currentStartParam}::timestamptz) AS current_total_count,
+              COUNT(*) FILTER (WHERE attempted_at >= ${currentStartParam}::timestamptz AND delivery_status = 'sent') AS current_sent_count,
+              COUNT(*) FILTER (WHERE attempted_at >= ${currentStartParam}::timestamptz AND delivery_status = 'failed') AS current_failed_count,
+              COUNT(*) FILTER (WHERE attempted_at >= ${currentStartParam}::timestamptz AND delivery_status = 'suppressed') AS current_suppressed_count,
+              COUNT(*) FILTER (WHERE attempted_at >= ${currentStartParam}::timestamptz AND delivery_status = 'skipped') AS current_skipped_count,
+              COALESCE(ARRAY_AGG(DISTINCT environment ORDER BY environment) FILTER (WHERE attempted_at >= ${currentStartParam}::timestamptz), '{}'::text[]) AS current_recent_environments,
+              COALESCE(ARRAY_AGG(DISTINCT event_type ORDER BY event_type) FILTER (WHERE attempted_at >= ${currentStartParam}::timestamptz), '{}'::text[]) AS current_recent_event_types,
+              MAX(attempted_at) FILTER (WHERE attempted_at >= ${currentStartParam}::timestamptz) AS current_last_activity_at,
+              MAX(attempted_at) FILTER (WHERE attempted_at >= ${currentStartParam}::timestamptz AND delivery_status = 'sent') AS current_last_sent_at,
+              MAX(attempted_at) FILTER (WHERE attempted_at >= ${currentStartParam}::timestamptz AND delivery_status = 'failed') AS current_last_failed_at,
+              MAX(attempted_at) FILTER (WHERE attempted_at >= ${currentStartParam}::timestamptz AND delivery_status = 'suppressed') AS current_last_suppressed_at,
+              MAX(attempted_at) FILTER (WHERE attempted_at >= ${currentStartParam}::timestamptz AND delivery_status = 'skipped') AS current_last_skipped_at,
+              COUNT(*) AS comparison_total_count,
+              COUNT(*) FILTER (WHERE delivery_status = 'sent') AS comparison_sent_count,
+              COUNT(*) FILTER (WHERE delivery_status = 'failed') AS comparison_failed_count,
+              COUNT(*) FILTER (WHERE delivery_status = 'suppressed') AS comparison_suppressed_count,
+              COUNT(*) FILTER (WHERE delivery_status = 'skipped') AS comparison_skipped_count,
+              COALESCE(ARRAY_AGG(DISTINCT environment ORDER BY environment), '{}'::text[]) AS comparison_recent_environments,
+              COALESCE(ARRAY_AGG(DISTINCT event_type ORDER BY event_type), '{}'::text[]) AS comparison_recent_event_types,
+              MAX(attempted_at) AS comparison_last_activity_at,
+              MAX(attempted_at) FILTER (WHERE delivery_status = 'sent') AS comparison_last_sent_at,
+              MAX(attempted_at) FILTER (WHERE delivery_status = 'failed') AS comparison_last_failed_at,
+              MAX(attempted_at) FILTER (WHERE delivery_status = 'suppressed') AS comparison_last_suppressed_at,
+              MAX(attempted_at) FILTER (WHERE delivery_status = 'skipped') AS comparison_last_skipped_at
+            FROM filtered
+            GROUP BY destination_name
+          ),
+          ranked AS (
+            SELECT
+              *,
+              COUNT(*) OVER() AS total_count
+            FROM aggregated
+            ORDER BY COALESCE(current_last_activity_at, comparison_last_activity_at) DESC, destination_name ASC
+          )
+          SELECT *
+          FROM ranked
+          LIMIT $${params.length + 1}
+        `,
+        [...params, normalized.limit]
+      )
+    );
+
+    const destinations = result.rows.map((row) => this.mapDeliveryTrendRow(row as Record<string, unknown>, normalized));
+    const totalCount = destinations.length > 0 ? Number((result.rows[0] as Record<string, unknown>).total_count ?? 0) : 0;
+    return {
+      referenceEndAt: normalized.referenceEndAt,
+      currentWindowStartAt: normalized.currentWindowStartAt,
+      comparisonWindowStartAt: normalized.comparisonWindowStartAt,
+      limit: normalized.limit,
+      totalCount,
+      hasMore: destinations.length < totalCount,
       destinations,
     };
   }

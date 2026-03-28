@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { WorkerRestartDeliveryTrendRow } from "../../../dashboard/src/types/api.ts";
 
 const CONTROL_SECRET = "dashboard-control-secret";
 const CONTROL_SERVICE_URL = "https://control.internal";
@@ -80,17 +81,96 @@ describe("dashboard control proxy", () => {
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
 
     const { api } = await import("../../../dashboard/src/lib/api.ts");
+    const { buildTrendDrilldown } = await import("../../../dashboard/src/lib/delivery-drilldown.ts");
+
+    const trendRow: WorkerRestartDeliveryTrendRow = {
+      destinationName: "primary",
+      destinationType: "webhook",
+      sinkType: "generic_webhook",
+      formatterProfile: "generic",
+      currentWindow: {
+        windowStartAt: "2026-03-27T00:00:00.000Z",
+        windowEndAt: "2026-03-28T00:00:00.000Z",
+        totalCount: 3,
+        sentCount: 1,
+        failedCount: 2,
+        suppressedCount: 0,
+        skippedCount: 0,
+        failureRate: 0.6666666667,
+        suppressionRate: 0,
+        healthHint: "failing",
+        recentEnvironments: ["production"],
+        recentEventTypes: ["alert_escalated"],
+        lastActivityAt: "2026-03-27T12:00:00.000Z",
+        lastSentAt: "2026-03-27T11:00:00.000Z",
+        lastFailedAt: "2026-03-27T12:00:00.000Z",
+        lastSuppressedAt: undefined,
+        lastSkippedAt: undefined,
+      },
+      comparisonWindow: {
+        windowStartAt: "2026-03-21T00:00:00.000Z",
+        windowEndAt: "2026-03-28T00:00:00.000Z",
+        totalCount: 12,
+        sentCount: 8,
+        failedCount: 4,
+        suppressedCount: 0,
+        skippedCount: 0,
+        failureRate: 0.3333333333,
+        suppressionRate: 0,
+        healthHint: "degraded",
+        recentEnvironments: ["production"],
+        recentEventTypes: ["alert_opened", "alert_escalated"],
+        lastActivityAt: "2026-03-27T12:00:00.000Z",
+        lastSentAt: "2026-03-27T11:00:00.000Z",
+        lastFailedAt: "2026-03-27T12:00:00.000Z",
+        lastSuppressedAt: undefined,
+        lastSkippedAt: undefined,
+      },
+      currentHealthHint: "failing",
+      comparisonHealthHint: "degraded",
+      trendHint: "worsening",
+      recentFailureDelta: 1,
+      recentSuppressionDelta: 0,
+      recentVolumeDelta: 0,
+      lastSentAt: "2026-03-27T11:00:00.000Z",
+      lastFailedAt: "2026-03-27T12:00:00.000Z",
+      summaryText: "Delivery behavior is worsening.",
+    };
+
+    const trendDraft = {
+      environment: "production",
+      destinationName: "",
+      status: "failed",
+      eventType: "alert_escalated",
+      severity: "critical",
+      from: "",
+      to: "",
+      alertId: "alert-123",
+      restartRequestId: "restart-123",
+      formatterProfile: "generic",
+    };
+    const drilldown = buildTrendDrilldown(trendDraft, trendRow, "24h");
 
     await api.restartAlertDeliveries({ environment: "production", destinationName: "primary" });
     await api.restartAlertDeliverySummary({ environment: "production", destinationName: "primary" });
+    await api.restartAlertDeliveryTrends({ environment: "production", destinationName: "primary", limit: 25 });
+    await api.restartAlertDeliveries(drilldown.query);
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(String(fetchMock.mock.calls[0][0])).toBe("/api/control/restart-alert-deliveries?environment=production&destinationName=primary");
     expect(String(fetchMock.mock.calls[1][0])).toBe("/api/control/restart-alert-deliveries/summary?environment=production&destinationName=primary");
+    expect(String(fetchMock.mock.calls[2][0])).toBe("/api/control/restart-alert-deliveries/trends?environment=production&destinationName=primary&limit=25");
+    expect(String(fetchMock.mock.calls[3][0])).toBe(
+      "/api/control/restart-alert-deliveries?environment=production&destinationName=primary&status=failed&eventType=alert_escalated&severity=critical&from=2026-03-27T00%3A00%3A00.000Z&to=2026-03-28T00%3A00%3A00.000Z&alertId=alert-123&restartRequestId=restart-123&formatterProfile=generic"
+    );
     const firstHeaders = new Headers(fetchMock.mock.calls[0][1] as RequestInit | undefined);
     const secondHeaders = new Headers(fetchMock.mock.calls[1][1] as RequestInit | undefined);
+    const thirdHeaders = new Headers(fetchMock.mock.calls[2][1] as RequestInit | undefined);
+    const fourthHeaders = new Headers(fetchMock.mock.calls[3][1] as RequestInit | undefined);
     expect(firstHeaders.get("authorization")).toBeNull();
     expect(secondHeaders.get("authorization")).toBeNull();
+    expect(thirdHeaders.get("authorization")).toBeNull();
+    expect(fourthHeaders.get("authorization")).toBeNull();
     expect(JSON.stringify(fetchMock.mock.calls)).not.toContain(CONTROL_SECRET);
   });
 

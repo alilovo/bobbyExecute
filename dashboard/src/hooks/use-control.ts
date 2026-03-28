@@ -12,6 +12,8 @@ import type {
   WorkerRestartDeliveryQuery,
   WorkerRestartDeliveryJournalResponse,
   WorkerRestartDeliverySummaryResponse,
+  WorkerRestartDeliveryTrendQuery,
+  WorkerRestartDeliveryTrendResponse,
 } from '@/types/api';
 
 export function useEmergencyStop() {
@@ -65,6 +67,7 @@ export function useRestartWorker() {
       queryClient.invalidateQueries({ queryKey: ['restart-alerts'] });
       queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries'] });
       queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries-trends'] });
       queryClient.invalidateQueries({ queryKey: ['health'] });
       queryClient.invalidateQueries({ queryKey: ['summary'] });
     },
@@ -80,6 +83,7 @@ export function useAcknowledgeRestartAlert() {
       queryClient.invalidateQueries({ queryKey: ['restart-alerts'] });
       queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries'] });
       queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries-trends'] });
     },
   });
 }
@@ -93,6 +97,7 @@ export function useResolveRestartAlert() {
       queryClient.invalidateQueries({ queryKey: ['restart-alerts'] });
       queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries'] });
       queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['restart-alert-deliveries-trends'] });
     },
   });
 }
@@ -110,6 +115,15 @@ export function useRestartAlertDeliverySummary(filters: WorkerRestartDeliveryQue
   return useQuery<WorkerRestartDeliverySummaryResponse>({
     queryKey: ['restart-alert-deliveries-summary', filters],
     queryFn: () => api.restartAlertDeliverySummary(filters),
+    refetchInterval: POLLING.CONTROL_STATUS,
+    staleTime: POLLING.CONTROL_STATUS,
+  });
+}
+
+export function useRestartAlertDeliveryTrends(filters: WorkerRestartDeliveryTrendQuery = {}) {
+  return useQuery<WorkerRestartDeliveryTrendResponse>({
+    queryKey: ['restart-alert-deliveries-trends', filters],
+    queryFn: () => api.restartAlertDeliveryTrends(filters),
     refetchInterval: POLLING.CONTROL_STATUS,
     staleTime: POLLING.CONTROL_STATUS,
   });

@@ -73,6 +73,7 @@ export type WorkerRestartAlertNotificationEventType =
   | 'alert_repeated_failure_summary';
 export type WorkerRestartAlertNotificationStatus = 'pending' | 'sent' | 'skipped' | 'suppressed' | 'failed';
 export type WorkerRestartDeliveryHealthHint = 'healthy' | 'degraded' | 'failing' | 'idle' | 'unknown';
+export type WorkerRestartDeliveryTrendHint = 'improving' | 'stable' | 'worsening' | 'inactive' | 'insufficient_data';
 
 export interface WorkerRestartAlertNotificationDestinationSummary {
   name: string;
@@ -193,6 +194,65 @@ export interface WorkerRestartDeliveryQuery {
   alertId?: string;
   restartRequestId?: string;
   formatterProfile?: string;
+}
+
+export interface WorkerRestartDeliveryTrendWindowSummary {
+  windowStartAt: string;
+  windowEndAt: string;
+  totalCount: number;
+  sentCount: number;
+  failedCount: number;
+  suppressedCount: number;
+  skippedCount: number;
+  failureRate: number;
+  suppressionRate: number;
+  healthHint: WorkerRestartDeliveryHealthHint;
+  recentEnvironments: string[];
+  recentEventTypes: WorkerRestartAlertNotificationEventType[];
+  lastActivityAt?: string;
+  lastSentAt?: string;
+  lastFailedAt?: string;
+  lastSuppressedAt?: string;
+  lastSkippedAt?: string;
+}
+
+export interface WorkerRestartDeliveryTrendRow {
+  destinationName: string;
+  destinationType?: string;
+  sinkType?: string;
+  formatterProfile?: string;
+  currentWindow: WorkerRestartDeliveryTrendWindowSummary;
+  comparisonWindow: WorkerRestartDeliveryTrendWindowSummary;
+  currentHealthHint: WorkerRestartDeliveryHealthHint;
+  comparisonHealthHint: WorkerRestartDeliveryHealthHint;
+  trendHint: WorkerRestartDeliveryTrendHint;
+  recentFailureDelta: number;
+  recentSuppressionDelta: number;
+  recentVolumeDelta: number;
+  lastSentAt?: string;
+  lastFailedAt?: string;
+  summaryText: string;
+}
+
+export interface WorkerRestartDeliveryTrendResponse {
+  success: true;
+  referenceEndAt: string;
+  currentWindowStartAt: string;
+  comparisonWindowStartAt: string;
+  limit: number;
+  totalCount: number;
+  hasMore: boolean;
+  destinations: WorkerRestartDeliveryTrendRow[];
+}
+
+export interface WorkerRestartDeliveryTrendQuery {
+  environment?: string;
+  destinationName?: string;
+  eventType?: string;
+  severity?: string;
+  formatterProfile?: string;
+  referenceEndAt?: string;
+  limit?: number;
 }
 
 export interface WorkerRestartStatus {

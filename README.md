@@ -107,6 +107,8 @@ The notification layer now supports multiple server-side destinations. The routi
 
 The private control plane also exposes a read-only delivery journal and compact destination summary at `GET /control/restart-alert-deliveries` and `GET /control/restart-alert-deliveries/summary`. These views are derived from the durable restart-alert event stream and are intended for troubleshooting destination outages, cooldown behavior, and flapping or misconfigured webhooks.
 
+`GET /control/restart-alert-deliveries/trends` adds a bounded 24h vs 7d comparison slice on top of the same history. It reports compact per-destination counts, health hints, trend hints, and recent send/failure timestamps so operators can spot degrading or inactive destinations without reading raw journal rows. The trend view is read-only and non-authoritative: it never mutates restart state or replaces the underlying event history.
+
 ## Repo Layout
 
 ```text
