@@ -12,6 +12,7 @@ Use this before any controlled live-test or any rollout beyond paper mode.
 - [x] Real quote and live swap path guarded by RPC verification and live prerequisites
 - [x] Versioned SQL migration runner with explicit schema readiness checks
 - [x] Postgres backup / restore helpers for control-plane state
+- [x] Disposable restore rehearsal runner with durable evidence capture
 - [x] Worker disk classification helper for boot-critical vs evidence-only state
 
 ## Verify Before Controlled Live-Test
@@ -21,6 +22,7 @@ Use this before any controlled live-test or any rollout beyond paper mode.
 - [ ] `cd bot && npm run db:status`
 - [ ] `cd bot && npm run db:migrate` if the status is not `ready`
 - [ ] `cd bot && npm run recovery:db-validate -- --input=<known-good-snapshot.json>`
+- [ ] `cd bot && npm run recovery:db-rehearse -- --source-database-url=<canonical-db> --target-database-url=<scratch-db> --source-context=production --target-context=disposable-rehearsal`
 - [ ] `cd bot && npm run recovery:worker-state -- --journal-path=/var/data/journal.jsonl`
 - [ ] `cd bot && npm run live:preflight`
 - [ ] `LIVE_TRADING=true`
@@ -41,6 +43,7 @@ Use this before any controlled live-test or any rollout beyond paper mode.
 
 - live config validation fails
 - schema migration status is `missing_but_migratable`, `migration_required`, or `unrecoverable`
+- rehearsal evidence is missing or stale for the governed promotion target
 - any live prerequisite is missing
 - control token is absent
 - runtime status is `error` or adapter health is degraded for live

@@ -434,6 +434,21 @@ function toReadiness(runtime?: RuntimeSnapshot): RuntimeReadiness | undefined {
   return buildRuntimeReadiness(runtime);
 }
 
+async function evaluateLivePromotionGateWithRehearsalEvidence(
+  deps: ControlRouteDeps,
+  snapshot: WorkerRestartSnapshot,
+  targetMode: ControlLivePromotionTargetMode
+): Promise<ControlLivePromotionGate> {
+  const environment = snapshot.runtimeConfig.environment ?? deps.runtimeEnvironment ?? "development";
+  const latestDatabaseRehearsal = deps.governanceRepository
+    ? await deps.governanceRepository.loadLatestDatabaseRehearsalEvidence(environment)
+    : null;
+
+  return evaluateLivePromotionGate(snapshot, toReadiness(snapshot.runtime), targetMode, {
+    latestDatabaseRehearsal,
+  });
+}
+
 function buildFallbackRestartStatus(
   runtimeConfig: RuntimeConfigStatus,
   worker?: import("../../persistence/runtime-visibility-repository.js").RuntimeWorkerVisibility
@@ -1169,7 +1184,7 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
 
       const snapshot = await readControlSnapshot(deps);
       const targetMode: ControlLivePromotionTargetMode = request.query.targetMode === "live" ? "live" : "live_limited";
-      const gate = evaluateLivePromotionGate(snapshot, toReadiness(snapshot.runtime), targetMode);
+      const gate = await evaluateLivePromotionGateWithRehearsalEvidence(deps, snapshot, targetMode);
       const limit = request.query.limit && /^\d+$/.test(request.query.limit) ? Math.min(Math.max(Number.parseInt(request.query.limit, 10), 1), 50) : 10;
       const requests = await governanceRepository.listLivePromotionRequests(
         snapshot.runtimeConfig.environment ?? deps.runtimeEnvironment ?? "development",
@@ -1212,7 +1227,7 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
       }
 
       const snapshot = await readControlSnapshot(deps);
-      const gate = evaluateLivePromotionGate(snapshot, toReadiness(snapshot.runtime), targetMode);
+      const gate = await evaluateLivePromotionGateWithRehearsalEvidence(deps, snapshot, targetMode);
       const requestReason = body.reason ?? `request ${targetMode}`;
       const record = buildLivePromotionRecord({
         environment: snapshot.runtimeConfig.environment ?? deps.runtimeEnvironment ?? "development",
@@ -1274,7 +1289,7 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
       }
 
       const snapshot = await readControlSnapshot(deps);
-      const gate = evaluateLivePromotionGate(snapshot, toReadiness(snapshot.runtime), record.targetMode);
+      const gate = await evaluateLivePromotionGateWithRehearsalEvidence(deps, snapshot, record.targetMode);
       if (!gate.allowed) {
         const blockedRecord = mergeLivePromotionRecord(record, {
           workflowStatus: "blocked",
@@ -1425,7 +1440,7 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
       }
 
       const snapshot = await readControlSnapshot(deps);
-      const gate = evaluateLivePromotionGate(snapshot, toReadiness(snapshot.runtime), record.targetMode);
+      const gate = await evaluateLivePromotionGateWithRehearsalEvidence(deps, snapshot, record.targetMode);
       if (!gate.allowed) {
         const blockedRecord = mergeLivePromotionRecord(record, {
           workflowStatus: "blocked",

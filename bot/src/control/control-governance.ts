@@ -1,5 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { RuntimeReadiness } from "../server/contracts/kpi.js";
+import type { SchemaMigrationStatus } from "../persistence/schema-migrations.js";
 import type { WorkerRestartSnapshot } from "./worker-restart-service.js";
 
 export type ControlOperatorRole = "viewer" | "operator" | "admin";
@@ -98,11 +99,63 @@ export interface ControlAuditEvent {
 export type ControlLivePromotionTargetMode = "live_limited" | "live";
 export type ControlLivePromotionWorkflowStatus = "pending" | "approved" | "denied" | "blocked" | "applied" | "rolled_back";
 export type ControlLivePromotionApplicationStatus = "pending_restart" | "applied" | "rolled_back" | "rejected";
+export type ControlRecoveryRehearsalStatus = "passed" | "failed";
+export type ControlRecoveryRehearsalContextKind = "canonical" | "staging" | "disposable" | "unknown";
 
 export interface ControlLivePromotionGateReason {
   code: string;
   message: string;
   severity: "blocked" | "warning";
+}
+
+export interface ControlRecoveryRehearsalContext {
+  label: string;
+  kind: ControlRecoveryRehearsalContextKind;
+}
+
+export interface ControlRecoverySnapshotSummary {
+  environment: string;
+  capturedAt: string;
+  schemaState: string;
+  counts: Record<string, number>;
+  totalRecords: number;
+}
+
+export interface ControlRecoveryRehearsalValidation {
+  matched: boolean;
+  before: ControlRecoverySnapshotSummary;
+  after: ControlRecoverySnapshotSummary;
+}
+
+export interface ControlRecoveryRehearsalEvidenceRecord {
+  id: string;
+  environment: string;
+  rehearsalKind: "disposable_restore";
+  status: ControlRecoveryRehearsalStatus;
+  executedAt: string;
+  recordedAt: string;
+  actorId: string;
+  actorDisplayName: string;
+  actorRole: ControlOperatorRole;
+  sessionId: string;
+  sourceContext: ControlRecoveryRehearsalContext;
+  targetContext: ControlRecoveryRehearsalContext;
+  sourceDatabaseFingerprint: string;
+  targetDatabaseFingerprint: string;
+  sourceSchemaStatus: SchemaMigrationStatus;
+  targetSchemaStatusBefore: SchemaMigrationStatus;
+  targetSchemaStatusAfter?: SchemaMigrationStatus;
+  restoreValidation: ControlRecoveryRehearsalValidation;
+  summary: string;
+  failureReason?: string;
+}
+
+export interface ControlRecoveryRehearsalGate {
+  required: boolean;
+  freshnessWindowMs: number;
+  status: "fresh" | "stale" | "missing" | "failed";
+  ageMs?: number;
+  latestEvidence?: ControlRecoveryRehearsalEvidenceRecord | null;
 }
 
 export interface ControlLivePromotionGate {
@@ -115,6 +168,7 @@ export interface ControlLivePromotionGate {
   restartRequired: boolean;
   restartInProgress: boolean;
   killSwitchActive: boolean;
+  databaseRehearsal: ControlRecoveryRehearsalGate;
   healthPosture?: string;
   healthReason?: string;
   reasons: ControlLivePromotionGateReason[];
@@ -163,6 +217,8 @@ export interface ControlLivePromotionRecord {
 export interface ControlGovernanceRepository {
   ensureSchema(): Promise<void>;
   recordAuditEvent(input: ControlAuditEvent): Promise<void>;
+  recordDatabaseRehearsalEvidence(input: ControlRecoveryRehearsalEvidenceRecord): Promise<void>;
+  loadLatestDatabaseRehearsalEvidence(environment: string): Promise<ControlRecoveryRehearsalEvidenceRecord | null>;
   saveLivePromotionRequest(record: ControlLivePromotionRecord): Promise<void>;
   loadLivePromotionRequest(id: string): Promise<ControlLivePromotionRecord | null>;
   listLivePromotionRequests(environment: string, limit?: number): Promise<ControlLivePromotionRecord[]>;
@@ -369,6 +425,7 @@ export function parseControlOperatorAssertion(
 }
 
 const LIVE_PROMOTION_HEARTBEAT_MAX_AGE_MS = 5 * 60 * 1000;
+const DATABASE_REHEARSAL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function isHeartbeatFresh(heartbeatAt?: string): boolean {
   if (!heartbeatAt) {
@@ -388,10 +445,84 @@ function addBlockedReason(
   reasons.push({ code, message, severity });
 }
 
+export function evaluateDatabaseRehearsalGate(
+  latestEvidence: ControlRecoveryRehearsalEvidenceRecord | null | undefined,
+  options: {
+    targetMode: ControlLivePromotionTargetMode;
+    freshnessWindowMs?: number;
+    nowMs?: number;
+  }
+): ControlRecoveryRehearsalGate {
+  const freshnessWindowMs = options.freshnessWindowMs ?? DATABASE_REHEARSAL_MAX_AGE_MS;
+  const nowMs = options.nowMs ?? Date.now();
+  const required = options.targetMode === "live_limited" || options.targetMode === "live";
+
+  if (!required) {
+    return {
+      required: false,
+      freshnessWindowMs,
+      status: "fresh",
+      latestEvidence: latestEvidence ?? null,
+    };
+  }
+
+  if (!latestEvidence) {
+    return {
+      required: true,
+      freshnessWindowMs,
+      status: "missing",
+      latestEvidence: null,
+    };
+  }
+
+  if (latestEvidence.status === "failed") {
+    return {
+      required: true,
+      freshnessWindowMs,
+      status: "failed",
+      latestEvidence,
+    };
+  }
+
+  const executedAtMs = Date.parse(latestEvidence.executedAt);
+  if (!Number.isFinite(executedAtMs)) {
+    return {
+      required: true,
+      freshnessWindowMs,
+      status: "failed",
+      latestEvidence,
+    };
+  }
+
+  const ageMs = Math.max(0, nowMs - executedAtMs);
+  if (ageMs > freshnessWindowMs) {
+    return {
+      required: true,
+      freshnessWindowMs,
+      status: "stale",
+      ageMs,
+      latestEvidence,
+    };
+  }
+
+  return {
+    required: true,
+    freshnessWindowMs,
+    status: "fresh",
+    ageMs,
+    latestEvidence,
+  };
+}
+
 export function evaluateLivePromotionGate(
   snapshot: WorkerRestartSnapshot,
   readiness: RuntimeReadiness | undefined,
-  targetMode: ControlLivePromotionTargetMode
+  targetMode: ControlLivePromotionTargetMode,
+  options: {
+    latestDatabaseRehearsal?: ControlRecoveryRehearsalEvidenceRecord | null;
+    databaseRehearsalFreshnessWindowMs?: number;
+    nowMs?: number;
+  } = {}
 ): ControlLivePromotionGate {
   const reasons: ControlLivePromotionGateReason[] = [];
   const currentMode = snapshot.runtimeConfig.appliedMode ?? snapshot.runtimeConfig.requestedMode ?? "unknown";
@@ -403,6 +534,11 @@ export function evaluateLivePromotionGate(
   const killSwitchActive = Boolean(snapshot.runtimeConfig.killSwitch || snapshot.controlView.killSwitch);
   const healthPosture = readiness?.posture;
   const healthReason = readiness?.reason;
+  const databaseRehearsal = evaluateDatabaseRehearsalGate(options.latestDatabaseRehearsal, {
+    targetMode,
+    freshnessWindowMs: options.databaseRehearsalFreshnessWindowMs,
+    nowMs: options.nowMs,
+  });
 
   if (currentRuntimeStatus === "error") {
     addBlockedReason(reasons, "runtime_error", "Runtime is in error state and requires manual review.");
@@ -426,6 +562,20 @@ export function evaluateLivePromotionGate(
 
   if (killSwitchActive) {
     addBlockedReason(reasons, "kill_switch_active", "Kill switch is active.");
+  }
+
+  if (databaseRehearsal.required) {
+    if (databaseRehearsal.status === "missing") {
+      addBlockedReason(reasons, "database_rehearsal_missing", "No successful disposable restore rehearsal is recorded.");
+    } else if (databaseRehearsal.status === "failed") {
+      addBlockedReason(reasons, "database_rehearsal_failed", "The most recent database rehearsal failed and promotion remains blocked.");
+    } else if (databaseRehearsal.status === "stale") {
+      addBlockedReason(
+        reasons,
+        "database_rehearsal_stale",
+        `The most recent successful database rehearsal is older than ${Math.floor(databaseRehearsal.freshnessWindowMs / (24 * 60 * 60 * 1000))} days.`
+      );
+    }
   }
 
   if (targetMode === "live_limited") {
@@ -456,6 +606,7 @@ export function evaluateLivePromotionGate(
     restartRequired,
     restartInProgress,
     killSwitchActive,
+    databaseRehearsal,
     healthPosture,
     healthReason,
     reasons,

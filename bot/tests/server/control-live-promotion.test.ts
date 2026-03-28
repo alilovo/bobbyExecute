@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  InMemoryControlGovernanceRepository,
+} from "../../src/persistence/control-governance-repository.js";
+import type { ControlRecoveryRehearsalEvidenceRecord } from "../../src/control/control-governance.js";
+import type { SchemaMigrationStatus } from "../../src/persistence/schema-migrations.js";
 import { createRuntimeVisibilityRepository, type RuntimeVisibilitySnapshot } from "../../src/persistence/runtime-visibility-repository.js";
 import { createControlServer } from "../../src/server/index.js";
 import { resetKillSwitch } from "../../src/governance/kill-switch.js";
@@ -7,7 +12,71 @@ import {
   buildControlOperatorAssertionHeaders,
   createRuntimeConfigTestManager,
   TEST_CONTROL_TOKEN,
+  TEST_RUNTIME_ENV,
 } from "../helpers/runtime-config-test-kit.js";
+
+function buildReadySchemaStatus() {
+  const status: SchemaMigrationStatus = {
+    state: "ready",
+    ready: true,
+    migrationTablePresent: true,
+    message: "Schema is ready.",
+    migrationsDir: "migrations",
+    availableMigrations: [],
+    appliedMigrations: [],
+    pendingMigrations: [],
+    checksumMismatches: [],
+    unknownAppliedVersions: [],
+  };
+
+  return status;
+}
+
+function seedRehearsalEvidence(
+  repository: InMemoryControlGovernanceRepository,
+  environment: string,
+  executedAt: string
+): Promise<void> {
+  const evidence: ControlRecoveryRehearsalEvidenceRecord = {
+    id: `rehearsal-${environment}-${executedAt}`,
+    environment,
+    rehearsalKind: "disposable_restore",
+    status: "passed",
+    executedAt,
+    recordedAt: executedAt,
+    actorId: "rehearsal-runner",
+    actorDisplayName: "Rehearsal Runner",
+    actorRole: "admin",
+    sessionId: `session-${executedAt}`,
+    sourceContext: { label: "canonical-production", kind: "canonical" },
+    targetContext: { label: "disposable-rehearsal", kind: "disposable" },
+    sourceDatabaseFingerprint: "source-fingerprint",
+    targetDatabaseFingerprint: "target-fingerprint",
+    sourceSchemaStatus: buildReadySchemaStatus(),
+    targetSchemaStatusBefore: buildReadySchemaStatus(),
+    targetSchemaStatusAfter: buildReadySchemaStatus(),
+    restoreValidation: {
+      matched: true,
+      before: {
+        environment,
+        capturedAt: executedAt,
+        schemaState: "ready",
+        counts: {},
+        totalRecords: 0,
+      },
+      after: {
+        environment,
+        capturedAt: executedAt,
+        schemaState: "ready",
+        counts: {},
+        totalRecords: 0,
+      },
+    },
+    summary: "fresh disposable restore rehearsal",
+  };
+
+  return repository.recordDatabaseRehearsalEvidence(evidence);
+}
 
 function buildVisibilitySnapshot(referenceTimeMs: number): RuntimeVisibilitySnapshot {
   const heartbeatAt = new Date(referenceTimeMs).toISOString();
@@ -122,11 +191,13 @@ async function createHarness(referenceTimeMs = Date.now()) {
   const { manager } = await createRuntimeConfigTestManager();
   const runtimeVisibilityRepository = await createRuntimeVisibilityRepository();
   await runtimeVisibilityRepository.save(buildVisibilitySnapshot(referenceTimeMs));
+  const governanceRepository = new InMemoryControlGovernanceRepository();
   const server = await createControlServer({
     port: 0,
     host: "127.0.0.1",
     runtimeConfigManager: manager,
     runtimeVisibilityRepository,
+    governanceRepository,
     runtimeEnvironment: "test",
     controlAuthToken: TEST_CONTROL_TOKEN,
   });
@@ -135,12 +206,13 @@ async function createHarness(referenceTimeMs = Date.now()) {
     throw new Error("Failed to resolve control test server port");
   }
 
-  return {
-    manager,
-    server,
-    baseUrl: `http://127.0.0.1:${address.port}`,
-  };
-}
+    return {
+      manager,
+      server,
+      governanceRepository,
+      baseUrl: `http://127.0.0.1:${address.port}`,
+    };
+  }
 
 describe("control live promotion governance", () => {
   let harnesses: Array<Awaited<ReturnType<typeof createHarness>>> = [];
@@ -204,6 +276,7 @@ describe("control live promotion governance", () => {
   it("persists approved live promotions and rollback state durably", async () => {
     const harness = await createHarness();
     harnesses.push(harness);
+    await seedRehearsalEvidence(harness.governanceRepository, TEST_RUNTIME_ENV, new Date().toISOString());
 
     const requestResponse = await fetch(`${harness.baseUrl}/control/live-promotion/request`, {
       method: "POST",
@@ -350,8 +423,9 @@ describe("control live promotion governance", () => {
   });
 
   it("fails closed when worker heartbeat is stale", async () => {
-  const harness = await createHarness(Date.now() - 10 * 60 * 1000);
+    const harness = await createHarness(Date.now() - 10 * 60 * 1000);
     harnesses.push(harness);
+    await seedRehearsalEvidence(harness.governanceRepository, TEST_RUNTIME_ENV, new Date().toISOString());
 
     const response = await fetch(`${harness.baseUrl}/control/live-promotion/request`, {
       method: "POST",
@@ -381,9 +455,87 @@ describe("control live promotion governance", () => {
           }),
         ]),
       },
-      request: {
-        workflowStatus: "blocked",
-        applicationStatus: "rejected",
+        request: {
+          workflowStatus: "blocked",
+          applicationStatus: "rejected",
+        },
+      });
+  });
+
+  it("blocks governed live promotion when rehearsal evidence is missing", async () => {
+    const harness = await createHarness();
+    harnesses.push(harness);
+
+    const response = await fetch(`${harness.baseUrl}/control/live-promotion/request`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...buildControlOperatorAssertionHeaders({
+          role: "admin",
+          actorId: "alice",
+          displayName: "Alice Example",
+          action: "live_promotion_request",
+          target: "/control/live-promotion/request",
+          authResult: "authorized",
+        }),
+      },
+      body: JSON.stringify({ targetMode: "live_limited", reason: "missing rehearsal evidence" }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      accepted: false,
+      gate: {
+        allowed: false,
+        databaseRehearsal: {
+          status: "missing",
+        },
+        reasons: expect.arrayContaining([
+          expect.objectContaining({
+            code: "database_rehearsal_missing",
+          }),
+        ]),
+      },
+    });
+  });
+
+  it("blocks governed live promotion when rehearsal evidence is stale", async () => {
+    const harness = await createHarness();
+    harnesses.push(harness);
+    const staleAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+    await seedRehearsalEvidence(harness.governanceRepository, TEST_RUNTIME_ENV, staleAt);
+
+    const response = await fetch(`${harness.baseUrl}/control/live-promotion/request`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...buildControlOperatorAssertionHeaders({
+          role: "admin",
+          actorId: "alice",
+          displayName: "Alice Example",
+          action: "live_promotion_request",
+          target: "/control/live-promotion/request",
+          authResult: "authorized",
+        }),
+      },
+      body: JSON.stringify({ targetMode: "live_limited", reason: "stale rehearsal evidence" }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      accepted: false,
+      gate: {
+        allowed: false,
+        databaseRehearsal: {
+          status: "stale",
+        },
+        reasons: expect.arrayContaining([
+          expect.objectContaining({
+            code: "database_rehearsal_stale",
+          }),
+        ]),
       },
     });
   });

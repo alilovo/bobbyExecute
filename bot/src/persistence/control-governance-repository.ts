@@ -4,6 +4,7 @@ import type {
   ControlAuditEvent,
   ControlGovernanceRepository,
   ControlGovernanceRepositoryWithAudits,
+  ControlRecoveryRehearsalEvidenceRecord,
   ControlLivePromotionRecord,
 } from "../control/control-governance.js";
 import { assertSchemaReady } from "./schema-migrations.js";
@@ -11,6 +12,7 @@ import { assertSchemaReady } from "./schema-migrations.js";
 interface MemoryGovernanceState {
   audits: ControlAuditEvent[];
   promotions: ControlLivePromotionRecord[];
+  rehearsals: ControlRecoveryRehearsalEvidenceRecord[];
 }
 
 function clonePromotion(record: ControlLivePromotionRecord): ControlLivePromotionRecord {
@@ -33,10 +35,15 @@ function mapAuditRow(row: Record<string, unknown>): ControlAuditEvent {
   return fromJson<ControlAuditEvent>(row.event_json);
 }
 
+function mapRehearsalRow(row: Record<string, unknown>): ControlRecoveryRehearsalEvidenceRecord {
+  return fromJson<ControlRecoveryRehearsalEvidenceRecord>(row.evidence_json);
+}
+
 export class InMemoryControlGovernanceRepository implements ControlGovernanceRepositoryWithAudits {
   private readonly state: MemoryGovernanceState = {
     audits: [],
     promotions: [],
+    rehearsals: [],
   };
 
   async ensureSchema(): Promise<void> {
@@ -51,6 +58,17 @@ export class InMemoryControlGovernanceRepository implements ControlGovernanceRep
         createdAt: input.createdAt ?? new Date().toISOString(),
       }),
     });
+  }
+
+  async recordDatabaseRehearsalEvidence(input: ControlRecoveryRehearsalEvidenceRecord): Promise<void> {
+    this.state.rehearsals.push(JSON.parse(JSON.stringify(input)) as ControlRecoveryRehearsalEvidenceRecord);
+  }
+
+  async loadLatestDatabaseRehearsalEvidence(environment: string): Promise<ControlRecoveryRehearsalEvidenceRecord | null> {
+    const record = [...this.state.rehearsals]
+      .filter((entry) => entry.environment === environment)
+      .sort((left, right) => Date.parse(right.executedAt) - Date.parse(left.executedAt))[0];
+    return record ? (JSON.parse(JSON.stringify(record)) as ControlRecoveryRehearsalEvidenceRecord) : null;
   }
 
   async saveLivePromotionRequest(record: ControlLivePromotionRecord): Promise<void> {
@@ -133,6 +151,79 @@ export class PostgresControlGovernanceRepository implements ControlGovernanceRep
         ]
       );
     });
+  }
+
+  async recordDatabaseRehearsalEvidence(input: ControlRecoveryRehearsalEvidenceRecord): Promise<void> {
+    const record = {
+      ...input,
+      recordedAt: input.recordedAt ?? new Date().toISOString(),
+    };
+    await this.withClient(async (client) => {
+      await client.query(
+        `
+          INSERT INTO control_database_rehearsal_evidence (
+            id, environment, rehearsal_kind, status, executed_at, recorded_at, actor_id, actor_display_name,
+            actor_role, session_id, source_context_json, target_context_json, source_database_fingerprint,
+            target_database_fingerprint, source_schema_status_json, target_schema_status_before_json,
+            target_schema_status_after_json, restore_validation_json, summary, failure_reason, evidence_json
+          ) VALUES (
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            environment = EXCLUDED.environment,
+            rehearsal_kind = EXCLUDED.rehearsal_kind,
+            status = EXCLUDED.status,
+            executed_at = EXCLUDED.executed_at,
+            recorded_at = EXCLUDED.recorded_at,
+            actor_id = EXCLUDED.actor_id,
+            actor_display_name = EXCLUDED.actor_display_name,
+            actor_role = EXCLUDED.actor_role,
+            session_id = EXCLUDED.session_id,
+            source_context_json = EXCLUDED.source_context_json,
+            target_context_json = EXCLUDED.target_context_json,
+            source_database_fingerprint = EXCLUDED.source_database_fingerprint,
+            target_database_fingerprint = EXCLUDED.target_database_fingerprint,
+            source_schema_status_json = EXCLUDED.source_schema_status_json,
+            target_schema_status_before_json = EXCLUDED.target_schema_status_before_json,
+            target_schema_status_after_json = EXCLUDED.target_schema_status_after_json,
+            restore_validation_json = EXCLUDED.restore_validation_json,
+            summary = EXCLUDED.summary,
+            failure_reason = EXCLUDED.failure_reason,
+            evidence_json = EXCLUDED.evidence_json
+        `,
+        [
+          record.id,
+          record.environment,
+          record.rehearsalKind,
+          record.status,
+          record.executedAt,
+          record.recordedAt,
+          record.actorId,
+          record.actorDisplayName,
+          record.actorRole,
+          record.sessionId,
+          JSON.stringify(record.sourceContext),
+          JSON.stringify(record.targetContext),
+          record.sourceDatabaseFingerprint,
+          record.targetDatabaseFingerprint,
+          JSON.stringify(record.sourceSchemaStatus),
+          JSON.stringify(record.targetSchemaStatusBefore),
+          record.targetSchemaStatusAfter ? JSON.stringify(record.targetSchemaStatusAfter) : null,
+          JSON.stringify(record.restoreValidation),
+          record.summary,
+          record.failureReason ?? null,
+          JSON.stringify(record),
+        ]
+      );
+    });
+  }
+
+  async loadLatestDatabaseRehearsalEvidence(environment: string): Promise<ControlRecoveryRehearsalEvidenceRecord | null> {
+    const result = await this.withClient((client) =>
+      client.query(`SELECT evidence_json FROM control_database_rehearsal_evidence WHERE environment = $1 ORDER BY executed_at DESC LIMIT 1`, [environment])
+    );
+    const row = result.rows[0];
+    return row ? mapRehearsalRow(row as Record<string, unknown>) : null;
   }
 
   async saveLivePromotionRequest(record: ControlLivePromotionRecord): Promise<void> {

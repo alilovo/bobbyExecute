@@ -51,7 +51,8 @@ Read surfaces:
 5. Reset only after the cause is understood.
 6. Use `POST /control/reset` to clear the kill switch.
 7. If the worker disk was replaced, run `cd bot && npm run recovery:worker-state -- --journal-path=/var/data/journal.jsonl`.
-8. Re-check readiness before re-arming live.
+8. If governed live promotion is blocked because rehearsal evidence is missing or stale, run `cd bot && npm run recovery:db-rehearse -- --source-database-url=<canonical-db> --target-database-url=<scratch-db> --source-context=production --target-context=disposable-rehearsal` rather than overriding the gate.
+9. Re-check readiness before re-arming live.
 
 ## Post-Incident Review
 

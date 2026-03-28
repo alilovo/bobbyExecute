@@ -35,11 +35,14 @@ Operator flow:
 1. Point the target environment at the intended Postgres instance.
 2. Run `cd bot && npm run db:status`.
 3. If the status is `missing_but_migratable` or `migration_required`, run `cd bot && npm run db:migrate`.
-4. Run `cd bot && npm run recovery:db-validate -- --input=<snapshot.json>` against a known-good snapshot or staging clone.
-5. Run `cd bot && npm run recovery:worker-state -- --journal-path=/var/data/journal.jsonl` on the worker disk that will boot the release.
-6. Deploy the services only after schema and worker-disk prerequisites are satisfied.
+4. Run `cd bot && npm run recovery:db-rehearse -- --source-database-url=<canonical-db> --target-database-url=<scratch-db> --source-context=production --target-context=disposable-rehearsal` against a disposable target before governed live promotion.
+5. Run `cd bot && npm run recovery:db-validate -- --input=<snapshot.json>` against a known-good snapshot or staging clone.
+6. Run `cd bot && npm run recovery:worker-state -- --journal-path=/var/data/journal.jsonl` on the worker disk that will boot the release.
+7. Deploy the services only after schema, rehearsal evidence, and worker-disk prerequisites are satisfied.
 
 If `db:status` reports `unrecoverable`, treat the database as needing restore or reconciliation before the release can start.
+
+The disposable rehearsal writes durable evidence back to the canonical control DB. Governed promotion to `live_limited` or `live` is blocked until that evidence is fresh enough for the configured gate.
 
 ## Build And Start
 

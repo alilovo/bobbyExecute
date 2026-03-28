@@ -72,6 +72,7 @@ From `bot/`:
 npm run recovery:db-backup -- --environment=production --output=/tmp/control-backup.json
 npm run recovery:db-restore -- --input=/tmp/control-backup.json
 npm run recovery:db-validate -- --input=/tmp/control-backup.json
+npm run recovery:db-rehearse -- --source-database-url=<canonical-db> --target-database-url=<scratch-db> --source-context=production --target-context=disposable-rehearsal
 npm run recovery:worker-state -- --journal-path=/var/data/journal.jsonl
 ```
 
@@ -80,6 +81,7 @@ Notes:
 - `recovery:db-backup` captures a control-plane snapshot for one environment.
 - `recovery:db-restore` restores that snapshot into a schema-ready database.
 - `recovery:db-validate` performs a restore-and-recapture round trip and reports whether the counts matched.
+- `recovery:db-rehearse` captures or accepts a source snapshot, migrates a disposable target if needed, runs restore validation against the disposable target, and writes durable rehearsal evidence back to the canonical control DB.
 - `recovery:worker-state` reports which worker-disk artifacts are present, which are boot-critical, and which are evidence-only.
 
 ## Restore Validation
@@ -89,11 +91,13 @@ Validation is intentionally layered:
 - automated tests:
   - `bot/tests/recovery/schema-migrations.test.ts`
   - `bot/tests/recovery/control-plane-backup.test.ts`
+  - `bot/tests/recovery/disposable-db-rehearsal.test.ts`
   - `bot/tests/recovery/worker-state-manifest.test.ts`
 - operator drill:
   - capture a Postgres snapshot
   - restore it into a scratch database
   - run `npm run recovery:db-validate`
+  - run `npm run recovery:db-rehearse` against a disposable target before governed promotion
   - inspect `npm run recovery:worker-state`
 - staging rehearsal:
   - promote the same migration set to staging first
@@ -106,15 +110,17 @@ The restore path is only considered proven when validation is run after the rest
 1. Run `npm run db:status` against the target database.
 2. Run `npm run db:migrate` if migrations are pending.
 3. Run `npm run recovery:db-validate` against a fresh snapshot or staging clone.
-4. Run `npm run recovery:worker-state` on the worker disk that will boot the new release.
-5. Confirm readiness endpoints are healthy after the migration.
-6. Deploy the new release only after schema and recovery prerequisites are satisfied.
+4. Run `npm run recovery:db-rehearse` against a disposable target and verify the durable rehearsal evidence before governed live promotion.
+5. Run `npm run recovery:worker-state` on the worker disk that will boot the new release.
+6. Confirm readiness endpoints are healthy after the migration.
+7. Deploy the new release only after schema, rehearsal, and worker-disk prerequisites are satisfied.
 
 Rollback notes:
 
 - If a migration checksum changes after it has been applied, treat that as unrecoverable drift.
 - Restore the database from the last known good backup before redeploying incompatible code.
 - If worker boot-critical files are missing, restore them explicitly or keep the worker offline.
+- If rehearsal evidence is missing or stale, do not attempt governed promotion until `npm run recovery:db-rehearse` has been run successfully again.
 
 ## Fail-Closed Rules
 
@@ -122,6 +128,7 @@ Rollback notes:
 - Partial migration state is not acceptable.
 - Schema checksum mismatch is unrecoverable until reconciled.
 - Backup absence must be reported as a recovery gap.
+- Missing or stale disposable rehearsal evidence blocks governed promotion and must be reported explicitly.
 - Worker disk loss must be called out explicitly.
 - Restored Postgres state with stale worker disk is not automatically safe.
 - Restore success claims require validation evidence.
