@@ -9,6 +9,8 @@ Public readonly bot API, private control plane, and runtime worker entrypoints f
 - Persistent action logs, journal entries, cycle summaries, incidents, and execution evidence
 - Guarded live-test round control with worker visibility snapshots for the dashboard
 - Runtime behavior is now controlled through persisted runtime config plus private control endpoints.
+- Schema migrations are explicit, versioned, and tracked in `bot/migrations/`.
+- Recovery helpers are available for Postgres snapshots and worker-disk classification.
 
 ## Commands
 
@@ -23,6 +25,12 @@ npm run test:chaos
 npm run test:integration
 npm run test:e2e
 npm run test:config
+npm run db:status
+npm run db:migrate
+npm run recovery:db-backup
+npm run recovery:db-restore
+npm run recovery:db-validate
+npm run recovery:worker-state
 npm run build
 npm run premerge
 npm run start:server
@@ -78,6 +86,14 @@ npm run live:test
   - `POST /control/restart-alerts/:id/resolve`
 - `GET /control/history`
 
+## Schema And Recovery
+
+- The Postgres repositories no longer create tables on boot. They assert schema readiness and fail closed if the schema is missing, incomplete, or checksum-mismatched.
+- `npm run db:status` reports whether the database is ready, migratable, pending migration, or unrecoverable.
+- `npm run db:migrate` applies ordered SQL files from `bot/migrations/` and records them in `schema_migrations`.
+- `npm run recovery:db-backup`, `npm run recovery:db-restore`, and `npm run recovery:db-validate` are the supported control-plane backup and restore entrypoints.
+- `npm run recovery:worker-state` reports which worker-local files are canonical, reconstructible, or evidence-only.
+
 ## Operational Notes
 
 - `/kpi/*` expose public bot truth for the dashboard.
@@ -95,6 +111,7 @@ npm run live:test
 - Trend rows can be drilled into a bookmarkable journal slice through the dashboard URL. Selecting a destination writes the bounded drilldown state into the query string, widening to 7d updates the URL deterministically, and clearing drilldown removes the destination/window markers while keeping any broader safe journal filters. Malformed URL state is normalized safely, and all reads continue to go through the dashboard server-side proxy.
 - When bounded journal or drilldown state is active, the dashboard also exposes a `Copy drilldown URL` action. It copies the current normalized dashboard URL only, so the shared link stays read-only and cannot expose private-control secrets or endpoints. Clipboard failures degrade safely and the browser can still use the address bar if needed.
 - If the control token is missing, the protected routes fail closed.
+- If a schema migration is missing or mismatched, the service does not pretend to be healthy. Operators must migrate or restore before boot.
 
 ## Related Docs
 

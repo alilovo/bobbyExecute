@@ -4,6 +4,7 @@
  */
 import { loadConfig } from "../config/load-config.js";
 import { bootstrap } from "../bootstrap.js";
+import { SchemaMigrationError, formatSchemaStatus } from "../persistence/schema-migrations.js";
 
 const entryConfig = loadConfig();
 const entryMode = entryConfig.executionMode === "live" ? "live-test" : entryConfig.executionMode;
@@ -34,6 +35,12 @@ bootstrap()
     process.on("SIGTERM", shutdown);
   })
   .catch((err) => {
+    if (err instanceof SchemaMigrationError) {
+      console.error("[server] Schema readiness blocked startup:", formatSchemaStatus(err.status));
+      console.error(JSON.stringify(err.status, null, 2));
+      process.exit(1);
+      return;
+    }
     console.error("Server failed:", err);
     process.exit(1);
   });

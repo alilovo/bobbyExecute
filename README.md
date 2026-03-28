@@ -8,6 +8,8 @@ Governance-first Solana trading bot with deterministic execution, append-only jo
 - Dry and paper are the normal local modes.
 - Live-test support is guarded, bounded, and operator-visible.
 - Runtime behavior is governed by persisted runtime config and a private control service, not by changing env vars.
+- Schema upgrades are explicit and versioned through `bot/migrations/`; operators run `npm run db:migrate` before booting against a fresh or upgraded database.
+- Recovery is documented and testable through `docs/bobbyexecution/recovery_and_upgrade_runbook.md`.
 - The repository does not claim uncontrolled live trading readiness.
 
 ## Canonical Docs
@@ -18,6 +20,7 @@ Governance-first Solana trading bot with deterministic execution, append-only jo
 - [`bot/README.md`](bot/README.md)
 - [`RENDER_DEPLOYMENT.md`](RENDER_DEPLOYMENT.md)
 - [`docs/bobbyexecution/production_readiness_checklist.md`](docs/bobbyexecution/production_readiness_checklist.md)
+- [`docs/bobbyexecution/recovery_and_upgrade_runbook.md`](docs/bobbyexecution/recovery_and_upgrade_runbook.md)
 - [`docs/bobbyexecution/live_test_runbook.md`](docs/bobbyexecution/live_test_runbook.md)
 - [`docs/bobbyexecution/incident_and_killswitch_runbook.md`](docs/bobbyexecution/incident_and_killswitch_runbook.md)
 - [`docs/bobbyexecution/trading_execution_protocol.md`](docs/bobbyexecution/trading_execution_protocol.md)
@@ -46,26 +49,40 @@ Governance-first Solana trading bot with deterministic execution, append-only jo
    npm install
    ```
 
-4. Run the offline gate:
+4. Check schema readiness if you are pointing at a real Postgres database:
+
+   ```bash
+   cd bot
+   npm run db:status
+   ```
+
+5. If the status is `missing_but_migratable` or `migration_required`, run:
+
+   ```bash
+   cd bot
+   npm run db:migrate
+   ```
+
+6. Run the offline gate:
 
    ```bash
    npm run premerge
    ```
 
-5. Build the runtime:
+7. Build the runtime:
 
    ```bash
    npm run build
    ```
 
-6. Start the API server:
+8. Start the API server:
 
    ```bash
    npm run start:server
    ```
 
-7. Check `GET /health` and `GET /kpi/summary` on the public bot service.
-8. Use the private control service or the dashboard proxy routes for control-path testing, and read worker status through `GET /control/status`.
+9. Check `GET /health` and `GET /kpi/summary` on the public bot service.
+10. Use the private control service or the dashboard proxy routes for control-path testing, and read worker status through `GET /control/status`.
 
 ## Runtime Surfaces
 

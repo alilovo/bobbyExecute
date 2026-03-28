@@ -26,6 +26,21 @@ The deployed baseline now matches the worker split:
 
 The public bot service stays read-only. Mutations live on the private control service, and the dashboard proxies privileged calls through server-side routes instead of calling the control plane directly from the browser.
 
+## Schema And Recovery Discipline
+
+Schema upgrades are explicit and must happen before a new release boots against a target database.
+
+Operator flow:
+
+1. Point the target environment at the intended Postgres instance.
+2. Run `cd bot && npm run db:status`.
+3. If the status is `missing_but_migratable` or `migration_required`, run `cd bot && npm run db:migrate`.
+4. Run `cd bot && npm run recovery:db-validate -- --input=<snapshot.json>` against a known-good snapshot or staging clone.
+5. Run `cd bot && npm run recovery:worker-state -- --journal-path=/var/data/journal.jsonl` on the worker disk that will boot the release.
+6. Deploy the services only after schema and worker-disk prerequisites are satisfied.
+
+If `db:status` reports `unrecoverable`, treat the database as needing restore or reconciliation before the release can start.
+
 ## Build And Start
 
 Bot web service:
@@ -48,6 +63,7 @@ Runtime worker:
 - Start: `cd bot && npm run start:worker`
 - Listen address: none, this is a background worker
 - Persistent state: mounted at `/var/data`
+- Boot-critical worker files stay on that disk, but they are not the canonical source of truth for control-plane state.
 
 Dashboard service:
 
@@ -189,7 +205,7 @@ The bot only emits CORS headers for the dashboard origin injected by the Bluepri
 ## Persistent Storage
 
 The runtime worker owns the persistent disk mount.
-The worker-local file-backed runtime artifacts stay on that disk and are not assumed to be shared with the public bot or control services. That includes the journal, incident files, cycle summaries, idempotency state, kill switch state, and live-control state.
+The worker-local file-backed runtime artifacts stay on that disk and are not assumed to be shared with the public bot or control services. The journal, incident files, cycle summaries, and execution evidence are operational records. The kill-switch, live-control, daily-loss, and idempotency files are boot-critical worker state and must be backed up or restored explicitly if the disk is replaced.
 
 The public bot and private control services read the summarized worker visibility snapshot from Postgres instead of reaching into worker-local files.
 

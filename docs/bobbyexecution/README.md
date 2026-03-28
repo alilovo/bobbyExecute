@@ -9,6 +9,7 @@ Use this index to find the current operator, runtime, and architecture docs.
 
 - [`governance/SoT.md`](../../governance/SoT.md)
 - [`production_readiness_checklist.md`](production_readiness_checklist.md)
+- [`recovery_and_upgrade_runbook.md`](recovery_and_upgrade_runbook.md)
 - [`live_test_runbook.md`](live_test_runbook.md)
 - [`incident_and_killswitch_runbook.md`](incident_and_killswitch_runbook.md)
 

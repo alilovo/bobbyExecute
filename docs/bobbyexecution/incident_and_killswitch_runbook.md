@@ -13,6 +13,8 @@ Trigger an emergency stop when any of these occur:
 - the kill switch is already active
 - a control route refuses a live action in a way that requires operator review
 - a catastrophic chaos or risk outcome indicates the runtime should halt
+- `npm run db:status` reports `migration_required`, `missing_but_migratable`, or `unrecoverable`
+- worker disk loss removes boot-critical state
 
 ## Immediate Actions
 
@@ -44,9 +46,12 @@ Read surfaces:
 
 1. Inspect the latest control history entry and worker visibility snapshot.
 2. Confirm whether the failure was data, adapter, quote, verification, or control related.
-3. Reset only after the cause is understood.
-4. Use `POST /control/reset` to clear the kill switch.
-5. Re-check readiness before re-arming live.
+3. Run `cd bot && npm run db:status` if the failure might involve schema drift or restore state.
+4. If a restore is needed, capture a fresh backup before changing anything else.
+5. Reset only after the cause is understood.
+6. Use `POST /control/reset` to clear the kill switch.
+7. If the worker disk was replaced, run `cd bot && npm run recovery:worker-state -- --journal-path=/var/data/journal.jsonl`.
+8. Re-check readiness before re-arming live.
 
 ## Post-Incident Review
 

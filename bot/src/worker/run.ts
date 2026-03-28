@@ -3,6 +3,7 @@
  */
 import { loadConfig } from "../config/load-config.js";
 import { createRuntimeVisibilityRepository } from "../persistence/runtime-visibility-repository.js";
+import { SchemaMigrationError, formatSchemaStatus } from "../persistence/schema-migrations.js";
 import { startRuntimeWorker } from "./runtime-worker.js";
 
 const entryConfig = loadConfig();
@@ -44,6 +45,12 @@ console.log(
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 })().catch((error) => {
+  if (error instanceof SchemaMigrationError) {
+    console.error("[worker] Schema readiness blocked startup:", formatSchemaStatus(error.status));
+    console.error(JSON.stringify(error.status, null, 2));
+    process.exit(1);
+    return;
+  }
   console.error("[worker] Runtime worker failed:", error);
   process.exit(1);
 });

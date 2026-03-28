@@ -8,6 +8,7 @@ import { RuntimeConfigManager } from "../runtime/runtime-config-manager.js";
 import { createRuntimeVisibilityRepository } from "../persistence/runtime-visibility-repository.js";
 import { createWorkerRestartRepository } from "../persistence/worker-restart-repository.js";
 import { createWorkerRestartAlertRepository } from "../persistence/worker-restart-alert-repository.js";
+import { SchemaMigrationError, formatSchemaStatus } from "../persistence/schema-migrations.js";
 import { createWorkerRestartService } from "./worker-restart-service.js";
 import { WorkerRestartAlertService } from "./worker-restart-alert-service.js";
 import {
@@ -131,6 +132,12 @@ console.log(
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 })().catch((error) => {
+  if (error instanceof SchemaMigrationError) {
+    console.error("[control] Schema readiness blocked startup:", formatSchemaStatus(error.status));
+    console.error(JSON.stringify(error.status, null, 2));
+    process.exit(1);
+    return;
+  }
   console.error("[control] Control plane failed:", error);
   process.exit(1);
 });

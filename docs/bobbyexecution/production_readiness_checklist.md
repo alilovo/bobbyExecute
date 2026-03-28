@@ -10,11 +10,18 @@ Use this before any controlled live-test or any rollout beyond paper mode.
 - [x] Live-control and kill-switch state with pause, resume, halt, reset, and emergency stop
 - [x] Adapter circuit breaker, freshness checks, and fail-closed config validation
 - [x] Real quote and live swap path guarded by RPC verification and live prerequisites
+- [x] Versioned SQL migration runner with explicit schema readiness checks
+- [x] Postgres backup / restore helpers for control-plane state
+- [x] Worker disk classification helper for boot-critical vs evidence-only state
 
 ## Verify Before Controlled Live-Test
 
 - [ ] `cd bot && npm run premerge`
 - [ ] `cd bot && npm run build`
+- [ ] `cd bot && npm run db:status`
+- [ ] `cd bot && npm run db:migrate` if the status is not `ready`
+- [ ] `cd bot && npm run recovery:db-validate -- --input=<known-good-snapshot.json>`
+- [ ] `cd bot && npm run recovery:worker-state -- --journal-path=/var/data/journal.jsonl`
 - [ ] `cd bot && npm run live:preflight`
 - [ ] `LIVE_TRADING=true`
 - [ ] `DRY_RUN=false`
@@ -33,6 +40,7 @@ Use this before any controlled live-test or any rollout beyond paper mode.
 ## No-Go Conditions
 
 - live config validation fails
+- schema migration status is `missing_but_migratable`, `migration_required`, or `unrecoverable`
 - any live prerequisite is missing
 - control token is absent
 - runtime status is `error` or adapter health is degraded for live

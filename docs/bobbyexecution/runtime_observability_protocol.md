@@ -94,7 +94,16 @@ The current runtime writes:
 
 These records are the bot truth, not in-memory placeholders.
 
+Schema readiness is separate from runtime health. The supported operator view is `cd bot && npm run db:status`; the supported upgrade path is `cd bot && npm run db:migrate`. The migration table `schema_migrations` is the source of truth for which SQL files have been applied.
+
 The worker-local runtime files stay on the worker disk. Public and control services consume the summarized worker visibility snapshot from Postgres instead of reading those files directly.
+
+Worker disk classification is explicit:
+
+- boot-critical canonical state: kill switch, live control, daily loss, idempotency
+- reconstructible or evidence-only state: journal, actions, runtime cycle summaries, incidents, execution evidence
+
+If boot-critical worker state is missing, the worker must fail closed rather than inventing a healthy state.
 
 Restart-required config changes are considered pending until the private control plane sees a restart request, the worker restarts, and the worker publishes a converged applied version that matches the requested version. A request being sent is not success on its own.
 
