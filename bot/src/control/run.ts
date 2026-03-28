@@ -112,6 +112,7 @@ console.log(
     controlAuthToken: entryConfig.controlToken,
     restartService,
     restartAlertRepository: restartAlertRepository,
+    databaseUrl: process.env.DATABASE_URL,
   });
 
   const address = server.server.address();

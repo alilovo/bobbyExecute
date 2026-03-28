@@ -43,12 +43,19 @@ export function buildControlServiceUrl(path: string, env: NodeJS.ProcessEnv = pr
 
 export function buildControlRequestHeaders(
   initHeaders: HeadersInit | undefined,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  operatorHeaders: HeadersInit | undefined = undefined
 ): Headers {
   const headers = new Headers(initHeaders);
   headers.set("authorization", `Bearer ${resolveControlServiceToken(env)}`);
   if (!headers.has("content-type")) {
     headers.set("content-type", "application/json");
+  }
+  const forwardedOperatorHeaders = new Headers(operatorHeaders);
+  for (const [name, value] of forwardedOperatorHeaders.entries()) {
+    if (!headers.has(name)) {
+      headers.set(name, value);
+    }
   }
   return headers;
 }
@@ -61,10 +68,11 @@ export interface ForwardControlRequestOptions extends RequestInit {
 export async function forwardControlRequest(
   path: string,
   init: RequestInit = {},
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  operatorHeaders: HeadersInit | undefined = undefined
 ): Promise<Response> {
   const url = buildControlServiceUrl(path, env);
-  const headers = buildControlRequestHeaders(init.headers, env);
+  const headers = buildControlRequestHeaders(init.headers, env, operatorHeaders);
   return fetch(url, {
     ...init,
     headers,

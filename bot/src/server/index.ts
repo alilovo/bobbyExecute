@@ -15,6 +15,8 @@ import type { RuntimeConfigManager } from "../runtime/runtime-config-manager.js"
 import type { RuntimeVisibilityRepository } from "../persistence/runtime-visibility-repository.js";
 import type { WorkerRestartService } from "../control/worker-restart-service.js";
 import type { WorkerRestartAlertRepository } from "../persistence/worker-restart-alert-repository.js";
+import type { ControlGovernanceRepositoryWithAudits } from "../control/control-governance.js";
+import { createControlGovernanceRepository } from "../persistence/control-governance-repository.js";
 
 export interface ServerConfig {
   port?: number;
@@ -32,8 +34,10 @@ export interface ServerConfig {
   runtimeVisibilityRepository?: RuntimeVisibilityRepository;
   restartService?: WorkerRestartService;
   restartAlertRepository?: WorkerRestartAlertRepository;
+  governanceRepository?: ControlGovernanceRepositoryWithAudits;
   runtimeEnvironment?: string;
   controlAuthToken?: string;
+  databaseUrl?: string;
 }
 
 const DEFAULT_PORT = 3333;
@@ -121,6 +125,9 @@ async function createVisibilityServer(
   };
   await fastify.register(kpiRoutes(kpiDeps));
   if (options.includeControlRoutes) {
+    const governanceRepository =
+      config.governanceRepository ?? (await createControlGovernanceRepository(config.databaseUrl));
+    await governanceRepository.ensureSchema();
     await fastify.register(
       controlRoutes({
         runtimeConfigManager: config.runtimeConfigManager,
@@ -128,6 +135,7 @@ async function createVisibilityServer(
         runtimeVisibilityRepository: config.runtimeVisibilityRepository,
         restartService: config.restartService,
         restartAlertRepository: config.restartAlertRepository,
+        governanceRepository,
         runtimeEnvironment: config.runtimeEnvironment,
       })
     );

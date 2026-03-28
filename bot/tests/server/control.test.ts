@@ -8,7 +8,12 @@ import { tmpdir } from "node:os";
 import { createControlServer } from "../../src/server/index.js";
 import { createRuntimeVisibilityRepository, type RuntimeVisibilitySnapshot } from "../../src/persistence/runtime-visibility-repository.js";
 import { resetKillSwitch } from "../../src/governance/kill-switch.js";
-import { createRuntimeConfigTestManager, controlHeaders, TEST_CONTROL_TOKEN } from "../helpers/runtime-config-test-kit.js";
+import {
+  buildControlOperatorAssertionHeaders,
+  createRuntimeConfigTestManager,
+  controlHeaders,
+  TEST_CONTROL_TOKEN,
+} from "../helpers/runtime-config-test-kit.js";
 
 function buildVisibilitySnapshot(): RuntimeVisibilitySnapshot {
   return {
@@ -275,7 +280,7 @@ describe("control routes", () => {
 
     const emergency = await fetch(`${harness.baseUrl}/emergency-stop`, {
       method: "POST",
-      headers: controlHeaders(),
+      headers: buildControlOperatorAssertionHeaders({ action: "emergency_stop", target: "/emergency-stop" }),
     });
     expect(emergency.status).toBe(200);
     const emergencyBody = await emergency.json();
@@ -292,7 +297,7 @@ describe("control routes", () => {
 
     const reset = await fetch(`${harness.baseUrl}/control/reset`, {
       method: "POST",
-      headers: controlHeaders(),
+      headers: buildControlOperatorAssertionHeaders({ action: "reset_kill_switch", target: "/control/reset" }),
     });
     expect(reset.status).toBe(200);
     const resetBody = await reset.json();

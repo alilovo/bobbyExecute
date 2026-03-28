@@ -109,6 +109,10 @@ The private control plane also exposes a read-only delivery journal and compact 
 
 `GET /control/restart-alert-deliveries/trends` adds a bounded 24h vs 7d comparison slice on top of the same history. It reports compact per-destination counts, health hints, trend hints, and recent send/failure timestamps so operators can spot degrading or inactive destinations without reading raw journal rows. The trend view is read-only and non-authoritative: it never mutates restart state or replaces the underlying event history.
 
+Trend rows can also be used as bookmarkable drilldowns: selecting a destination writes a bounded journal slice into the URL, including the destination, preserved safe filter context, and the 24h or 7d window. Clearing drilldown removes the trend-specific URL state and returns to broader journal browsing. Malformed URL values are normalized or ignored, and all reads still flow through the dashboard server-side proxy.
+
+When any bounded journal or drilldown state is present, the control page also shows a small `Copy drilldown URL` action. It copies the current normalized dashboard URL, so operators can share the same bounded slice without using the address bar manually. The copied link remains read-only and never includes control-plane secrets or private-control service URLs.
+
 ## Repo Layout
 
 ```text

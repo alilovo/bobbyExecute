@@ -4,16 +4,25 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { POLLING } from '@/lib/constants';
 import type {
+  DashboardLoginRequest,
   RestartAlertActionRequest,
   RestartAlertActionResponse,
   RestartAlertListResponse,
   RestartWorkerRequest,
   RestartWorkerResponse,
+  DashboardOperatorAuthState,
+  DashboardLoginResponse,
+  DashboardLogoutResponse,
   WorkerRestartDeliveryQuery,
   WorkerRestartDeliveryJournalResponse,
   WorkerRestartDeliverySummaryResponse,
   WorkerRestartDeliveryTrendQuery,
   WorkerRestartDeliveryTrendResponse,
+  LivePromotionDecisionBody,
+  LivePromotionListResponse,
+  LivePromotionRecord,
+  LivePromotionRequestBody,
+  LivePromotionTargetMode,
 } from '@/types/api';
 
 export function useEmergencyStop() {
@@ -46,6 +55,37 @@ export function useControlStatus() {
     queryFn: api.controlStatus,
     refetchInterval: POLLING.CONTROL_STATUS,
     staleTime: POLLING.CONTROL_STATUS,
+  });
+}
+
+export function useOperatorSession() {
+  return useQuery<DashboardOperatorAuthState>({
+    queryKey: ['operator-session'],
+    queryFn: api.operatorSession,
+    refetchInterval: POLLING.CONTROL_STATUS,
+    staleTime: POLLING.CONTROL_STATUS,
+  });
+}
+
+export function useLogin() {
+  const queryClient = useQueryClient();
+  return useMutation<DashboardLoginResponse, Error, DashboardLoginRequest>({
+    mutationFn: api.login,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['operator-session'] });
+      queryClient.invalidateQueries({ queryKey: ['control-status'] });
+    },
+  });
+}
+
+export function useLogout() {
+  const queryClient = useQueryClient();
+  return useMutation<DashboardLogoutResponse, Error>({
+    mutationFn: api.logout,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['operator-session'] });
+      queryClient.invalidateQueries({ queryKey: ['control-status'] });
+    },
   });
 }
 
@@ -126,5 +166,59 @@ export function useRestartAlertDeliveryTrends(filters: WorkerRestartDeliveryTren
     queryFn: () => api.restartAlertDeliveryTrends(filters),
     refetchInterval: POLLING.CONTROL_STATUS,
     staleTime: POLLING.CONTROL_STATUS,
+  });
+}
+
+export function useLivePromotions(targetMode: LivePromotionTargetMode = 'live_limited') {
+  return useQuery<LivePromotionListResponse>({
+    queryKey: ['live-promotions', targetMode],
+    queryFn: () => api.livePromotions(targetMode),
+    refetchInterval: POLLING.CONTROL_STATUS,
+    staleTime: POLLING.CONTROL_STATUS,
+  });
+}
+
+function invalidateLivePromotionQueries(queryClient: ReturnType<typeof useQueryClient>): void {
+  queryClient.invalidateQueries({ queryKey: ['live-promotions'] });
+  queryClient.invalidateQueries({ queryKey: ['control-status'] });
+}
+
+export function useRequestLivePromotion() {
+  const queryClient = useQueryClient();
+  return useMutation<{ success: true; request: LivePromotionRecord }, Error, LivePromotionRequestBody>({
+    mutationFn: api.requestLivePromotion,
+    onSuccess: () => invalidateLivePromotionQueries(queryClient),
+  });
+}
+
+export function useApproveLivePromotion() {
+  const queryClient = useQueryClient();
+  return useMutation<{ success: true; request: LivePromotionRecord }, Error, { id: string; input?: LivePromotionDecisionBody }>({
+    mutationFn: ({ id, input }) => api.approveLivePromotion(id, input),
+    onSuccess: () => invalidateLivePromotionQueries(queryClient),
+  });
+}
+
+export function useDenyLivePromotion() {
+  const queryClient = useQueryClient();
+  return useMutation<{ success: true; request: LivePromotionRecord }, Error, { id: string; input?: LivePromotionDecisionBody }>({
+    mutationFn: ({ id, input }) => api.denyLivePromotion(id, input),
+    onSuccess: () => invalidateLivePromotionQueries(queryClient),
+  });
+}
+
+export function useApplyLivePromotion() {
+  const queryClient = useQueryClient();
+  return useMutation<{ success: true; request: LivePromotionRecord }, Error, { id: string; input?: LivePromotionDecisionBody }>({
+    mutationFn: ({ id, input }) => api.applyLivePromotion(id, input),
+    onSuccess: () => invalidateLivePromotionQueries(queryClient),
+  });
+}
+
+export function useRollbackLivePromotion() {
+  const queryClient = useQueryClient();
+  return useMutation<{ success: true; request: LivePromotionRecord }, Error, { id: string; input?: LivePromotionDecisionBody }>({
+    mutationFn: ({ id, input }) => api.rollbackLivePromotion(id, input),
+    onSuccess: () => invalidateLivePromotionQueries(queryClient),
   });
 }

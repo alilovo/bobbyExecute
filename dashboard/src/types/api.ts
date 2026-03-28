@@ -2,6 +2,10 @@ export type HealthStatus = 'OK' | 'DEGRADED' | 'FAIL';
 export type BotStatus = 'running' | 'paused' | 'stopped';
 export type AdapterStatus = 'healthy' | 'degraded' | 'down';
 export type DecisionAction = 'allow' | 'block' | 'abort';
+export type DashboardOperatorRole = 'viewer' | 'operator' | 'admin';
+export type LivePromotionTargetMode = 'live_limited' | 'live';
+export type LivePromotionWorkflowStatus = 'pending' | 'approved' | 'denied' | 'blocked' | 'applied' | 'rolled_back';
+export type LivePromotionApplicationStatus = 'pending_restart' | 'applied' | 'rolled_back' | 'rejected';
 
 export interface KillSwitchState {
   halted: boolean;
@@ -377,6 +381,111 @@ export interface ControlStatusResponse {
   restartAlerts?: WorkerRestartAlertSummary;
   killSwitch: KillSwitchState;
   liveControl: Record<string, unknown>;
+}
+
+export interface DashboardOperatorSession {
+  sessionId: string;
+  actorId: string;
+  displayName: string;
+  role: DashboardOperatorRole;
+  issuedAt: string;
+  expiresAt: string;
+}
+
+export interface DashboardOperatorAuthState {
+  configured: boolean;
+  authenticated: boolean;
+  session?: DashboardOperatorSession;
+  identityLabel: string;
+  reason?: string;
+}
+
+export interface DashboardLoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface DashboardLoginResponse extends DashboardOperatorAuthState {}
+
+export interface DashboardLogoutResponse {
+  success: true;
+}
+
+export interface LivePromotionGateReason {
+  code: string;
+  message: string;
+  severity: 'blocked' | 'warning';
+}
+
+export interface LivePromotionGateResult {
+  allowed: boolean;
+  targetMode: LivePromotionTargetMode;
+  currentMode: string;
+  currentRuntimeStatus: string;
+  workerHeartbeatAt?: string;
+  activeRestartAlertCount: number;
+  restartRequired: boolean;
+  restartInProgress: boolean;
+  killSwitchActive: boolean;
+  healthPosture?: string;
+  healthReason?: string;
+  reasons: LivePromotionGateReason[];
+}
+
+export interface LivePromotionRecord {
+  id: string;
+  environment: string;
+  targetMode: LivePromotionTargetMode;
+  previousMode: string;
+  workflowStatus: LivePromotionWorkflowStatus;
+  applicationStatus: LivePromotionApplicationStatus;
+  requestReason: string;
+  blockedReason?: string;
+  approvalReason?: string;
+  rollbackReason?: string;
+  requestedByActorId: string;
+  requestedByDisplayName: string;
+  requestedByRole: DashboardOperatorRole;
+  requestedBySessionId: string;
+  requestedAt: string;
+  approvedByActorId?: string;
+  approvedByDisplayName?: string;
+  approvedByRole?: DashboardOperatorRole;
+  approvedBySessionId?: string;
+  approvedAt?: string;
+  deniedByActorId?: string;
+  deniedByDisplayName?: string;
+  deniedByRole?: DashboardOperatorRole;
+  deniedBySessionId?: string;
+  deniedAt?: string;
+  appliedByActorId?: string;
+  appliedByDisplayName?: string;
+  appliedByRole?: DashboardOperatorRole;
+  appliedBySessionId?: string;
+  appliedAt?: string;
+  rolledBackByActorId?: string;
+  rolledBackByDisplayName?: string;
+  rolledBackByRole?: DashboardOperatorRole;
+  rolledBackBySessionId?: string;
+  rolledBackAt?: string;
+  updatedAt: string;
+}
+
+export interface LivePromotionListResponse {
+  success: true;
+  currentMode: string;
+  currentRuntimeStatus: string;
+  gate: LivePromotionGateResult;
+  requests: LivePromotionRecord[];
+}
+
+export interface LivePromotionRequestBody {
+  targetMode: LivePromotionTargetMode;
+  reason?: string;
+}
+
+export interface LivePromotionDecisionBody {
+  reason?: string;
 }
 
 export interface RestartWorkerRequest {

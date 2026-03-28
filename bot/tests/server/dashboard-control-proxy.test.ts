@@ -1,15 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkerRestartDeliveryTrendRow } from "../../../dashboard/src/types/api.ts";
+import { buildDashboardSessionCookie } from "../../../dashboard/src/lib/operator-auth.ts";
+import { parseControlOperatorAssertion } from "../../src/control/control-governance.js";
+import type { DashboardOperatorSession } from "../../../dashboard/src/types/api.ts";
 
 const CONTROL_SECRET = "dashboard-control-secret";
 const CONTROL_SERVICE_URL = "https://control.internal";
 const BOT_API_URL = "https://bot.example";
+const DASHBOARD_SESSION_SECRET = "dashboard-session-secret";
 
 function resetEnv(): void {
   delete process.env.CONTROL_SERVICE_URL;
   delete process.env.CONTROL_TOKEN;
   delete process.env.NEXT_PUBLIC_API_URL;
   delete process.env.NEXT_PUBLIC_USE_MOCK;
+  delete process.env.DASHBOARD_SESSION_SECRET;
 }
 
 describe("dashboard control proxy", () => {
@@ -19,6 +24,7 @@ describe("dashboard control proxy", () => {
     process.env.CONTROL_TOKEN = CONTROL_SECRET;
     process.env.NEXT_PUBLIC_API_URL = BOT_API_URL;
     process.env.NEXT_PUBLIC_USE_MOCK = "false";
+    process.env.DASHBOARD_SESSION_SECRET = DASHBOARD_SESSION_SECRET;
   });
 
   afterEach(() => {
@@ -81,7 +87,9 @@ describe("dashboard control proxy", () => {
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
 
     const { api } = await import("../../../dashboard/src/lib/api.ts");
-    const { buildTrendDrilldown } = await import("../../../dashboard/src/lib/delivery-drilldown.ts");
+    const { buildDeliveryJournalUrlState, buildTrendDrilldown, parseDeliveryJournalUrlState } = await import(
+      "../../../dashboard/src/lib/delivery-drilldown.ts"
+    );
 
     const trendRow: WorkerRestartDeliveryTrendRow = {
       destinationName: "primary",
@@ -150,11 +158,13 @@ describe("dashboard control proxy", () => {
       formatterProfile: "generic",
     };
     const drilldown = buildTrendDrilldown(trendDraft, trendRow, "24h");
+    const sharedUrl = buildDeliveryJournalUrlState(drilldown).toString();
+    const restoredFromUrl = parseDeliveryJournalUrlState(new URLSearchParams(sharedUrl));
 
     await api.restartAlertDeliveries({ environment: "production", destinationName: "primary" });
     await api.restartAlertDeliverySummary({ environment: "production", destinationName: "primary" });
     await api.restartAlertDeliveryTrends({ environment: "production", destinationName: "primary", limit: 25 });
-    await api.restartAlertDeliveries(drilldown.query);
+    await api.restartAlertDeliveries(restoredFromUrl.query);
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(String(fetchMock.mock.calls[0][0])).toBe("/api/control/restart-alert-deliveries?environment=production&destinationName=primary");
@@ -162,6 +172,9 @@ describe("dashboard control proxy", () => {
     expect(String(fetchMock.mock.calls[2][0])).toBe("/api/control/restart-alert-deliveries/trends?environment=production&destinationName=primary&limit=25");
     expect(String(fetchMock.mock.calls[3][0])).toBe(
       "/api/control/restart-alert-deliveries?environment=production&destinationName=primary&status=failed&eventType=alert_escalated&severity=critical&from=2026-03-27T00%3A00%3A00.000Z&to=2026-03-28T00%3A00%3A00.000Z&alertId=alert-123&restartRequestId=restart-123&formatterProfile=generic"
+    );
+    expect(sharedUrl).toBe(
+      "environment=production&destinationName=primary&status=failed&eventType=alert_escalated&severity=critical&from=2026-03-27T00%3A00%3A00.000Z&to=2026-03-28T00%3A00%3A00.000Z&alertId=alert-123&restartRequestId=restart-123&formatterProfile=generic&drilldown=trend&window=24h"
     );
     const firstHeaders = new Headers(fetchMock.mock.calls[0][1] as RequestInit | undefined);
     const secondHeaders = new Headers(fetchMock.mock.calls[1][1] as RequestInit | undefined);
@@ -184,6 +197,17 @@ describe("dashboard control proxy", () => {
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
 
     const { POST } = await import("../../../dashboard/src/app/api/control/[...path]/route.ts");
+    const session: DashboardOperatorSession = {
+      sessionId: "session-123",
+      actorId: "alice",
+      displayName: "Alice Example",
+      role: "admin",
+      issuedAt: "2026-03-27T12:00:00.000Z",
+      expiresAt: "2026-03-28T20:00:00.000Z",
+    };
+    const sessionCookie = buildDashboardSessionCookie(session, {
+      DASHBOARD_SESSION_SECRET,
+    });
 
     const request = new Request("http://localhost/api/control/mode", {
       method: "POST",
@@ -191,6 +215,7 @@ describe("dashboard control proxy", () => {
         "content-type": "application/json",
         "x-request-id": "req-123",
         "x-idempotency-key": "idem-456",
+        cookie: `${sessionCookie.name}=${sessionCookie.value}`,
       },
       body: JSON.stringify({ mode: "paper", reason: "proxy test" }),
     });
@@ -209,6 +234,16 @@ describe("dashboard control proxy", () => {
     expect(headers.get("content-type")).toBe("application/json");
     expect(headers.get("x-request-id")).toBe("req-123");
     expect(headers.get("x-idempotency-key")).toBe("idem-456");
+    const assertion = parseControlOperatorAssertion(headers.get("x-dashboard-operator-assertion") ?? undefined, CONTROL_SECRET);
+    expect(assertion).toMatchObject({
+      actorId: "alice",
+      displayName: "Alice Example",
+      role: "admin",
+      authResult: "authorized",
+      action: "mode_change",
+      target: "/control/mode",
+      requestId: "req-123",
+    });
 
     await expect(response.json()).resolves.toMatchObject({
       success: true,

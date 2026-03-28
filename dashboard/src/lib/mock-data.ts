@@ -5,6 +5,9 @@ import type {
   DecisionsResponse,
   MetricsResponse,
   ControlStatusResponse,
+  DashboardLoginRequest,
+  DashboardOperatorAuthState,
+  DashboardOperatorRole,
   RestartAlertListResponse,
   WorkerRestartDeliveryJournalResponse,
   WorkerRestartDeliverySummaryResponse,
@@ -17,10 +20,42 @@ import type {
   WorkerRestartAlertRecord,
   WorkerRestartAlertNotificationEventType,
   WorkerRestartStatus,
+  LivePromotionDecisionBody,
+  LivePromotionGateResult,
+  LivePromotionListResponse,
+  LivePromotionRecord,
+  LivePromotionRequestBody,
+  LivePromotionTargetMode,
 } from '@/types/api';
 
 const now = () => new Date().toISOString();
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+
+export function mockDashboardSession(role: DashboardOperatorRole = 'admin'): DashboardOperatorAuthState {
+  const session = {
+    sessionId: `session-${role}`,
+    actorId: `${role}-operator`,
+    displayName: `${role[0].toUpperCase()}${role.slice(1)} Operator`,
+    role,
+    issuedAt: ago(15 * 60 * 1000),
+    expiresAt: ago(-7 * 60 * 60 * 1000),
+  };
+
+  return {
+    configured: true,
+    authenticated: true,
+    session,
+    identityLabel: `${session.displayName} (${session.role})`,
+  };
+}
+
+export function mockDashboardLogin(input: DashboardLoginRequest): DashboardOperatorAuthState {
+  return mockDashboardSession(input.username.includes('viewer') ? 'viewer' : input.username.includes('ops') ? 'operator' : 'admin');
+}
+
+export function mockDashboardLogout() {
+  return { success: true as const };
+}
 
 export function mockHealth(): HealthResponse {
   return {
@@ -219,6 +254,135 @@ export function mockControlStatus(): ControlStatusResponse {
       liveTestMode: false,
       killSwitchActive: false,
       lastTransitionAt: heartbeat,
+    },
+  };
+}
+
+function buildLivePromotionGate(targetMode: LivePromotionTargetMode): LivePromotionGateResult {
+  return {
+    allowed: true,
+    targetMode,
+    currentMode: 'paper',
+    currentRuntimeStatus: 'running',
+    workerHeartbeatAt: heartbeatTimestamp(),
+    activeRestartAlertCount: 0,
+    restartRequired: false,
+    restartInProgress: false,
+    killSwitchActive: false,
+    healthPosture: 'healthy_for_posture',
+    healthReason: undefined,
+    reasons: [],
+  };
+}
+
+function heartbeatTimestamp(): string {
+  return now();
+}
+
+function buildLivePromotionRecord(targetMode: LivePromotionTargetMode, status: LivePromotionRecord['workflowStatus']): LivePromotionRecord {
+  const timestamp = now();
+  const session = mockDashboardSession('admin').session!;
+  return {
+    id: `promotion-${targetMode}-${status}`,
+    environment: 'mock',
+    targetMode,
+    previousMode: 'paper',
+    workflowStatus: status,
+    applicationStatus: status === 'applied' ? 'pending_restart' : status === 'rolled_back' ? 'rolled_back' : 'pending_restart',
+    requestReason: `mock ${targetMode} promotion`,
+    requestedByActorId: session.actorId,
+    requestedByDisplayName: session.displayName,
+    requestedByRole: session.role,
+    requestedBySessionId: session.sessionId,
+    requestedAt: timestamp,
+    blockedReason: status === 'blocked' ? 'mock blocked' : undefined,
+    approvalReason: status === 'approved' ? 'mock approved' : undefined,
+    rollbackReason: status === 'rolled_back' ? 'mock rollback' : undefined,
+    approvedByActorId: status === 'approved' || status === 'applied' || status === 'rolled_back' ? session.actorId : undefined,
+    approvedByDisplayName: status === 'approved' || status === 'applied' || status === 'rolled_back' ? session.displayName : undefined,
+    approvedByRole: status === 'approved' || status === 'applied' || status === 'rolled_back' ? session.role : undefined,
+    approvedBySessionId: status === 'approved' || status === 'applied' || status === 'rolled_back' ? session.sessionId : undefined,
+    approvedAt: status === 'approved' || status === 'applied' || status === 'rolled_back' ? timestamp : undefined,
+    deniedByActorId: status === 'denied' ? session.actorId : undefined,
+    deniedByDisplayName: status === 'denied' ? session.displayName : undefined,
+    deniedByRole: status === 'denied' ? session.role : undefined,
+    deniedBySessionId: status === 'denied' ? session.sessionId : undefined,
+    deniedAt: status === 'denied' ? timestamp : undefined,
+    appliedByActorId: status === 'applied' ? session.actorId : undefined,
+    appliedByDisplayName: status === 'applied' ? session.displayName : undefined,
+    appliedByRole: status === 'applied' ? session.role : undefined,
+    appliedBySessionId: status === 'applied' ? session.sessionId : undefined,
+    appliedAt: status === 'applied' ? timestamp : undefined,
+    rolledBackByActorId: status === 'rolled_back' ? session.actorId : undefined,
+    rolledBackByDisplayName: status === 'rolled_back' ? session.displayName : undefined,
+    rolledBackByRole: status === 'rolled_back' ? session.role : undefined,
+    rolledBackBySessionId: status === 'rolled_back' ? session.sessionId : undefined,
+    rolledBackAt: status === 'rolled_back' ? timestamp : undefined,
+    updatedAt: timestamp,
+  };
+}
+
+export function mockLivePromotions(input: { targetMode?: LivePromotionTargetMode } = {}): LivePromotionListResponse {
+  const gate = buildLivePromotionGate(input.targetMode ?? 'live');
+  return {
+    success: true,
+    currentMode: 'paper',
+    currentRuntimeStatus: 'running',
+    gate,
+    requests: [
+      buildLivePromotionRecord(input.targetMode === 'live' ? 'live' : 'live_limited', 'pending'),
+      buildLivePromotionRecord('live', 'blocked'),
+    ],
+  };
+}
+
+export function mockRequestLivePromotion(input: LivePromotionRequestBody): { success: true; request: LivePromotionRecord } {
+  return {
+    success: true,
+    request: buildLivePromotionRecord(input.targetMode, 'pending'),
+  };
+}
+
+export function mockApproveLivePromotion(id: string, input: LivePromotionDecisionBody = {}) {
+  const targetMode = id.includes('live_limited') ? 'live_limited' : 'live';
+  return {
+    success: true as const,
+    request: {
+      ...buildLivePromotionRecord(targetMode, 'approved'),
+      approvalReason: input.reason ?? 'mock approved',
+    },
+  };
+}
+
+export function mockDenyLivePromotion(id: string, input: LivePromotionDecisionBody = {}) {
+  const targetMode = id.includes('live_limited') ? 'live_limited' : 'live';
+  return {
+    success: true as const,
+    request: {
+      ...buildLivePromotionRecord(targetMode, 'denied'),
+      blockedReason: input.reason ?? 'mock denied',
+    },
+  };
+}
+
+export function mockApplyLivePromotion(id: string, input: LivePromotionDecisionBody = {}) {
+  const targetMode = id.includes('live_limited') ? 'live_limited' : 'live';
+  return {
+    success: true as const,
+    request: {
+      ...buildLivePromotionRecord(targetMode, 'applied'),
+      approvalReason: input.reason ?? 'mock applied',
+    },
+  };
+}
+
+export function mockRollbackLivePromotion(id: string, input: LivePromotionDecisionBody = {}) {
+  const targetMode = id.includes('live_limited') ? 'live_limited' : 'live';
+  return {
+    success: true as const,
+    request: {
+      ...buildLivePromotionRecord(targetMode, 'rolled_back'),
+      rollbackReason: input.reason ?? 'mock rolled back',
     },
   };
 }

@@ -4,6 +4,10 @@ import type {
   AdaptersResponse,
   DecisionsResponse,
   MetricsResponse,
+  DashboardLoginRequest,
+  DashboardLoginResponse,
+  DashboardLogoutResponse,
+  DashboardOperatorAuthState,
   ControlStatusResponse,
   EmergencyStopResponse,
   WorkerRestartDeliveryQuery,
@@ -17,6 +21,11 @@ import type {
   RestartWorkerRequest,
   RestartWorkerResponse,
   ResetResponse,
+  LivePromotionDecisionBody,
+  LivePromotionListResponse,
+  LivePromotionRecord,
+  LivePromotionRequestBody,
+  LivePromotionTargetMode,
 } from '../types/api';
 import { API_BASE, USE_MOCK } from './constants';
 import {
@@ -26,11 +35,20 @@ import {
   mockDecisions,
   mockMetrics,
   mockControlStatus,
+  mockDashboardLogin,
+  mockDashboardLogout,
+  mockDashboardSession,
   mockRestartAlerts,
   mockRestartWorker,
   mockRestartAlertDeliveries,
   mockRestartAlertDeliverySummary,
   mockRestartAlertDeliveryTrends,
+  mockLivePromotions,
+  mockRequestLivePromotion,
+  mockApproveLivePromotion,
+  mockDenyLivePromotion,
+  mockApplyLivePromotion,
+  mockRollbackLivePromotion,
 } from './mock-data';
 
 class ApiError extends Error {
@@ -108,6 +126,42 @@ async function fetchProxyApi<T>(path: string, options?: RequestInit): Promise<T>
   return response.json();
 }
 
+async function fetchAuthApi<T>(path: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`/api/auth${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    let message = `${response.status} ${response.statusText}`;
+    if (text) {
+      try {
+        const payload = JSON.parse(text) as { reason?: unknown; message?: unknown };
+        if (typeof payload.reason === 'string' && payload.reason.trim()) {
+          message = payload.reason;
+        } else if (typeof payload.message === 'string' && payload.message.trim()) {
+          message = payload.message;
+        }
+      } catch {
+        message = text;
+      }
+    }
+    throw new ApiError(response.status, message);
+  }
+
+  return response.json();
+}
+
+function buildLivePromotionQueryString(targetMode: LivePromotionTargetMode): string {
+  const params = new URLSearchParams();
+  params.set('targetMode', targetMode);
+  return `?${params.toString()}`;
+}
+
 export const api = {
   health: (): Promise<HealthResponse> =>
     USE_MOCK ? Promise.resolve(mockHealth()) : fetchApi('/health'),
@@ -123,6 +177,18 @@ export const api = {
 
   metrics: (): Promise<MetricsResponse> =>
     USE_MOCK ? Promise.resolve(mockMetrics()) : fetchApi('/kpi/metrics'),
+
+  operatorSession: (): Promise<DashboardOperatorAuthState> =>
+    USE_MOCK ? Promise.resolve(mockDashboardSession()) : fetchAuthApi('/session'),
+
+  login: (input: DashboardLoginRequest): Promise<DashboardLoginResponse> =>
+    USE_MOCK ? Promise.resolve(mockDashboardLogin(input)) : fetchAuthApi('/login', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  logout: (): Promise<DashboardLogoutResponse> =>
+    USE_MOCK ? Promise.resolve(mockDashboardLogout()) : fetchAuthApi('/logout', { method: 'POST' }),
 
   controlStatus: (): Promise<ControlStatusResponse> =>
     USE_MOCK ? Promise.resolve(mockControlStatus()) : fetchProxyApi('/status'),
@@ -144,6 +210,39 @@ export const api = {
     USE_MOCK
       ? Promise.resolve(mockRestartAlertDeliveryTrends(query))
       : fetchProxyApi(`/restart-alert-deliveries/trends${buildDeliveryQueryString(query)}`),
+
+  livePromotions: (targetMode: LivePromotionTargetMode = 'live_limited'): Promise<LivePromotionListResponse> =>
+    USE_MOCK ? Promise.resolve(mockLivePromotions({ targetMode })) : fetchProxyApi(`/live-promotion${buildLivePromotionQueryString(targetMode)}`),
+
+  requestLivePromotion: (input: LivePromotionRequestBody): Promise<{ success: true; request: LivePromotionRecord }> =>
+    USE_MOCK ? Promise.resolve(mockRequestLivePromotion(input)) : fetchProxyApi('/live-promotion/request', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  approveLivePromotion: (id: string, input: LivePromotionDecisionBody = {}): Promise<{ success: true; request: LivePromotionRecord }> =>
+    USE_MOCK ? Promise.resolve(mockApproveLivePromotion(id, input)) : fetchProxyApi(`/live-promotion/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  denyLivePromotion: (id: string, input: LivePromotionDecisionBody = {}): Promise<{ success: true; request: LivePromotionRecord }> =>
+    USE_MOCK ? Promise.resolve(mockDenyLivePromotion(id, input)) : fetchProxyApi(`/live-promotion/${id}/deny`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  applyLivePromotion: (id: string, input: LivePromotionDecisionBody = {}): Promise<{ success: true; request: LivePromotionRecord }> =>
+    USE_MOCK ? Promise.resolve(mockApplyLivePromotion(id, input)) : fetchProxyApi(`/live-promotion/${id}/apply`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  rollbackLivePromotion: (id: string, input: LivePromotionDecisionBody = {}): Promise<{ success: true; request: LivePromotionRecord }> =>
+    USE_MOCK ? Promise.resolve(mockRollbackLivePromotion(id, input)) : fetchProxyApi(`/live-promotion/${id}/rollback`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 
   emergencyStop: (): Promise<EmergencyStopResponse> =>
     fetchProxyApi('/emergency-stop', { method: 'POST' }),

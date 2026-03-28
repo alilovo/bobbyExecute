@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createControlServer } from "../../src/server/index.js";
 import { createRuntimeVisibilityRepository, type RuntimeVisibilitySnapshot } from "../../src/persistence/runtime-visibility-repository.js";
-import { createRuntimeConfigTestManager, controlHeaders, TEST_CONTROL_TOKEN } from "../helpers/runtime-config-test-kit.js";
+import {
+  buildControlOperatorAssertionHeaders,
+  createRuntimeConfigTestManager,
+  controlHeaders,
+  TEST_CONTROL_TOKEN,
+} from "../helpers/runtime-config-test-kit.js";
 
 function buildVisibilitySnapshot(): RuntimeVisibilitySnapshot {
   return {
@@ -196,7 +201,7 @@ describe("control runtime-config routes", () => {
     const modeResponse = await fetch(`${harness.baseUrl}/control/mode`, {
       method: "POST",
       headers: {
-        ...controlHeaders(),
+        ...buildControlOperatorAssertionHeaders({ action: "runtime_config_change", target: "/control/runtime-config" }),
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -266,7 +271,7 @@ describe("control runtime-config routes", () => {
     const patchResponse = await fetch(`${harness.baseUrl}/control/runtime-config`, {
       method: "POST",
       headers: {
-        ...controlHeaders(),
+        ...buildControlOperatorAssertionHeaders({ action: "runtime_config_change", target: "/control/runtime-config" }),
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -298,7 +303,7 @@ describe("control runtime-config routes", () => {
     const pauseResponse = await fetch(`${harness.baseUrl}/control/pause`, {
       method: "POST",
       headers: {
-        ...controlHeaders(),
+        ...buildControlOperatorAssertionHeaders({ action: "pause", target: "/control/pause", role: "operator" }),
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -321,7 +326,7 @@ describe("control runtime-config routes", () => {
     const resumeResponse = await fetch(`${harness.baseUrl}/control/resume`, {
       method: "POST",
       headers: {
-        ...controlHeaders(),
+        ...buildControlOperatorAssertionHeaders({ action: "resume", target: "/control/resume", role: "operator" }),
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -341,7 +346,7 @@ describe("control runtime-config routes", () => {
     const triggerResponse = await fetch(`${harness.baseUrl}/emergency-stop`, {
       method: "POST",
       headers: {
-        ...controlHeaders(),
+        ...buildControlOperatorAssertionHeaders({ action: "emergency_stop", target: "/emergency-stop" }),
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -364,7 +369,7 @@ describe("control runtime-config routes", () => {
     const resetResponse = await fetch(`${harness.baseUrl}/control/reset`, {
       method: "POST",
       headers: {
-        ...controlHeaders(),
+        ...buildControlOperatorAssertionHeaders({ action: "reset_kill_switch", target: "/control/reset" }),
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -392,7 +397,7 @@ describe("control runtime-config routes", () => {
     const reloadResponse = await fetch(`${harness.baseUrl}/control/reload`, {
       method: "POST",
       headers: {
-        ...controlHeaders(),
+        ...buildControlOperatorAssertionHeaders({ action: "reload", target: "/control/reload" }),
         "content-type": "application/json",
       },
       body: JSON.stringify({

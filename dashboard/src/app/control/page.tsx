@@ -1,17 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
+  useApplyLivePromotion,
+  useApproveLivePromotion,
   useAcknowledgeRestartAlert,
+  useDenyLivePromotion,
   useControlStatus,
+  useLivePromotions,
+  useLogin,
+  useLogout,
+  useOperatorSession,
   useEmergencyStop,
   useRestartAlertDeliveries,
   useRestartAlertDeliverySummary,
   useRestartAlertDeliveryTrends,
+  useRequestLivePromotion,
   useResetKillSwitch,
   useRestartAlerts,
   useRestartWorker,
   useResolveRestartAlert,
+  useRollbackLivePromotion,
 } from '@/hooks/use-control';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,20 +30,29 @@ import { Badge } from '@/components/ui/badge';
 import { LoadingCard } from '@/components/shared/loading-card';
 import { ErrorCard } from '@/components/shared/error-card';
 import {
+  buildDeliveryJournalUrlPathname,
+  buildDeliveryJournalUrlState,
+  buildDeliveryJournalShareUrl,
   buildDeliveryQueryFromDraft,
   buildTrendDrilldown,
-  captureDeliveryJournalSnapshot,
   createEmptyDeliveryJournalDraft,
+  clearTrendDrilldownDraft,
+  copyTextToClipboard,
   drilldownLabel,
   drilldownWindowRangeLabel,
-  restoreDeliveryJournalSnapshot,
+  getDeliveryJournalCopyButtonLabel,
+  getDeliveryJournalCopyNotice,
+  hasShareableDeliveryJournalState,
   type DeliveryDrilldownWindow,
   type DeliveryJournalDraft,
-  type DeliveryJournalSnapshot,
+  parseDeliveryJournalUrlState,
   type DeliveryTrendDrilldownState,
+  normalizeDeliveryJournalDraft,
 } from '@/lib/delivery-drilldown';
+import { describeOperatorRole, requiredRoleForAction } from '@/lib/operator-policy';
 import { formatTimestampFull, relativeTime } from '@/lib/utils';
 import type {
+  DashboardOperatorRole,
   WorkerRestartAlertRecord,
   WorkerRestartDeliveryHealthHint,
   WorkerRestartDeliveryJournalRow,
@@ -42,9 +61,11 @@ import type {
   WorkerRestartDeliveryTrendHint,
   WorkerRestartDeliveryTrendQuery,
   WorkerRestartDeliveryTrendRow,
+  LivePromotionRecord,
+  LivePromotionTargetMode,
   WorkerRestartStatus,
 } from '@/types/api';
-import { ShieldAlert, ShieldCheck, OctagonX, RotateCcw, AlertTriangle, Clock, Server } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, OctagonX, RotateCcw, AlertTriangle, Clock, Server, LogIn, LogOut, UserRound, ShieldQuestion } from 'lucide-react';
 
 const CONFIRM_TEXT = 'HALT';
 const RESET_CONFIRM_TEXT = 'RESET';
@@ -219,7 +240,85 @@ function compactValue(value?: string): string {
   return value && value.trim().length > 0 ? value : '—';
 }
 
-export default function ControlPage() {
+function roleBadgeVariant(role?: DashboardOperatorRole | null): 'default' | 'success' | 'warning' | 'danger' | 'info' {
+  switch (role) {
+    case 'admin':
+      return 'success';
+    case 'operator':
+      return 'info';
+    case 'viewer':
+      return 'warning';
+    default:
+      return 'default';
+  }
+}
+
+function roleBadgeLabel(role?: DashboardOperatorRole | null): string {
+  return role ? role.toUpperCase() : 'UNAUTHENTICATED';
+}
+
+function livePromotionStatusVariant(status?: LivePromotionRecord['workflowStatus']): 'default' | 'success' | 'warning' | 'danger' | 'info' {
+  switch (status) {
+    case 'applied':
+      return 'success';
+    case 'approved':
+      return 'info';
+    case 'pending':
+      return 'warning';
+    case 'blocked':
+    case 'denied':
+      return 'danger';
+    case 'rolled_back':
+      return 'default';
+    default:
+      return 'default';
+  }
+}
+
+function livePromotionStatusLabel(status?: LivePromotionRecord['workflowStatus']): string {
+  return status ? status.replace(/_/g, ' ').toUpperCase() : 'UNKNOWN';
+}
+
+function livePromotionApplicationStatusLabel(status?: LivePromotionRecord['applicationStatus']): string {
+  return status ? status.replace(/_/g, ' ').toUpperCase() : 'UNKNOWN';
+}
+
+function livePromotionTargetOptions(): LivePromotionTargetMode[] {
+  return ['live_limited', 'live'];
+}
+
+function ControlPageContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const searchParamsString = searchParams.toString();
+  const parsedJournalState = useMemo(
+    () => parseDeliveryJournalUrlState(new URLSearchParams(searchParamsString)),
+    [searchParamsString]
+  );
+  const committedSearchParamsRef = useRef(searchParamsString);
+  const pendingSearchParamsRef = useRef<string | null>(null);
+  const {
+    data: operatorSession,
+    isLoading: operatorSessionLoading,
+    error: operatorSessionError,
+    refetch: refetchOperatorSession,
+  } = useOperatorSession();
+  const [deliveryDraft, setDeliveryDraft] = useState<DeliveryJournalDraft>(() => parsedJournalState.draft);
+  const [operatorUsername, setOperatorUsername] = useState('');
+  const [operatorPassword, setOperatorPassword] = useState('');
+  const [promotionTargetMode, setPromotionTargetMode] = useState<LivePromotionTargetMode>('live_limited');
+  const [promotionReason, setPromotionReason] = useState('');
+  const [operatorNotice, setOperatorNotice] = useState<string | null>(null);
+  const [promotionNotice, setPromotionNotice] = useState<string | null>(null);
+  const login = useLogin();
+  const logout = useLogout();
+  const {
+    data: livePromotions,
+    isLoading: livePromotionsLoading,
+    error: livePromotionsError,
+    refetch: refetchLivePromotions,
+  } = useLivePromotions(promotionTargetMode);
   const { data: status, isLoading, error, refetch } = useControlStatus();
   const { data: restartAlerts, isLoading: alertsLoading, error: alertsError, refetch: refetchAlerts } = useRestartAlerts();
   const emergencyStop = useEmergencyStop();
@@ -227,10 +326,13 @@ export default function ControlPage() {
   const restartWorker = useRestartWorker();
   const acknowledgeRestartAlert = useAcknowledgeRestartAlert();
   const resolveRestartAlert = useResolveRestartAlert();
-  const [deliveryDraft, setDeliveryDraft] = useState<DeliveryJournalDraft>(createEmptyDeliveryJournalDraft());
-  const [deliverySnapshot, setDeliverySnapshot] = useState<DeliveryJournalSnapshot | null>(null);
-  const [activeDrilldown, setActiveDrilldown] = useState<DeliveryTrendDrilldownState | null>(null);
-  const [deliveryFilters, setDeliveryFilters] = useState<WorkerRestartDeliveryQuery>({});
+  const requestLivePromotion = useRequestLivePromotion();
+  const approveLivePromotion = useApproveLivePromotion();
+  const denyLivePromotion = useDenyLivePromotion();
+  const applyLivePromotion = useApplyLivePromotion();
+  const rollbackLivePromotion = useRollbackLivePromotion();
+  const deliveryFilters = parsedJournalState.query;
+  const activeDrilldown = parsedJournalState.drilldown;
   const { data: deliveryJournal, isLoading: deliveriesLoading, error: deliveriesError, refetch: refetchDeliveries } =
     useRestartAlertDeliveries(deliveryFilters);
   const {
@@ -264,6 +366,9 @@ export default function ControlPage() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [restartNotice, setRestartNotice] = useState<string | null>(null);
   const [alertNotice, setAlertNotice] = useState<string | null>(null);
+  const [copyNotice, setCopyNotice] = useState<string | null>(null);
+  const [copyingShareUrl, setCopyingShareUrl] = useState(false);
+  const copyNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const killSwitch = status?.killSwitch;
   const restart = status?.restart;
@@ -271,9 +376,15 @@ export default function ControlPage() {
   const restartAlertItems = restartAlerts?.alerts ?? [];
   const worker = status?.worker;
   const runtimeConfig = status?.runtimeConfig;
+  const operatorIdentity = operatorSession?.session;
+  const operatorRole = operatorIdentity?.role;
+  const operatorAuthenticated = Boolean(operatorSession?.authenticated && operatorIdentity);
+  const operatorCanOperate = operatorRole === 'operator' || operatorRole === 'admin';
+  const operatorCanAdmin = operatorRole === 'admin';
   const deliveryRows = deliveryJournal?.deliveries ?? [];
   const deliveryDestinations = deliverySummary?.destinations ?? [];
   const deliveryTrendRows = deliveryTrends?.destinations ?? [];
+  const livePromotionRows = livePromotions?.requests ?? [];
   const deliveryTotals = deliveryDestinations.reduce(
     (totals, destination) => {
       totals.totalCount += destination.totalCount;
@@ -305,40 +416,121 @@ export default function ControlPage() {
       ? 'This worker still has a restart-required config pending. Request the redeploy from the private control plane.'
       : 'No restart-required config is pending, so the control plane will reject restart requests until one appears.';
   const activeRestartAlerts = restartAlertItems.filter((alert) => alert.status !== 'resolved');
+  const shareableJournalState = hasShareableDeliveryJournalState(parsedJournalState);
 
-  const applyDeliveryFilters = () => {
-    setDeliveryFilters(buildDeliveryQueryFromDraft(deliveryDraft));
-    setDeliverySnapshot(null);
-    setActiveDrilldown(null);
-  };
+  useEffect(
+    () => () => {
+      if (copyNoticeTimerRef.current) {
+        clearTimeout(copyNoticeTimerRef.current);
+      }
+    },
+    []
+  );
 
-  const resetDeliveryFilters = () => {
-    setDeliveryDraft(createEmptyDeliveryJournalDraft());
-    setDeliveryFilters({});
-    setDeliverySnapshot(null);
-    setActiveDrilldown(null);
-  };
-
-  const applyTrendDrilldown = (row: WorkerRestartDeliveryTrendRow, window: DeliveryDrilldownWindow) => {
-    const snapshot = deliverySnapshot ?? captureDeliveryJournalSnapshot(deliveryDraft);
-    const next = buildTrendDrilldown(deliveryDraft, row, window);
-    setDeliverySnapshot(snapshot);
-    setDeliveryDraft(next.draft);
-    setDeliveryFilters(next.query);
-    setActiveDrilldown(next.drilldown);
-  };
-
-  const clearTrendDrilldown = () => {
-    if (!deliverySnapshot) {
-      setActiveDrilldown(null);
+  useEffect(() => {
+    const canonicalParams = buildDeliveryJournalUrlState(parsedJournalState).toString();
+    if (canonicalParams !== searchParamsString) {
+      const nextPath = buildDeliveryJournalUrlPathname(pathname, parsedJournalState);
+      pendingSearchParamsRef.current = canonicalParams;
+      router.replace(nextPath, { scroll: false });
       return;
     }
 
-    const restored = restoreDeliveryJournalSnapshot(deliverySnapshot);
-    setDeliveryDraft(restored.draft);
-    setDeliveryFilters(restored.query);
-    setDeliverySnapshot(null);
-    setActiveDrilldown(null);
+    if (pendingSearchParamsRef.current === searchParamsString) {
+      pendingSearchParamsRef.current = null;
+      committedSearchParamsRef.current = searchParamsString;
+      setDeliveryDraft(parsedJournalState.draft);
+      return;
+    }
+
+    if (committedSearchParamsRef.current !== searchParamsString) {
+      committedSearchParamsRef.current = searchParamsString;
+      setDeliveryDraft(parsedJournalState.draft);
+    }
+  }, [pathname, parsedJournalState, router, searchParamsString]);
+
+  const pushDeliveryState = (
+    nextDraft: DeliveryJournalDraft,
+    nextDrilldown: DeliveryTrendDrilldownState | null,
+    options?: { replace?: boolean }
+  ) => {
+    const normalizedDraft = normalizeDeliveryJournalDraft(nextDraft);
+    const nextState = {
+      draft: normalizedDraft,
+      query: buildDeliveryQueryFromDraft(normalizedDraft),
+      drilldown: nextDrilldown,
+    };
+    const nextSearchParams = buildDeliveryJournalUrlState(nextState).toString();
+    const nextPath = buildDeliveryJournalUrlPathname(pathname, nextState);
+
+    setDeliveryDraft(normalizedDraft);
+    pendingSearchParamsRef.current = nextSearchParams;
+
+    if (nextSearchParams === searchParamsString) {
+      return;
+    }
+
+    if (options?.replace) {
+      router.replace(nextPath, { scroll: false });
+      return;
+    }
+
+    router.push(nextPath, { scroll: false });
+  };
+
+  const applyDeliveryFilters = () => {
+    const normalizedDraft = normalizeDeliveryJournalDraft(deliveryDraft);
+    const currentDrilldown =
+      activeDrilldown &&
+      normalizedDraft.destinationName === activeDrilldown.destinationName &&
+      normalizedDraft.environment.trim() === (activeDrilldown.environment ?? '') &&
+      normalizedDraft.from === activeDrilldown.windowStartAt &&
+      normalizedDraft.to === activeDrilldown.windowEndAt
+        ? activeDrilldown
+        : null;
+
+    pushDeliveryState(normalizedDraft, currentDrilldown);
+  };
+
+  const resetDeliveryFilters = () => {
+    pushDeliveryState(createEmptyDeliveryJournalDraft(), null);
+  };
+
+  const applyTrendDrilldown = (row: WorkerRestartDeliveryTrendRow, window: DeliveryDrilldownWindow) => {
+    const next = buildTrendDrilldown(normalizeDeliveryJournalDraft(deliveryDraft), row, window);
+    pushDeliveryState(next.draft, next.drilldown);
+  };
+
+  const clearTrendDrilldown = () => {
+    const clearedDraft = clearTrendDrilldownDraft(deliveryDraft);
+    pushDeliveryState(clearedDraft, null);
+  };
+
+  const copyCurrentJournalUrl = async () => {
+    const shareUrl = buildDeliveryJournalShareUrl(window.location.origin, pathname, parsedJournalState);
+    if (!shareUrl) {
+      setCopyNotice('No bounded journal URL is available to copy.');
+      return;
+    }
+
+    setCopyingShareUrl(true);
+    const copied = await copyTextToClipboard(shareUrl);
+    setCopyingShareUrl(false);
+
+    setCopyNotice(
+      copied
+        ? getDeliveryJournalCopyNotice(parsedJournalState, true)
+        : getDeliveryJournalCopyNotice(parsedJournalState, false, 'The browser blocked clipboard access.')
+    );
+
+    if (copyNoticeTimerRef.current) {
+      clearTimeout(copyNoticeTimerRef.current);
+    }
+
+    copyNoticeTimerRef.current = setTimeout(() => {
+      setCopyNotice(null);
+      copyNoticeTimerRef.current = null;
+    }, 2500);
   };
 
   const handleEmergencyStop = () => {
@@ -400,6 +592,123 @@ export default function ControlPage() {
     );
   };
 
+  const handleOperatorLogin = () => {
+    login.mutate(
+      {
+        username: operatorUsername.trim(),
+        password: operatorPassword,
+      },
+      {
+        onSuccess: (response) => {
+          setOperatorNotice(
+            response.authenticated && response.session
+              ? `Signed in as ${response.session.displayName} (${response.session.role})`
+              : 'Sign-in completed.'
+          );
+          setOperatorPassword('');
+          void refetchOperatorSession();
+        },
+        onError: (mutationError) => {
+          setOperatorNotice(mutationError.message);
+        },
+      }
+    );
+  };
+
+  const handleOperatorLogout = () => {
+    logout.mutate(undefined, {
+      onSuccess: () => {
+        setOperatorNotice('Signed out.');
+        setOperatorPassword('');
+        void refetchOperatorSession();
+      },
+      onError: (mutationError) => {
+        setOperatorNotice(mutationError.message);
+      },
+    });
+  };
+
+  const handleRequestLivePromotion = () => {
+    requestLivePromotion.mutate(
+      {
+        targetMode: promotionTargetMode,
+        reason: promotionReason.trim() || undefined,
+      },
+      {
+        onSuccess: (response) => {
+          setPromotionNotice(`Promotion request ${response.request.workflowStatus}.`);
+          setPromotionReason('');
+          void refetchLivePromotions();
+        },
+        onError: (mutationError) => {
+          setPromotionNotice(mutationError.message);
+        },
+      }
+    );
+  };
+
+  const handleApproveLivePromotion = (id: string) => {
+    approveLivePromotion.mutate(
+      { id, input: { reason: promotionReason.trim() || undefined } },
+      {
+        onSuccess: (response) => {
+          setPromotionNotice(`Promotion ${response.request.workflowStatus}.`);
+          void refetchLivePromotions();
+        },
+        onError: (mutationError) => {
+          setPromotionNotice(mutationError.message);
+        },
+      }
+    );
+  };
+
+  const handleDenyLivePromotion = (id: string) => {
+    denyLivePromotion.mutate(
+      { id, input: { reason: promotionReason.trim() || undefined } },
+      {
+        onSuccess: (response) => {
+          setPromotionNotice(`Promotion ${response.request.workflowStatus}.`);
+          void refetchLivePromotions();
+        },
+        onError: (mutationError) => {
+          setPromotionNotice(mutationError.message);
+        },
+      }
+    );
+  };
+
+  const handleApplyLivePromotion = (id: string) => {
+    applyLivePromotion.mutate(
+      { id, input: { reason: promotionReason.trim() || undefined } },
+      {
+        onSuccess: (response) => {
+          setPromotionNotice(`Promotion ${response.request.workflowStatus}.`);
+          void refetchLivePromotions();
+          void refetch();
+        },
+        onError: (mutationError) => {
+          setPromotionNotice(mutationError.message);
+        },
+      }
+    );
+  };
+
+  const handleRollbackLivePromotion = (id: string) => {
+    rollbackLivePromotion.mutate(
+      { id, input: { reason: promotionReason.trim() || undefined } },
+      {
+        onSuccess: (response) => {
+          setPromotionNotice(`Promotion ${response.request.workflowStatus}.`);
+          void refetchLivePromotions();
+          void refetch();
+        },
+        onError: (mutationError) => {
+          setPromotionNotice(mutationError.message);
+        },
+      }
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -429,6 +738,270 @@ export default function ControlPage() {
         <h2 className="text-lg font-semibold text-text-primary">Control</h2>
         <p className="text-sm text-text-muted">Safety controls, worker restarts, and emergency actions</p>
       </div>
+
+      <Card className="border-border-default">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <UserRound className="h-5 w-5 text-accent-cyan" />
+            <div>
+              <CardTitle className="text-text-primary font-semibold text-base">Operator Access</CardTitle>
+              <p className="text-xs text-text-muted mt-0.5">
+                Public read-only views stay available, but privileged controls require an authenticated operator session.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {operatorNotice && (
+            <div className="rounded border border-accent-cyan/30 bg-accent-cyan/5 p-3 text-sm text-text-secondary">
+              {operatorNotice}
+            </div>
+          )}
+
+          {operatorSessionError && (
+            <div className="rounded border border-accent-danger/30 bg-accent-danger/5 p-3">
+              <p className="text-sm font-medium text-accent-danger">Operator session unavailable</p>
+              <p className="mt-1 text-sm text-text-secondary">
+                {operatorSessionError instanceof Error ? operatorSessionError.message : 'Unable to load operator session.'}
+              </p>
+            </div>
+          )}
+
+          {operatorSessionLoading ? (
+            <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-3 text-sm text-text-muted">
+              Loading operator session...
+            </div>
+          ) : operatorAuthenticated && operatorIdentity ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Badge variant={roleBadgeVariant(operatorRole)} className="text-sm px-3 py-1">
+                  {roleBadgeLabel(operatorRole)}
+                </Badge>
+                <span className="text-xs text-text-muted">{operatorIdentity.displayName}</span>
+                <span className="text-xs text-text-muted">Session: {operatorIdentity.sessionId}</span>
+                <span className="text-xs text-text-muted">Expires: {safeTimestamp(operatorIdentity.expiresAt)}</span>
+              </div>
+              <p className="text-sm text-text-secondary">
+                Signed in as <span className="font-medium text-text-primary">{describeOperatorRole(operatorRole)}</span>.
+                {operatorRole === 'viewer' && ' Read-only access only.'}
+                {operatorRole === 'operator' && ' Operational controls allowed; high-risk actions remain blocked.'}
+                {operatorRole === 'admin' && ' Privileged controls and governed live promotion are available.'}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleOperatorLogout}
+                  disabled={logout.isPending}
+                >
+                  <LogOut className="h-4 w-4" />
+                  {logout.isPending ? 'Signing out...' : 'Sign out'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <div className="space-y-3">
+                <div className="text-sm text-text-secondary">
+                  Privileged actions are blocked until you sign in with an operator account.
+                </div>
+                <Input
+                  value={operatorUsername}
+                  onChange={(e) => setOperatorUsername(e.target.value)}
+                  placeholder="Operator username"
+                  autoComplete="username"
+                />
+                <Input
+                  type="password"
+                  value={operatorPassword}
+                  onChange={(e) => setOperatorPassword(e.target.value)}
+                  placeholder="Password"
+                  autoComplete="current-password"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    onClick={handleOperatorLogin}
+                    disabled={login.isPending || operatorUsername.trim().length === 0 || operatorPassword.length === 0}
+                  >
+                    <LogIn className="h-4 w-4" />
+                    {login.isPending ? 'Signing in...' : 'Sign in'}
+                  </Button>
+                </div>
+                {login.isError && (
+                  <p className="text-xs text-accent-danger">
+                    {login.error instanceof Error ? login.error.message : 'Unable to sign in.'}
+                  </p>
+                )}
+              </div>
+              <div className="rounded border border-border-subtle bg-bg-surface-hover/40 p-3 text-sm text-text-muted space-y-2">
+                <p className="font-medium text-text-secondary">Access policy</p>
+                <p>viewer: read-only reporting and drilldown links.</p>
+                <p>operator: pause, resume, and restart-alert acknowledgements.</p>
+                <p>admin: emergency stop, reset, worker restart, and live promotion governance.</p>
+                <p>
+                  Auth status: {operatorSession?.configured ? 'configured' : 'not configured'} ·{' '}
+                  {operatorSession?.authenticated ? 'authenticated' : 'not authenticated'}
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border-default">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <ShieldQuestion className="h-5 w-5 text-accent-cyan" />
+            <div>
+              <CardTitle className="text-text-primary font-semibold text-base">Live Promotion Governance</CardTitle>
+              <p className="text-xs text-text-muted mt-0.5">
+                live_limited and live transitions are approved and recorded before the runtime mode can change.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {promotionNotice && (
+            <div className="rounded border border-accent-cyan/30 bg-accent-cyan/5 p-3 text-sm text-text-secondary">
+              {promotionNotice}
+            </div>
+          )}
+
+          {livePromotionsError && (
+            <div className="rounded border border-accent-danger/30 bg-accent-danger/5 p-3">
+              <p className="text-sm font-medium text-accent-danger">Promotion state unavailable</p>
+              <p className="mt-1 text-sm text-text-secondary">
+                {livePromotionsError instanceof Error ? livePromotionsError.message : 'Unable to load live promotion state.'}
+              </p>
+            </div>
+          )}
+
+          {livePromotionsLoading ? (
+            <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-3 text-sm text-text-muted">
+              Loading promotion state...
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Badge variant={livePromotions?.gate.allowed ? 'success' : 'danger'} className="text-sm px-3 py-1">
+                  {livePromotions?.gate.allowed ? 'GATE ALLOWED' : 'GATE BLOCKED'}
+                </Badge>
+                <span className="text-xs text-text-muted">Current mode: {livePromotions?.currentMode ?? '—'}</span>
+                <span className="text-xs text-text-muted">Runtime: {livePromotions?.currentRuntimeStatus ?? '—'}</span>
+                <span className="text-xs text-text-muted">Role required: {requiredRoleForAction('live_promotion_request') ?? 'admin'}</span>
+              </div>
+
+              {livePromotions?.gate.reasons.length ? (
+                <div className="rounded border border-border-subtle bg-bg-surface-hover/40 p-3 space-y-1">
+                  <p className="text-sm font-medium text-text-secondary">Gate reasons</p>
+                  {livePromotions.gate.reasons.map((reason) => (
+                    <p key={reason.code} className={`text-sm ${reason.severity === 'blocked' ? 'text-accent-danger' : 'text-accent-warning'}`}>
+                      {reason.code}: {reason.message}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-text-muted">No blocking gate reasons are currently recorded.</p>
+              )}
+
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end">
+                <div>
+                  <label className="mb-1 block text-xs uppercase tracking-wide text-text-muted">Target mode</label>
+                  <select
+                    className="w-full rounded border border-border-subtle bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none focus:border-accent-cyan"
+                    value={promotionTargetMode}
+                    onChange={(event) => setPromotionTargetMode(event.target.value as LivePromotionTargetMode)}
+                    disabled={!operatorCanAdmin}
+                  >
+                    {livePromotionTargetOptions().map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs uppercase tracking-wide text-text-muted">Reason</label>
+                  <Input
+                    value={promotionReason}
+                    onChange={(e) => setPromotionReason(e.target.value)}
+                    placeholder="Promotion reason or rollback note"
+                    disabled={!operatorCanAdmin}
+                  />
+                </div>
+                <Button type="button" onClick={handleRequestLivePromotion} disabled={!operatorCanAdmin || requestLivePromotion.isPending}>
+                  {requestLivePromotion.isPending ? 'Requesting...' : 'Request promotion'}
+                </Button>
+              </div>
+              {!operatorCanAdmin && (
+                <p className="text-xs text-accent-warning">
+                  Admin role is required for live promotion governance.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-text-secondary">Promotion requests</p>
+            {livePromotions?.requests.length ? (
+              <div className="space-y-3">
+                {livePromotions.requests.map((request) => {
+                  const canApprove = operatorCanAdmin && request.workflowStatus === 'pending';
+                  const canDeny = operatorCanAdmin && request.workflowStatus === 'pending';
+                  const canApply = operatorCanAdmin && request.workflowStatus === 'approved';
+                  const canRollback = operatorCanAdmin && request.workflowStatus === 'applied';
+                  return (
+                    <div key={request.id} className="rounded border border-border-subtle bg-bg-surface-hover/40 p-3 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={livePromotionStatusVariant(request.workflowStatus)} className="text-xs px-2 py-0.5">
+                          {livePromotionStatusLabel(request.workflowStatus)}
+                        </Badge>
+                        <Badge variant="default" className="text-xs px-2 py-0.5">
+                          {request.targetMode}
+                        </Badge>
+                        <span className="text-xs text-text-muted">
+                          Requested by {request.requestedByDisplayName} ({request.requestedByRole})
+                        </span>
+                      </div>
+                      <p className="text-sm text-text-secondary">Reason: {request.requestReason}</p>
+                      <div className="grid gap-2 text-xs text-text-muted md:grid-cols-2">
+                        <div>Requested: {safeTimestamp(request.requestedAt)}</div>
+                        <div>Applied: {safeTimestamp(request.appliedAt)}</div>
+                        <div>Approved: {safeTimestamp(request.approvedAt)}</div>
+                        <div>Denied: {safeTimestamp(request.deniedAt)}</div>
+                        <div>Rolled back: {safeTimestamp(request.rolledBackAt)}</div>
+                        <div>Application: {livePromotionApplicationStatusLabel(request.applicationStatus)}</div>
+                      </div>
+                      {request.blockedReason && <p className="text-xs text-accent-danger">Blocked: {request.blockedReason}</p>}
+                      {request.approvalReason && <p className="text-xs text-accent-success">Approval: {request.approvalReason}</p>}
+                      {request.rollbackReason && <p className="text-xs text-accent-warning">Rollback: {request.rollbackReason}</p>}
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" size="sm" variant="outline" disabled={!canApprove} onClick={() => handleApproveLivePromotion(request.id)}>
+                          Approve
+                        </Button>
+                        <Button type="button" size="sm" variant="ghost" disabled={!canDeny} onClick={() => handleDenyLivePromotion(request.id)}>
+                          Deny
+                        </Button>
+                        <Button type="button" size="sm" variant="default" disabled={!canApply} onClick={() => handleApplyLivePromotion(request.id)}>
+                          Apply
+                        </Button>
+                        <Button type="button" size="sm" variant="danger" disabled={!canRollback} onClick={() => handleRollbackLivePromotion(request.id)}>
+                          Roll back
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-3 text-sm text-text-muted">
+                No live promotion requests are recorded.
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="border-border-default">
         <CardHeader>
@@ -519,14 +1092,14 @@ export default function ControlPage() {
               value={restartReason}
               onChange={(e) => setRestartReason(e.target.value)}
               placeholder="Optional restart reason for the audit trail"
-              disabled={!restartActionEnabled || restartWorker.isPending}
+              disabled={!restartActionEnabled || restartWorker.isPending || !operatorCanAdmin}
             />
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button
                 variant="default"
                 size="lg"
                 className="w-full sm:w-auto"
-                disabled={!restartActionEnabled || restartWorker.isPending}
+                disabled={!restartActionEnabled || restartWorker.isPending || !operatorCanAdmin}
                 onClick={handleRestartWorker}
               >
                 {restartWorker.isPending ? 'Requesting...' : restartActionLabel}
@@ -543,6 +1116,9 @@ export default function ControlPage() {
               </Button>
             </div>
             <p className="text-xs text-text-muted">{restartHint}</p>
+            {!operatorCanAdmin && (
+              <p className="text-xs text-accent-warning">Admin role required for worker restart.</p>
+            )}
             {restartWorker.isError && (
               <p className="text-xs text-accent-danger">
                 Restart request failed: {restartWorker.error instanceof Error ? restartWorker.error.message : 'Unknown error'}
@@ -727,7 +1303,7 @@ export default function ControlPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        disabled={acknowledgeRestartAlert.isPending}
+                        disabled={acknowledgeRestartAlert.isPending || !operatorCanOperate}
                         onClick={() => handleAcknowledgeAlert(alert.id)}
                       >
                         {acknowledgeRestartAlert.isPending ? 'Acknowledging...' : 'Acknowledge'}
@@ -737,7 +1313,7 @@ export default function ControlPage() {
                       <Button
                         variant="default"
                         size="sm"
-                        disabled={resolveRestartAlert.isPending}
+                        disabled={resolveRestartAlert.isPending || !operatorCanOperate}
                         onClick={() => handleResolveAlert(alert.id)}
                       >
                         {resolveRestartAlert.isPending ? 'Resolving...' : 'Resolve'}
@@ -851,10 +1427,29 @@ export default function ControlPage() {
               >
                 Refresh
               </Button>
+              {shareableJournalState && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    void copyCurrentJournalUrl();
+                  }}
+                  disabled={copyingShareUrl}
+                >
+                  {copyingShareUrl ? 'Copying...' : getDeliveryJournalCopyButtonLabel(parsedJournalState)}
+                </Button>
+              )}
               <p className="text-xs text-text-muted">
                 Blank fields use the server default window and no extra filters.
               </p>
             </div>
+            {copyNotice && (
+              <div className="xl:col-span-3">
+                <p className="text-xs text-text-secondary" aria-live="polite">
+                  {copyNotice}
+                </p>
+              </div>
+            )}
           </form>
 
           {activeDrilldown && (
@@ -1240,13 +1835,13 @@ export default function ControlPage() {
             </div>
 
             {!showHaltConfirm ? (
-              <Button
-                variant="danger"
-                size="lg"
-                className="w-full"
-                disabled={killSwitch?.halted || emergencyStop.isPending}
-                onClick={() => setShowHaltConfirm(true)}
-              >
+                <Button
+                  variant="danger"
+                  size="lg"
+                  className="w-full"
+                  disabled={killSwitch?.halted || emergencyStop.isPending || !operatorCanAdmin}
+                  onClick={() => setShowHaltConfirm(true)}
+                >
                 <OctagonX className="h-4 w-4" />
                 {killSwitch?.halted ? 'Already Halted' : 'Halt Trading'}
               </Button>
@@ -1266,7 +1861,7 @@ export default function ControlPage() {
                   <Button
                     variant="danger"
                     className="flex-1"
-                    disabled={haltInput !== CONFIRM_TEXT || emergencyStop.isPending}
+                    disabled={haltInput !== CONFIRM_TEXT || emergencyStop.isPending || !operatorCanAdmin}
                     onClick={handleEmergencyStop}
                   >
                     {emergencyStop.isPending ? 'Stopping...' : 'Confirm Emergency Stop'}
@@ -1285,6 +1880,9 @@ export default function ControlPage() {
                   <p className="text-xs text-accent-danger">
                     Failed to trigger emergency stop. Try again.
                   </p>
+                )}
+                {!operatorCanAdmin && (
+                  <p className="text-xs text-accent-warning">Admin role required for emergency stop.</p>
                 )}
               </div>
             )}
@@ -1321,7 +1919,7 @@ export default function ControlPage() {
                 variant="default"
                 size="lg"
                 className="w-full"
-                disabled={!killSwitch?.halted || resetKillSwitch.isPending}
+                disabled={!killSwitch?.halted || resetKillSwitch.isPending || !operatorCanAdmin}
                 onClick={() => setShowResetConfirm(true)}
               >
                 <RotateCcw className="h-4 w-4" />
@@ -1342,7 +1940,7 @@ export default function ControlPage() {
                   <Button
                     variant="default"
                     className="flex-1"
-                    disabled={resetInput !== RESET_CONFIRM_TEXT || resetKillSwitch.isPending}
+                    disabled={resetInput !== RESET_CONFIRM_TEXT || resetKillSwitch.isPending || !operatorCanAdmin}
                     onClick={handleReset}
                   >
                     {resetKillSwitch.isPending ? 'Resetting...' : 'Confirm Reset'}
@@ -1362,6 +1960,9 @@ export default function ControlPage() {
                     Failed to reset kill switch. Try again.
                   </p>
                 )}
+                {!operatorCanAdmin && (
+                  <p className="text-xs text-accent-warning">Admin role required for reset.</p>
+                )}
               </div>
             )}
           </CardContent>
@@ -1374,5 +1975,13 @@ export default function ControlPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function ControlPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-text-secondary">Loading control page...</div>}>
+      <ControlPageContent />
+    </Suspense>
   );
 }

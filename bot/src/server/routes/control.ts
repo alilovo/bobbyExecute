@@ -26,6 +26,27 @@ import type {
   WorkerRestartAlertListResponse,
   WorkerRestartAlertSummary,
 } from "../../control/worker-restart-alert-service.js";
+import type {
+  ControlAuditEvent,
+  ControlGovernanceRepositoryWithAudits,
+  ControlLivePromotionGate,
+  ControlLivePromotionRecord,
+  ControlOperatorAssertion,
+  ControlOperatorAuthContext,
+  ControlOperatorIdentity,
+  ControlAction,
+  ControlLivePromotionTargetMode,
+} from "../../control/control-governance.js";
+import {
+  CONTROL_OPERATOR_ASSERTION_HEADER,
+  buildControlAuditActor,
+  buildAuditEventId,
+  canRolePerformControlAction,
+  classifyControlAction,
+  evaluateLivePromotionGate,
+  parseControlOperatorAssertion,
+  requiredRoleForControlAction,
+} from "../../control/control-governance.js";
 import type { WorkerRestartRequestRecord } from "../../persistence/worker-restart-repository.js";
 import type {
   WorkerRestartAlertNotificationEventType,
@@ -43,11 +64,18 @@ import type { RuntimeConfigManager } from "../../runtime/runtime-config-manager.
 import type { RuntimeSnapshot } from "../../runtime/dry-run-runtime.js";
 import type { RuntimeReadiness } from "../contracts/kpi.js";
 
+declare module "fastify" {
+  interface FastifyRequest {
+    controlOperatorContext?: ControlOperatorAuthContext;
+  }
+}
+
 export interface ControlRouteDeps {
   runtimeConfigManager?: RuntimeConfigManager;
   runtimeVisibilityRepository?: RuntimeVisibilityRepository;
   restartService?: WorkerRestartService;
   restartAlertRepository?: WorkerRestartAlertRepository;
+  governanceRepository?: ControlGovernanceRepositoryWithAudits;
   runtimeEnvironment?: string;
   requiredToken?: string;
   getRuntimeSnapshot?: () => RuntimeSnapshot;
@@ -125,6 +153,27 @@ export interface RestartWorkerResponse {
   restartAlerts?: WorkerRestartAlertSummary;
 }
 
+export interface LivePromotionGateResponse extends ControlLivePromotionGate {
+  success: true;
+}
+
+export interface LivePromotionResponse {
+  success: true;
+  gate: ControlLivePromotionGate;
+  currentMode: string;
+  currentRuntimeStatus: string;
+  requests: ControlLivePromotionRecord[];
+}
+
+export interface LivePromotionRequestResponse {
+  success: boolean;
+  accepted: boolean;
+  message: string;
+  request?: ControlLivePromotionRecord;
+  gate?: ControlLivePromotionGate;
+  reason?: string;
+}
+
 export interface RuntimeConfigMutationResponse extends RuntimeConfigMutationResult {
   success: boolean;
   status: RuntimeConfigStatus;
@@ -154,19 +203,184 @@ function readPresentedToken(headers: Record<string, unknown>): string | undefine
   return undefined;
 }
 
+function resolveRequestPath(url: string): string {
+  try {
+    return new URL(url, "http://control.local").pathname;
+  } catch {
+    return url.split("?")[0] ?? url;
+  }
+}
+
+function resolveRequestId(headers: Record<string, unknown>): string | undefined {
+  const requestId = headers["x-request-id"];
+  return typeof requestId === "string" && requestId.length > 0 ? requestId : undefined;
+}
+
+function isControlMutation(method: string, targetPath: string): boolean {
+  if (method === "GET" || method === "HEAD") {
+    return false;
+  }
+  return Boolean(classifyControlAction(targetPath));
+}
+
 async function recordAuthFailure(
-  runtimeConfigManager: RuntimeConfigManager | undefined,
+  deps: ControlRouteDeps,
   action: string,
-  reason: string
+  target: string,
+  reason: string,
+  context?: ControlOperatorAuthContext,
+  requestId?: string
 ): Promise<void> {
-  if (!runtimeConfigManager) {
+  if (deps.runtimeConfigManager) {
+    await deps.runtimeConfigManager.recordAuthFailure({
+      actor: context?.identity.actorId ?? "control_api",
+      action,
+      reason,
+    });
+  }
+
+  if (deps.governanceRepository) {
+    const actor = buildControlAuditActor(context?.identity ?? null);
+    await deps.governanceRepository.recordAuditEvent({
+      id: buildAuditEventId(),
+      environment: deps.runtimeEnvironment ?? "development",
+      action: "auth_failure",
+      target,
+      result: "denied",
+      actorId: actor.actorId,
+      actorDisplayName: actor.actorDisplayName,
+      actorRole: actor.actorRole,
+      sessionId: actor.sessionId,
+      requestId,
+      reason,
+      note: action,
+      createdAt: new Date().toISOString(),
+      metadata: context
+        ? {
+            authResult: context.authResult,
+            requestedAction: context.action,
+            requestedTarget: context.target,
+            deniedReason: context.reason,
+          }
+        : undefined,
+      });
+  }
+}
+
+function getOperatorContext(request: import("fastify").FastifyRequest): ControlOperatorAuthContext {
+  if (!request.controlOperatorContext) {
+    throw new Error("operator context missing after authorization");
+  }
+
+  return request.controlOperatorContext;
+}
+
+function buildLivePromotionRecord(input: {
+  environment: string;
+  gate: ControlLivePromotionGate;
+  context: ControlOperatorAuthContext;
+  targetMode: ControlLivePromotionTargetMode;
+  previousMode: string;
+  requestReason: string;
+  workflowStatus: ControlLivePromotionRecord["workflowStatus"];
+  applicationStatus: ControlLivePromotionRecord["applicationStatus"];
+  blockedReason?: string;
+  approvalReason?: string;
+  rollbackReason?: string;
+  approved?: boolean;
+  denied?: boolean;
+  applied?: boolean;
+  rolledBack?: boolean;
+  requestedAt?: string;
+  updatedAt?: string;
+}): ControlLivePromotionRecord {
+  const now = input.updatedAt ?? new Date().toISOString();
+  return {
+    id: input.context.requestId ?? buildAuditEventId(),
+    environment: input.environment,
+    targetMode: input.targetMode,
+    previousMode: input.previousMode,
+    workflowStatus: input.workflowStatus,
+    applicationStatus: input.applicationStatus,
+    requestReason: input.requestReason,
+    blockedReason: input.blockedReason,
+    approvalReason: input.approvalReason,
+    rollbackReason: input.rollbackReason,
+    requestedByActorId: input.context.identity.actorId,
+    requestedByDisplayName: input.context.identity.displayName,
+    requestedByRole: input.context.identity.role,
+    requestedBySessionId: input.context.identity.sessionId,
+    requestedAt: input.requestedAt ?? now,
+    approvedByActorId: input.approved ? input.context.identity.actorId : undefined,
+    approvedByDisplayName: input.approved ? input.context.identity.displayName : undefined,
+    approvedByRole: input.approved ? input.context.identity.role : undefined,
+    approvedBySessionId: input.approved ? input.context.identity.sessionId : undefined,
+    approvedAt: input.approved ? now : undefined,
+    deniedByActorId: input.denied ? input.context.identity.actorId : undefined,
+    deniedByDisplayName: input.denied ? input.context.identity.displayName : undefined,
+    deniedByRole: input.denied ? input.context.identity.role : undefined,
+    deniedBySessionId: input.denied ? input.context.identity.sessionId : undefined,
+    deniedAt: input.denied ? now : undefined,
+    appliedByActorId: input.applied ? input.context.identity.actorId : undefined,
+    appliedByDisplayName: input.applied ? input.context.identity.displayName : undefined,
+    appliedByRole: input.applied ? input.context.identity.role : undefined,
+    appliedBySessionId: input.applied ? input.context.identity.sessionId : undefined,
+    appliedAt: input.applied ? now : undefined,
+    rolledBackByActorId: input.rolledBack ? input.context.identity.actorId : undefined,
+    rolledBackByDisplayName: input.rolledBack ? input.context.identity.displayName : undefined,
+    rolledBackByRole: input.rolledBack ? input.context.identity.role : undefined,
+    rolledBackBySessionId: input.rolledBack ? input.context.identity.sessionId : undefined,
+    rolledBackAt: input.rolledBack ? now : undefined,
+    gateSnapshot: input.gate,
+    updatedAt: now,
+  };
+}
+
+function mergeLivePromotionRecord(
+  record: ControlLivePromotionRecord,
+  patch: Partial<ControlLivePromotionRecord>
+): ControlLivePromotionRecord {
+  return {
+    ...record,
+    ...patch,
+    gateSnapshot: patch.gateSnapshot ?? record.gateSnapshot,
+    updatedAt: patch.updatedAt ?? new Date().toISOString(),
+  };
+}
+
+async function recordOperatorAudit(
+  deps: ControlRouteDeps,
+  context: ControlOperatorAuthContext | undefined,
+  input: {
+    action: ControlAuditEvent["action"];
+    target: string;
+    result: ControlAuditEvent["result"];
+    reason?: string;
+    note?: string;
+    requestId?: string;
+    metadata?: Record<string, unknown>;
+  }
+): Promise<void> {
+  if (!deps.governanceRepository) {
     return;
   }
 
-  await runtimeConfigManager.recordAuthFailure({
-    actor: "control_api",
-    action,
-    reason,
+  const actor = buildControlAuditActor(context?.identity ?? null);
+  await deps.governanceRepository.recordAuditEvent({
+    id: buildAuditEventId(),
+    environment: deps.runtimeEnvironment ?? "development",
+    action: input.action,
+    target: input.target,
+    result: input.result,
+    actorId: actor.actorId,
+    actorDisplayName: actor.actorDisplayName,
+    actorRole: actor.actorRole,
+    sessionId: actor.sessionId,
+    requestId: input.requestId,
+    reason: input.reason,
+    note: input.note,
+    createdAt: new Date().toISOString(),
+    metadata: input.metadata,
   });
 }
 
@@ -472,13 +686,13 @@ async function readControlSnapshot(deps: ControlRouteDeps): Promise<WorkerRestar
 }
 
 export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
-  const { runtimeConfigManager, requiredToken } = deps;
+  const { runtimeConfigManager, requiredToken, governanceRepository } = deps;
 
   return async (fastify) => {
     fastify.addHook("preHandler", async (request, reply) => {
       const actionLabel = `${request.method} ${request.url}`;
       if (!requiredToken) {
-        void recordAuthFailure(runtimeConfigManager, actionLabel, "control token not configured");
+        void recordAuthFailure(deps, actionLabel, resolveRequestPath(request.url), "control token not configured", undefined, resolveRequestId(request.headers as Record<string, unknown>));
         return reply.status(403).send({
           success: false,
           code: "control_auth_unconfigured",
@@ -490,7 +704,14 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
 
       const presentedToken = readPresentedToken(request.headers as Record<string, unknown>);
       if (presentedToken !== requiredToken) {
-        void recordAuthFailure(runtimeConfigManager, actionLabel, "missing or invalid control authorization");
+        void recordAuthFailure(
+          deps,
+          actionLabel,
+          resolveRequestPath(request.url),
+          "missing or invalid control authorization",
+          undefined,
+          resolveRequestId(request.headers as Record<string, unknown>)
+        );
         return reply.status(403).send({
           success: false,
           code: "control_auth_invalid",
@@ -499,6 +720,105 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
           liveControl: getMicroLiveControlSnapshot(),
         } satisfies ControlResponse);
       }
+
+      const targetPath = resolveRequestPath(request.url);
+      const routeAction = classifyControlAction(targetPath);
+      if (!routeAction || !isControlMutation(request.method, targetPath)) {
+        return;
+      }
+
+      const requestId = resolveRequestId(request.headers as Record<string, unknown>);
+      const assertion = parseControlOperatorAssertion(
+        typeof request.headers[CONTROL_OPERATOR_ASSERTION_HEADER] === "string"
+          ? (request.headers[CONTROL_OPERATOR_ASSERTION_HEADER] as string)
+          : undefined,
+        requiredToken
+      );
+      if (!assertion) {
+        void recordAuthFailure(
+          deps,
+          actionLabel,
+          targetPath,
+          "missing or invalid operator assertion",
+          undefined,
+          requestId
+        );
+        return reply.status(403).send({
+          success: false,
+          code: "control_auth_invalid",
+          message: "Control routes denied: missing or invalid operator assertion.",
+          killSwitch: getKillSwitchState(),
+          liveControl: getMicroLiveControlSnapshot(),
+        } satisfies ControlResponse);
+      }
+
+      if (Date.parse(assertion.expiresAt) <= Date.now()) {
+        const context: ControlOperatorAuthContext = {
+          identity: {
+            actorId: assertion.actorId,
+            displayName: assertion.displayName,
+            role: assertion.role,
+            sessionId: assertion.sessionId,
+            issuedAt: assertion.issuedAt,
+            expiresAt: assertion.expiresAt,
+          },
+          authResult: "denied",
+          action: assertion.action,
+          target: assertion.target,
+          requestId: assertion.requestId ?? requestId,
+          reason: "expired operator session",
+        };
+        void recordAuthFailure(deps, actionLabel, targetPath, "expired operator session", context, requestId);
+        return reply.status(403).send({
+          success: false,
+          code: "control_auth_invalid",
+          message: "Control routes denied: operator session has expired.",
+          killSwitch: getKillSwitchState(),
+          liveControl: getMicroLiveControlSnapshot(),
+        } satisfies ControlResponse);
+      }
+
+      const identity: ControlOperatorIdentity = {
+        actorId: assertion.actorId,
+        displayName: assertion.displayName,
+        role: assertion.role,
+        sessionId: assertion.sessionId,
+        issuedAt: assertion.issuedAt,
+        expiresAt: assertion.expiresAt,
+      };
+      const requiredRole = requiredRoleForControlAction(routeAction.action);
+      const authorized = assertion.authResult === "authorized" && canRolePerformControlAction(assertion.role, routeAction.action);
+      if (!authorized) {
+        const denialReason = assertion.authResult !== "authorized"
+          ? assertion.reason ?? "operator assertion denied"
+          : requiredRole
+            ? `role '${assertion.role}' requires '${requiredRole}' for '${routeAction.action}'`
+            : `role '${assertion.role}' cannot perform '${routeAction.action}'`;
+        const context: ControlOperatorAuthContext = {
+          identity,
+          authResult: "denied",
+          action: routeAction.action,
+          target: routeAction.target,
+          requestId: requestId ?? assertion.requestId,
+          reason: denialReason,
+        };
+        void recordAuthFailure(deps, actionLabel, targetPath, denialReason, context, requestId ?? assertion.requestId);
+        return reply.status(403).send({
+          success: false,
+          code: "control_auth_invalid",
+          message: `Control routes denied: ${denialReason}.`,
+          killSwitch: getKillSwitchState(),
+          liveControl: getMicroLiveControlSnapshot(),
+        } satisfies ControlResponse);
+      }
+
+      request.controlOperatorContext = {
+        identity,
+        authResult: "authorized",
+        action: routeAction.action,
+        target: routeAction.target,
+        requestId: requestId ?? assertion.requestId,
+      };
     });
 
     fastify.post<{ Reply: ControlResponse | RuntimeConfigMutationResponse }>("/emergency-stop", async (_request, reply) => {
@@ -511,13 +831,22 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
         });
       }
 
+      const operatorContext = getOperatorContext(_request);
       const result = await runtimeConfigManager.setKillSwitch({
         action: "trigger",
-        actor: "control_api",
+        actor: operatorContext.identity.actorId,
         reason: "API emergency-stop",
       });
       const snapshot = await readControlSnapshot(deps);
       const readiness = toReadiness(snapshot.runtime);
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "emergency_stop",
+        target: "/control/emergency-stop",
+        result: result.accepted ? "allowed" : "blocked",
+        reason: "API emergency-stop",
+        note: result.message,
+        requestId: operatorContext.requestId,
+      });
       return reply.status(result.accepted ? 200 : 409).send(buildMutationResponse(result, snapshot, readiness));
     });
 
@@ -534,15 +863,24 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
         });
       }
 
+      const operatorContext = getOperatorContext(request);
       const body = (request.body ?? {}) as { scope?: "soft" | "hard"; reason?: string };
       const scope = body.scope ?? "soft";
       const reason = body.reason ?? `${scope} pause`;
       const result = await runtimeConfigManager.setPause({
         scope,
-        actor: "control_api",
+        actor: operatorContext.identity.actorId,
         reason,
       });
       const snapshot = await readControlSnapshot(deps);
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "pause",
+        target: "/control/pause",
+        result: result.accepted ? "allowed" : "blocked",
+        reason,
+        note: result.message,
+        requestId: operatorContext.requestId,
+      });
       return reply.status(result.accepted ? 200 : 409).send(buildMutationResponse(result, snapshot));
     });
 
@@ -559,12 +897,21 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
         });
       }
 
+      const operatorContext = getOperatorContext(request);
       const body = (request.body ?? {}) as { reason?: string };
       const result = await runtimeConfigManager.resume({
-        actor: "control_api",
+        actor: operatorContext.identity.actorId,
         reason: body.reason ?? "api_resume",
       });
       const snapshot = await readControlSnapshot(deps);
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "resume",
+        target: "/control/resume",
+        result: result.accepted ? "allowed" : "blocked",
+        reason: body.reason ?? "api_resume",
+        note: result.message,
+        requestId: operatorContext.requestId,
+      });
       return reply.status(result.accepted ? 200 : 409).send(buildMutationResponse(result, snapshot));
     });
 
@@ -578,12 +925,21 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
         });
       }
 
+      const operatorContext = getOperatorContext(_request);
       const result = await runtimeConfigManager.setKillSwitch({
         action: "trigger",
-        actor: "control_api",
+        actor: operatorContext.identity.actorId,
         reason: "API halt",
       });
       const snapshot = await readControlSnapshot(deps);
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "emergency_stop",
+        target: "/control/halt",
+        result: result.accepted ? "allowed" : "blocked",
+        reason: "API halt",
+        note: result.message,
+        requestId: operatorContext.requestId,
+      });
       return reply.status(result.accepted ? 200 : 409).send(buildMutationResponse(result, snapshot));
     });
 
@@ -597,12 +953,21 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
         });
       }
 
+      const operatorContext = getOperatorContext(_request);
       const result = await runtimeConfigManager.setKillSwitch({
         action: "reset",
-        actor: "control_api",
+        actor: operatorContext.identity.actorId,
         reason: "API reset",
       });
       const snapshot = await readControlSnapshot(deps);
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "reset_kill_switch",
+        target: "/control/reset",
+        result: result.accepted ? "allowed" : "blocked",
+        reason: "API reset",
+        note: result.message,
+        requestId: operatorContext.requestId,
+      });
       return reply.status(result.accepted ? 200 : 409).send(buildMutationResponse(result, snapshot));
     });
 
@@ -678,11 +1043,53 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
         });
       }
 
-      const result = await runtimeConfigManager.setMode(request.body.mode, {
-        actor: "control_api",
-        reason: request.body.reason ?? `mode set to ${request.body.mode}`,
+      const operatorContext = getOperatorContext(request);
+      const requestedMode = request.body.mode;
+      if (requestedMode === "live" || requestedMode === "live_limited") {
+        const message = "Direct live mode changes are governed by the live promotion workflow.";
+        const status = runtimeConfigManager.getRuntimeConfigStatus();
+        await recordOperatorAudit(deps, operatorContext, {
+          action: "mode_change",
+          target: "/control/mode",
+          result: "blocked",
+          reason: request.body.reason ?? message,
+          note: message,
+          requestId: operatorContext.requestId,
+          metadata: {
+            requestedMode,
+          },
+        });
+        return reply.status(409).send({
+          success: false,
+          accepted: false,
+          action: "mode",
+          message,
+          rejectionReason: "live promotion governance required",
+          pendingApply: status.pendingApply,
+          requiresRestart: status.requiresRestart,
+          reloadNonce: status.reloadNonce,
+          status,
+          killSwitch: getKillSwitchState(),
+          liveControl: getMicroLiveControlSnapshot(),
+        } satisfies RuntimeConfigMutationResponse);
+      }
+
+      const result = await runtimeConfigManager.setMode(requestedMode, {
+        actor: operatorContext.identity.actorId,
+        reason: request.body.reason ?? `mode set to ${requestedMode}`,
       });
       const snapshot = await readControlSnapshot(deps);
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "mode_change",
+        target: "/control/mode",
+        result: result.accepted ? "allowed" : "blocked",
+        reason: request.body.reason ?? `mode set to ${requestedMode}`,
+        note: result.message,
+        requestId: operatorContext.requestId,
+        metadata: {
+          requestedMode,
+        },
+      });
       return reply.status(result.accepted ? 200 : 409).send(buildMutationResponse(result, snapshot));
     });
 
@@ -699,12 +1106,21 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
         });
       }
 
+      const operatorContext = getOperatorContext(request);
       const result = await runtimeConfigManager.applyBehaviorPatch({
         patch: request.body.patch as never,
-        actor: "control_api",
+        actor: operatorContext.identity.actorId,
         reason: request.body.reason ?? "runtime config patch",
       });
       const snapshot = await readControlSnapshot(deps);
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "runtime_config_change",
+        target: "/control/runtime-config",
+        result: result.accepted ? "allowed" : "blocked",
+        reason: request.body.reason ?? "runtime config patch",
+        note: result.message,
+        requestId: operatorContext.requestId,
+      });
       return reply.status(result.accepted ? 200 : 409).send(buildMutationResponse(result, snapshot));
     });
 
@@ -721,12 +1137,431 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
         });
       }
 
+      const operatorContext = getOperatorContext(request);
       const result = await runtimeConfigManager.reload({
-        actor: "control_api",
+        actor: operatorContext.identity.actorId,
         reason: request.body.reason ?? "control_api_reload",
       });
       const snapshot = await readControlSnapshot(deps);
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "reload",
+        target: "/control/reload",
+        result: result.accepted ? "allowed" : "blocked",
+        reason: request.body.reason ?? "control_api_reload",
+        note: result.message,
+        requestId: operatorContext.requestId,
+      });
       return reply.status(result.accepted ? 200 : 409).send(buildMutationResponse(result, snapshot));
+    });
+
+    fastify.get<{
+      Querystring: { targetMode?: string; limit?: string };
+      Reply: LivePromotionResponse | ControlResponse;
+    }>("/control/live-promotion", async (request, reply) => {
+      if (!governanceRepository) {
+        return reply.status(503).send({
+          success: false,
+          message: "Live promotion governance is unavailable: governance repository is not wired.",
+          killSwitch: getKillSwitchState(),
+          liveControl: getMicroLiveControlSnapshot(),
+        });
+      }
+
+      const snapshot = await readControlSnapshot(deps);
+      const targetMode: ControlLivePromotionTargetMode = request.query.targetMode === "live" ? "live" : "live_limited";
+      const gate = evaluateLivePromotionGate(snapshot, toReadiness(snapshot.runtime), targetMode);
+      const limit = request.query.limit && /^\d+$/.test(request.query.limit) ? Math.min(Math.max(Number.parseInt(request.query.limit, 10), 1), 50) : 10;
+      const requests = await governanceRepository.listLivePromotionRequests(
+        snapshot.runtimeConfig.environment ?? deps.runtimeEnvironment ?? "development",
+        limit
+      );
+
+      return reply.status(200).send({
+        success: true,
+        gate,
+        currentMode: snapshot.runtimeConfig.appliedMode ?? snapshot.runtimeConfig.requestedMode ?? "unknown",
+        currentRuntimeStatus: snapshot.runtime?.status ?? "unknown",
+        requests,
+      });
+    });
+
+    fastify.post<{
+      Body: { targetMode: ControlLivePromotionTargetMode; reason?: string };
+      Reply: LivePromotionRequestResponse | ControlResponse;
+    }>("/control/live-promotion/request", async (request, reply) => {
+      if (!governanceRepository || !runtimeConfigManager) {
+        return reply.status(503).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion request unavailable: governance repository or runtime config manager is not wired.",
+          killSwitch: getKillSwitchState(),
+          liveControl: getMicroLiveControlSnapshot(),
+        } as ControlResponse);
+      }
+
+      const operatorContext = getOperatorContext(request);
+      const body = (request.body ?? {}) as { targetMode?: ControlLivePromotionTargetMode; reason?: string };
+      const targetMode = body.targetMode;
+      if (targetMode !== "live_limited" && targetMode !== "live") {
+        return reply.status(400).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion target mode must be 'live_limited' or 'live'.",
+          reason: "invalid target mode",
+        });
+      }
+
+      const snapshot = await readControlSnapshot(deps);
+      const gate = evaluateLivePromotionGate(snapshot, toReadiness(snapshot.runtime), targetMode);
+      const requestReason = body.reason ?? `request ${targetMode}`;
+      const record = buildLivePromotionRecord({
+        environment: snapshot.runtimeConfig.environment ?? deps.runtimeEnvironment ?? "development",
+        gate,
+        context: operatorContext,
+        targetMode,
+        previousMode: snapshot.runtimeConfig.appliedMode ?? snapshot.runtimeConfig.requestedMode ?? "unknown",
+        requestReason,
+        workflowStatus: gate.allowed ? "pending" : "blocked",
+        applicationStatus: gate.allowed ? "pending_restart" : "rejected",
+        blockedReason: gate.allowed ? undefined : gate.reasons.map((reason) => `${reason.code}: ${reason.message}`).join("; "),
+        updatedAt: new Date().toISOString(),
+      });
+
+      await governanceRepository.saveLivePromotionRequest(record);
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "promotion_request",
+        target: `/control/live-promotion/request:${targetMode}`,
+        result: gate.allowed ? "requested" : "blocked",
+        reason: requestReason,
+        note: gate.allowed ? "Promotion request accepted." : record.blockedReason,
+        requestId: record.id,
+        metadata: { gate, targetMode },
+      });
+
+      return reply.status(gate.allowed ? 201 : 409).send({
+        success: gate.allowed,
+        accepted: gate.allowed,
+        message: gate.allowed ? "Live promotion request accepted." : "Live promotion request blocked.",
+        request: record,
+        gate,
+      });
+    });
+
+    fastify.post<{
+      Params: { id: string };
+      Body: { reason?: string };
+      Reply: LivePromotionRequestResponse | ControlResponse;
+    }>("/control/live-promotion/:id/approve", async (request, reply) => {
+      if (!governanceRepository || !runtimeConfigManager) {
+        return reply.status(503).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion approval unavailable: governance repository or runtime config manager is not wired.",
+          killSwitch: getKillSwitchState(),
+          liveControl: getMicroLiveControlSnapshot(),
+        } as ControlResponse);
+      }
+
+      const operatorContext = getOperatorContext(request);
+      const record = await governanceRepository.loadLivePromotionRequest(request.params.id);
+      if (!record) {
+        return reply.status(404).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion request not found.",
+          reason: "not found",
+        });
+      }
+
+      const snapshot = await readControlSnapshot(deps);
+      const gate = evaluateLivePromotionGate(snapshot, toReadiness(snapshot.runtime), record.targetMode);
+      if (!gate.allowed) {
+        const blockedRecord = mergeLivePromotionRecord(record, {
+          workflowStatus: "blocked",
+          applicationStatus: "rejected",
+          blockedReason: gate.reasons.map((reason) => `${reason.code}: ${reason.message}`).join("; "),
+          updatedAt: new Date().toISOString(),
+        });
+        await governanceRepository.saveLivePromotionRequest(blockedRecord);
+        await recordOperatorAudit(deps, operatorContext, {
+          action: "promotion_decision",
+          target: `/control/live-promotion/${record.id}/approve`,
+          result: "blocked",
+          reason: request.body?.reason,
+          note: blockedRecord.blockedReason,
+          requestId: record.id,
+          metadata: { gate, requestedTarget: record.targetMode },
+        });
+        return reply.status(409).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion approval blocked by gate checks.",
+          request: blockedRecord,
+          gate,
+          reason: blockedRecord.blockedReason,
+        });
+      }
+
+      const approvedRecord = mergeLivePromotionRecord(record, {
+        workflowStatus: "approved",
+        applicationStatus: "pending_restart",
+        approvalReason: request.body?.reason ?? "promotion approved",
+        approvedByActorId: operatorContext.identity.actorId,
+        approvedByDisplayName: operatorContext.identity.displayName,
+        approvedByRole: operatorContext.identity.role,
+        approvedBySessionId: operatorContext.identity.sessionId,
+        approvedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      await governanceRepository.saveLivePromotionRequest(approvedRecord);
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "promotion_decision",
+        target: `/control/live-promotion/${record.id}/approve`,
+        result: "approved",
+        reason: request.body?.reason,
+        note: approvedRecord.approvalReason,
+        requestId: record.id,
+        metadata: { requestedTarget: record.targetMode },
+      });
+      return reply.status(200).send({
+        success: true,
+        accepted: true,
+        message: "Live promotion approved.",
+        request: approvedRecord,
+        gate,
+      });
+    });
+
+    fastify.post<{
+      Params: { id: string };
+      Body: { reason?: string };
+      Reply: LivePromotionRequestResponse | ControlResponse;
+    }>("/control/live-promotion/:id/deny", async (request, reply) => {
+      if (!governanceRepository) {
+        return reply.status(503).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion denial unavailable: governance repository is not wired.",
+          killSwitch: getKillSwitchState(),
+          liveControl: getMicroLiveControlSnapshot(),
+        } as ControlResponse);
+      }
+
+      const operatorContext = getOperatorContext(request);
+      const record = await governanceRepository.loadLivePromotionRequest(request.params.id);
+      if (!record) {
+        return reply.status(404).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion request not found.",
+          reason: "not found",
+        });
+      }
+
+      const deniedRecord = mergeLivePromotionRecord(record, {
+        workflowStatus: "denied",
+        applicationStatus: "rejected",
+        approvalReason: undefined,
+        blockedReason: request.body?.reason ?? "promotion denied",
+        deniedByActorId: operatorContext.identity.actorId,
+        deniedByDisplayName: operatorContext.identity.displayName,
+        deniedByRole: operatorContext.identity.role,
+        deniedBySessionId: operatorContext.identity.sessionId,
+        deniedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      await governanceRepository.saveLivePromotionRequest(deniedRecord);
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "promotion_decision",
+        target: `/control/live-promotion/${record.id}/deny`,
+        result: "denied",
+        reason: request.body?.reason,
+        note: deniedRecord.blockedReason,
+        requestId: record.id,
+        metadata: { requestedTarget: record.targetMode },
+      });
+      return reply.status(200).send({
+        success: true,
+        accepted: true,
+        message: "Live promotion denied.",
+        request: deniedRecord,
+      });
+    });
+
+    fastify.post<{
+      Params: { id: string };
+      Body: { reason?: string };
+      Reply: LivePromotionRequestResponse | ControlResponse;
+    }>("/control/live-promotion/:id/apply", async (request, reply) => {
+      if (!governanceRepository || !runtimeConfigManager) {
+        return reply.status(503).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion application unavailable: governance repository or runtime config manager is not wired.",
+          killSwitch: getKillSwitchState(),
+          liveControl: getMicroLiveControlSnapshot(),
+        } as ControlResponse);
+      }
+
+      const operatorContext = getOperatorContext(request);
+      const record = await governanceRepository.loadLivePromotionRequest(request.params.id);
+      if (!record) {
+        return reply.status(404).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion request not found.",
+          reason: "not found",
+        });
+      }
+
+      if (record.workflowStatus !== "approved") {
+        return reply.status(409).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion must be approved before it can be applied.",
+          request: record,
+          reason: "approval required",
+        });
+      }
+
+      const snapshot = await readControlSnapshot(deps);
+      const gate = evaluateLivePromotionGate(snapshot, toReadiness(snapshot.runtime), record.targetMode);
+      if (!gate.allowed) {
+        const blockedRecord = mergeLivePromotionRecord(record, {
+          workflowStatus: "blocked",
+          applicationStatus: "rejected",
+          blockedReason: gate.reasons.map((reason) => `${reason.code}: ${reason.message}`).join("; "),
+          updatedAt: new Date().toISOString(),
+        });
+        await governanceRepository.saveLivePromotionRequest(blockedRecord);
+        await recordOperatorAudit(deps, operatorContext, {
+          action: "promotion_apply",
+          target: `/control/live-promotion/${record.id}/apply`,
+          result: "blocked",
+          reason: request.body?.reason,
+          note: blockedRecord.blockedReason,
+          requestId: record.id,
+          metadata: { gate, requestedTarget: record.targetMode },
+        });
+        return reply.status(409).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion application blocked by gate checks.",
+          request: blockedRecord,
+          gate,
+          reason: blockedRecord.blockedReason,
+        });
+      }
+
+      const result = await runtimeConfigManager.setMode(record.targetMode, {
+        actor: operatorContext.identity.actorId,
+        reason: request.body?.reason ?? record.requestReason,
+      });
+      const appliedRecord = mergeLivePromotionRecord(record, {
+        workflowStatus: "applied",
+        applicationStatus: result.requiresRestart || result.pendingApply ? "pending_restart" : "applied",
+        approvalReason: request.body?.reason ?? record.approvalReason,
+        appliedByActorId: operatorContext.identity.actorId,
+        appliedByDisplayName: operatorContext.identity.displayName,
+        appliedByRole: operatorContext.identity.role,
+        appliedBySessionId: operatorContext.identity.sessionId,
+        appliedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      await governanceRepository.saveLivePromotionRequest(appliedRecord);
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "promotion_apply",
+        target: `/control/live-promotion/${record.id}/apply`,
+        result: "applied",
+        reason: request.body?.reason ?? record.requestReason,
+        note: result.message,
+        requestId: record.id,
+        metadata: {
+          requestedTarget: record.targetMode,
+          requiresRestart: result.requiresRestart,
+          pendingApply: result.pendingApply,
+        },
+      });
+      return reply.status(result.accepted ? 200 : 409).send({
+        success: result.accepted,
+        accepted: result.accepted,
+        message: result.message,
+        request: appliedRecord,
+        gate,
+        reason: result.rejectionReason,
+      });
+    });
+
+    fastify.post<{
+      Params: { id: string };
+      Body: { reason?: string };
+      Reply: LivePromotionRequestResponse | ControlResponse;
+    }>("/control/live-promotion/:id/rollback", async (request, reply) => {
+      if (!governanceRepository || !runtimeConfigManager) {
+        return reply.status(503).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion rollback unavailable: governance repository or runtime config manager is not wired.",
+          killSwitch: getKillSwitchState(),
+          liveControl: getMicroLiveControlSnapshot(),
+        } as ControlResponse);
+      }
+
+      const operatorContext = getOperatorContext(request);
+      const record = await governanceRepository.loadLivePromotionRequest(request.params.id);
+      if (!record) {
+        return reply.status(404).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion request not found.",
+          reason: "not found",
+        });
+      }
+
+      if (record.workflowStatus !== "applied") {
+        return reply.status(409).send({
+          success: false,
+          accepted: false,
+          message: "Live promotion rollback is only available after application.",
+          request: record,
+          reason: "application required",
+        });
+      }
+
+      const result = await runtimeConfigManager.setMode(record.previousMode as RuntimeMode, {
+        actor: operatorContext.identity.actorId,
+        reason: request.body?.reason ?? record.rollbackReason ?? `rollback to ${record.previousMode}`,
+      });
+      const rolledBackRecord = mergeLivePromotionRecord(record, {
+        workflowStatus: "rolled_back",
+        applicationStatus: "rolled_back",
+        rollbackReason: request.body?.reason ?? `rollback to ${record.previousMode}`,
+        rolledBackByActorId: operatorContext.identity.actorId,
+        rolledBackByDisplayName: operatorContext.identity.displayName,
+        rolledBackByRole: operatorContext.identity.role,
+        rolledBackBySessionId: operatorContext.identity.sessionId,
+        rolledBackAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      await governanceRepository.saveLivePromotionRequest(rolledBackRecord);
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "promotion_rollback",
+        target: `/control/live-promotion/${record.id}/rollback`,
+        result: result.accepted ? "rolled_back" : "blocked",
+        reason: request.body?.reason,
+        note: result.message,
+        requestId: record.id,
+        metadata: {
+          previousMode: record.previousMode,
+        },
+      });
+      return reply.status(result.accepted ? 200 : 409).send({
+        success: result.accepted,
+        accepted: result.accepted,
+        message: result.message,
+        request: rolledBackRecord,
+        reason: result.rejectionReason,
+      });
     });
 
     fastify.post<{
@@ -743,12 +1578,26 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
         } as ControlResponse);
       }
 
+      const operatorContext = getOperatorContext(request);
       const body = (request.body ?? {}) as { reason?: string };
       const idempotencyKey = request.headers["x-idempotency-key"];
       const result = await deps.restartService.requestRestart({
-        actor: "control_api",
+        actor: operatorContext.identity.actorId,
         reason: body.reason,
         idempotencyKey: typeof idempotencyKey === "string" ? idempotencyKey : undefined,
+      });
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "restart_worker",
+        target: "/control/restart-worker",
+        result: result.accepted ? "allowed" : "blocked",
+        reason: body.reason,
+        note: result.message,
+        requestId: operatorContext.requestId,
+        metadata: {
+          targetService: result.targetService,
+          orchestrationMethod: result.orchestrationMethod,
+          targetVersionId: result.targetVersionId,
+        },
       });
       return reply.status(result.statusCode).send({
         success: result.accepted,
@@ -893,9 +1742,18 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
         });
       }
 
+      const operatorContext = getOperatorContext(request);
       const result = await deps.restartService.acknowledgeRestartAlert(request.params.id, {
-        actor: "control_api",
+        actor: operatorContext.identity.actorId,
         note: request.body?.note,
+      });
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "acknowledge_restart_alert",
+        target: `/control/restart-alerts/${request.params.id}/acknowledge`,
+        result: result.accepted ? "allowed" : "blocked",
+        reason: request.body?.note,
+        note: result.message,
+        requestId: operatorContext.requestId,
       });
       return reply.status(result.statusCode).send({
         success: result.accepted,
@@ -922,9 +1780,18 @@ export function controlRoutes(deps: ControlRouteDeps = {}): FastifyPluginAsync {
         });
       }
 
+      const operatorContext = getOperatorContext(request);
       const result = await deps.restartService.resolveRestartAlert(request.params.id, {
-        actor: "control_api",
+        actor: operatorContext.identity.actorId,
         note: request.body?.note,
+      });
+      await recordOperatorAudit(deps, operatorContext, {
+        action: "resolve_restart_alert",
+        target: `/control/restart-alerts/${request.params.id}/resolve`,
+        result: result.accepted ? "allowed" : "blocked",
+        reason: request.body?.note,
+        note: result.message,
+        requestId: operatorContext.requestId,
       });
       return reply.status(result.statusCode).send({
         success: result.accepted,
