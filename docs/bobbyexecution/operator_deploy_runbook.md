@@ -16,20 +16,20 @@
 1. Deploy or push the commit that contains `render.yaml` to staging.
 2. Wait for the staging bot, control, worker, dashboard, and rehearsal refresh cron to become healthy.
 3. Verify the public bot endpoints: `GET /health` and `GET /kpi/summary`.
-4. Verify the control endpoints: `GET /control/status`, `GET /control/runtime-config`, and `GET /control/history`.
+4. Verify the control endpoints: `GET /control/status`, `GET /control/runtime-status`, `GET /control/runtime-config`, and `GET /control/history`.
 
 ## 4. Staging Validation
 - Log in to the staging dashboard with a configured operator account and confirm the session is active.
 - Confirm a privileged dashboard action goes through the server-side proxy boundary and reaches the control service with the operator identity attached.
 - Check worker and control freshness: `GET /control/status` or `GET /control/runtime-status` should show a fresh or understood rehearsal status, a healthy worker heartbeat, and the expected restart state.
-- Confirm rehearsal evidence is present and current. If needed, run `cd bot && npm run recovery:db-rehearse:render`; use `cd bot && npm run recovery:db-rehearse` only as a manual fallback.
-- For restore validation, run `cd bot && npm run recovery:db-validate -- --input=<known-good-snapshot.json>` and open [`recovery_and_upgrade_runbook.md`](recovery_and_upgrade_runbook.md) for the full drill sequence.
+- Confirm rehearsal evidence is present and current. If needed, run `cd bot && npm run recovery:db-rehearse:render`; use `cd bot && npm run recovery:db-rehearse` only to rebuild evidence after the Render-native path is unavailable, and keep automation health marked degraded until the next automated refresh lands.
+- For restore validation, run `cd bot && npm run recovery:db-validate -- --input=<known-good-snapshot.json> --journal-path=/var/data/journal.jsonl` and open [`recovery_and_upgrade_runbook.md`](recovery_and_upgrade_runbook.md) for the full drill sequence.
 
 ## 5. Production Go/No-Go Checklist
 - [ ] Dashboard auth is configured and a real admin login works.
 - [ ] Staging endpoints are healthy.
 - [ ] `cd bot && npm run db:status` is `ready`.
-- [ ] The latest rehearsal evidence is fresh, or a manual fallback refresh has been validated and understood.
+- [ ] The latest rehearsal evidence is fresh from the Render-native automation path.
 - [ ] No open restart alerts or stale worker heartbeat block promotion.
 - [ ] Backup / restore validation has been completed against a known-good snapshot or staging clone.
 - [ ] The production Render secrets and service wiring are present and reviewed.

@@ -67,7 +67,7 @@ Governance-first Solana trading bot with deterministic execution, append-only jo
    npm run db:migrate
    ```
 
-6. Run the offline gate (lint + full test suite):
+6. Run the repo gate (`npm run premerge`, which covers lint, golden tasks, and chaos):
 
    ```bash
    npm run premerge
@@ -86,7 +86,7 @@ Governance-first Solana trading bot with deterministic execution, append-only jo
    ```
 
 9. Check `GET /health` and `GET /kpi/summary` on the public bot service.
-10. Use the private control service or the dashboard proxy routes for control-path testing, and read worker status through `GET /control/status`.
+10. Use the private control service or the dashboard proxy routes for control-path testing, and read worker status through `GET /control/status` or `GET /control/runtime-status`.
 
 ## Runtime Surfaces
 

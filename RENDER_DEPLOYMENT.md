@@ -3,17 +3,9 @@
 This repo now ships a Render Blueprint at [`render.yaml`](render.yaml).
 The Blueprint is the source of truth for the current deployment baseline.
 
-## Stepwise Setup
+## Deployment Entry
 
-If you want the shortest implementation path, do this in order:
-
-1. Deploy the background worker as a Render `worker` service.
-2. Deploy the public bot API as a Render `web` service.
-3. Deploy the private control plane as a Render `pserv` service.
-4. Deploy the dashboard as a Render `web` service.
-5. Fill the secret env vars in the Render dashboard.
-
-For a single operator-facing deploy lane, follow [`docs/bobbyexecution/operator_deploy_runbook.md`](docs/bobbyexecution/operator_deploy_runbook.md).
+Use [`docs/bobbyexecution/operator_deploy_runbook.md`](docs/bobbyexecution/operator_deploy_runbook.md) for the operator-facing staging-to-production sequence. This guide keeps the topology and Render wiring notes current; it does not repeat the launch drill.
 
 ## Current Render Topology
 
@@ -54,7 +46,7 @@ Render-native automatic refresh path:
 2. It reads from the canonical control Postgres via `SOURCE_DATABASE_URL` and restores into the disposable rehearsal Postgres via `TARGET_DATABASE_URL`.
 3. It records evidence back into the canonical control DB using the existing rehearsal evidence model.
 4. The promotion gate keeps reading the newest evidence from Postgres; there is no alternate CI source of truth.
-5. If the cron job fails, operators rerun the manual rehearsal command before attempting governed promotion.
+5. If the cron job fails, operators rerun the manual rehearsal command before attempting governed promotion, but that manual recovery does not mean the automation path is healthy.
 6. Operators can inspect `/control/status` or `/control/runtime-status` to see the latest evidence status, execution source, and freshness window.
 
 ## Build And Start
@@ -231,19 +223,6 @@ The runtime worker owns the persistent disk mount.
 The worker-local file-backed runtime artifacts stay on that disk and are not assumed to be shared with the public bot or control services. The journal, incident files, cycle summaries, and execution evidence are operational records. The kill-switch, live-control, daily-loss, and idempotency files are boot-critical worker state and must be backed up or restored explicitly if the disk is replaced.
 
 The public bot and private control services read the summarized worker visibility snapshot from Postgres instead of reaching into worker-local files.
-
-## Rollout Notes
-
-1. Deploy staging first.
-2. For the bot web service, Render runs the build phase with `npm ci && npm run build`, then starts the server with `npm run start:server`.
-3. For the worker, Render runs the same build phase, then starts the background process with `npm run start:worker` and does not expect an HTTP port.
-4. Verify the public bot read surfaces: `/health`, `/kpi/summary`, `/kpi/decisions`, `/kpi/adapters`, and `/kpi/metrics`.
-5. Verify the control surfaces: `/control/status`, `/control/runtime-config`, `/control/history`, `/control/mode`, `/control/pause`, `/control/resume`, `/control/halt`, `/control/reset`, and `/control/reload`.
-6. Verify restart-required changes through `POST /control/restart-worker` and confirm the control status shows worker heartbeat, last applied version, reload nonce, and restart convergence state.
-7. If convergence stalls or fails, inspect `GET /control/restart-alerts` and acknowledge or resolve the alert from the dashboard or private control service.
-8. Confirm the dashboard proxy routes are using the private control service, not the public bot service.
-9. Promote the same commit to production only after staging is healthy.
-10. Treat `LIVE_TRADING`, `DRY_RUN`, `TRADING_ENABLED`, `LIVE_TEST_MODE`, `MAX_SLIPPAGE_PERCENT`, and the circuit breaker env values as boot-seed defaults only; runtime changes now go through the control API.
 
 ## Current Gap
 

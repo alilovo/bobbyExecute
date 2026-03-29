@@ -76,7 +76,7 @@ Every major event should carry:
 - chaos pass status
 - latest execution attempts
 - verification outcomes
-- kill-switch status
+- emergency-stop / stop-state status
 - worker heartbeat
 - last applied and requested runtime config versions
 - restart-required state, restart request status, and convergence outcome
@@ -84,7 +84,7 @@ Every major event should carry:
 - filtered delivery journal rows and compact per-destination delivery summaries
 - database rehearsal freshness status with last success / failure timestamps
 - open rehearsal freshness alerts, severity, blocked-by-freshness state, and the latest evidence source
-- automation health that distinguishes healthy automation from manual fallback or repeated failed refreshes
+- automation health that distinguishes fresh automated evidence from operator-invoked recovery or repeated failed refreshes
 
 ## Persistence Expectations
 
@@ -115,7 +115,7 @@ Restart alerts open when convergence stalls or fails. `acknowledge` records that
 
 Critical restart alerts may also emit a server-side notification through the private control plane. The notification bridge is advisory only: alert persistence happens first, delivery is rate-limited, and delivery failures are recorded without changing the canonical restart state. Operators should inspect `/control/restart-alerts` and `/control/status` if an alert remains open after a notification attempt.
 
-Database rehearsal freshness uses the same pattern: durable Postgres evidence is authoritative, the control surface derives `fresh` / `warning` / `stale` / `failed` / `unknown`, and an open freshness alert is the visible operator signal when the latest automation or evidence cadence is no longer healthy. A manual fallback rehearsal can satisfy freshness temporarily, but the control surface should still show degraded automation health until the Render-native path recovers.
+Database rehearsal freshness uses the same pattern: durable Postgres evidence is authoritative, the control surface derives `fresh` / `warning` / `stale` / `failed` / `unknown`, and an open freshness alert is the visible operator signal when the latest automation or evidence cadence is no longer healthy. A manual recovery rehearsal can satisfy freshness temporarily, but the control surface should still show degraded automation health until the Render-native path recovers.
 Freshness notifications are advisory only. `warning` remains local-only, `stale` and repeated automated failures may fan out externally, and recovery notifications are only emitted after a previously notified degradation resolves. Notification delivery state is visible in the same control/status payload so operators can tell whether a freshness alert was sent, suppressed, failed, or recovered.
 
 The delivery payload is intentionally small and stable. It includes the environment, worker target, severity, reason code, summary, restart request id, requested and applied version ids when known, worker heartbeat age or timestamp when available, the recommended operator action, and a path hint for the control surface. Recovery notifications are emitted only after a previously notified alert resolves, so the bridge stays an escalation path rather than a parallel restart authority.

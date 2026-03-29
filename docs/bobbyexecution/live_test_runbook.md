@@ -4,16 +4,16 @@ Use this for a controlled live-test session. The runtime is fail-closed; if prer
 
 ## Preflight
 
-- Run `cd bot && npm run premerge` (lint + full `npm test`)
+- Run `cd bot && npm run premerge` (lint, golden tasks, and chaos gate)
 - Run `cd bot && npm run build`
 - Run `cd bot && npm run db:status`
 - Run `cd bot && npm run db:migrate` if the database is not ready
 - Run `cd bot && npm run recovery:db-validate -- --input=<known-good-snapshot.json> --journal-path=$JOURNAL_PATH` when you are changing a target database or rehearsal environment
 - Check `/control/status` or `/control/runtime-status` and confirm the latest `databaseRehearsal` record is fresh before governed live promotion
-- If the status is `warning`, confirm whether the latest passing rehearsal was manual fallback or whether the Render automation path is simply nearing expiry
+- If the status is `warning`, confirm the freshness alert reason and wait for the next automated Render refresh before promotion
 - If the status is `stale` or `failed`, stop and refresh evidence before any governed promotion attempt
 - If a freshness alert was sent externally, confirm the delivery status on the control surface before assuming operators already saw the degradation
-- Run `cd bot && npm run recovery:db-rehearse:render` if the automatic Render cron is stale or failed; use `cd bot && npm run recovery:db-rehearse -- --source-database-url=<canonical-db> --target-database-url=<scratch-db> --source-context=production --target-context=disposable-rehearsal` only as a manual fallback
+- Run `cd bot && npm run recovery:db-rehearse:render` if the automatic Render cron is stale or failed; use `cd bot && npm run recovery:db-rehearse -- --source-database-url=<canonical-db> --target-database-url=<scratch-db> --source-context=production --target-context=disposable-rehearsal` only to rebuild evidence after the Render-native path is unavailable
 - Run `cd bot && npm run live:preflight` (fails closed unless worker boot-critical state at `JOURNAL_PATH` is valid)
 - Set `LIVE_TRADING=true`, `DRY_RUN=false`, `RPC_MODE=real`, `TRADING_ENABLED=true`, `LIVE_TEST_MODE=true`
 - Set `WALLET_ADDRESS` and `CONTROL_TOKEN`
@@ -27,8 +27,8 @@ Use this for a controlled live-test session. The runtime is fail-closed; if prer
 4. Verify `GET /health`, `GET /kpi/summary`, and `GET /control/status`.
 5. Verify `GET /kpi/adapters` and `GET /kpi/metrics` before any trade attempt.
 6. If the worker disk was recreated, run `npm run recovery:worker-state -- --journal-path=$JOURNAL_PATH` and confirm `safeBoot=true` before resuming.
-7. If governed live promotion is blocked because rehearsal evidence is missing or stale, rerun the Render rehearsal refresh or the manual fallback and wait for the evidence record to become fresh again.
-8. If the latest evidence came from manual fallback, treat automation as degraded until the next automated Render refresh lands successfully.
+7. If governed live promotion is blocked because rehearsal evidence is missing or stale, rerun the Render rehearsal refresh and wait for the evidence record to become fresh again.
+8. If the latest evidence was rebuilt manually, treat automation as degraded until the next automated Render refresh lands successfully.
 
 ## What To Watch
 
@@ -59,7 +59,7 @@ Useful read surfaces:
 ## Stop And Reset
 
 - `POST /emergency-stop` immediately halts the runtime and triggers the kill switch.
-- `POST /control/reset` clears the kill switch and returns the round to a safe preflighted state.
+- `POST /control/reset` clears the current stop state and returns the round to a safe preflighted state.
 - `POST /control/halt` stops the runtime loop when you want a terminal stop without an emergency path.
 
 ## Post-Run Review

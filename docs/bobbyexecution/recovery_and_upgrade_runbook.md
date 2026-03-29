@@ -71,7 +71,7 @@ The canonical freshness signal for database rehearsal readiness comes from durab
 Freshness states exposed on `/control/status` and `/control/runtime-status` mean:
 
 - `fresh` - the latest successful rehearsal is within the freshness window and the latest success came from the expected automation path
-- `warning` - the latest successful rehearsal is still usable, but the freshness window is nearing expiry or the latest success came from manual fallback
+- `warning` - the latest successful rehearsal is still usable, but the freshness window is nearing expiry or the latest success came from an operator-invoked recovery path
 - `stale` - the latest successful rehearsal is older than the freshness window and promotion should remain blocked when freshness is required
 - `failed` - the latest rehearsal failed or there is no successful rehearsal evidence to trust
 - `unknown` - no durable evidence has been recorded yet
@@ -86,7 +86,7 @@ The control surface also exposes:
 - whether that freshness alert has been externally notified, suppressed, or failed
 - whether promotion is currently blocked by freshness
 
-Manual fallback still counts as real evidence, but it does not mean the Render automation path is healthy. When manual fallback is used, the control surface should make the automation drift obvious until a fresh automated rehearsal lands again.
+Manual recovery still counts as real evidence, but it does not mean the Render automation path is healthy. When recovery is used, the control surface should make the automation drift obvious until a fresh automated rehearsal lands again.
 Freshness notification policy is advisory: `warning` remains local-only, `stale` and repeated automated failures may notify externally, and a recovery notification is only sent after a previously notified degradation resolves. Notification delivery failure does not alter the canonical freshness state.
 
 ## Backup And Restore Commands
@@ -126,9 +126,9 @@ Validation is intentionally layered:
   - capture a Postgres snapshot
   - restore it into a scratch database
   - run `npm run recovery:db-validate -- --input=<snapshot.json> --journal-path=<worker-journal-path>`
-  - confirm the Render cron rehearsal refresh has produced a fresh evidence record, or run `npm run recovery:db-rehearse:render` / `npm run recovery:db-rehearse` if the latest record is stale or failed
-  - inspect `/control/status` or `/control/runtime-status` and confirm the freshness status is `fresh`; if it is `warning`, confirm whether the alert is expected manual fallback or a missing automated refresh
-  - run `npm run recovery:db-rehearse` against a disposable target before governed promotion
+  - confirm the Render cron rehearsal refresh has produced a fresh evidence record; if the latest record is stale or failed, rerun `npm run recovery:db-rehearse:render` or use `npm run recovery:db-rehearse` to rebuild evidence, then keep automation health degraded until the next automated refresh lands
+  - inspect `/control/status` or `/control/runtime-status` and confirm the freshness status is `fresh`; if it is `warning`, confirm the latest evidence source and whether the automation path is still current
+  - run `npm run recovery:db-rehearse` against a disposable target only as a recovery drill before governed promotion, not as a substitute for the automated refresh path
   - inspect `npm run recovery:worker-state`
 - staging rehearsal:
   - promote the same migration set to staging first
@@ -141,8 +141,8 @@ The restore path is only considered proven when validation is run after the rest
 1. Run `npm run db:status` against the target database.
 2. Run `npm run db:migrate` if migrations are pending.
 3. Run `npm run recovery:db-validate -- --input=<snapshot.json> --journal-path=<worker-journal-path>` against a fresh snapshot or staging clone.
-4. Confirm the latest `databaseRehearsal` status on `/control/status` or `/control/runtime-status` is `fresh`, or understand why it is `warning` before proceeding. Verify the latest successful run source and the open-alert state.
-5. Run `npm run recovery:db-rehearse:render` if the cron evidence is stale or missing, or `npm run recovery:db-rehearse` for a manual fallback rehearsal.
+4. Confirm the latest `databaseRehearsal` status on `/control/status` or `/control/runtime-status` is `fresh`, with the latest successful run source showing the automated path before proceeding. If it is `warning`, verify the open-alert state and the current automation path before proceeding.
+5. Run `npm run recovery:db-rehearse:render` if the cron evidence is stale or missing; use `npm run recovery:db-rehearse` only to rebuild evidence after the automated path is unavailable, then keep automation health degraded until the next automated refresh lands.
 6. Run `npm run recovery:worker-state` on the worker disk that will boot the new release.
 7. Confirm readiness endpoints are healthy after the migration.
 8. Deploy the new release only after schema, rehearsal, and worker-disk prerequisites are satisfied.
@@ -152,7 +152,7 @@ Rollback notes:
 - If a migration checksum changes after it has been applied, treat that as unrecoverable drift.
 - Restore the database from the last known good backup before redeploying incompatible code.
 - If worker boot-critical files are missing, restore them explicitly or keep the worker offline.
-- If rehearsal evidence is missing or stale, do not attempt governed promotion until `npm run recovery:db-rehearse` has been run successfully again.
+- If rehearsal evidence is missing or stale, do not attempt governed promotion until `npm run recovery:db-rehearse:render` has run successfully again and the automated path is current.
 - If freshness alert delivery failed, treat that as an operator visibility issue, not as recovered freshness.
 
 ## Fail-Closed Rules

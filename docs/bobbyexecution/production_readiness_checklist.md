@@ -7,7 +7,7 @@ Use this before any controlled live-test or any rollout beyond paper mode.
 - [x] Deterministic ingest -> signal -> risk -> execute -> verify -> journal -> monitor pipeline
 - [x] Persistent action log, journal, runtime cycle summaries, incidents, and execution evidence
 - [x] Runtime truth surfaces: `/health`, `/kpi/*`, `/control/status`, `/control/runtime-config`, `/control/history`
-- [x] Live-control and kill-switch state with pause, resume, halt, reset, and emergency stop
+- [x] Live-control stop state with pause, resume, halt, reset, and emergency stop
 - [x] Adapter circuit breaker, freshness checks, and fail-closed config validation
 - [x] Real quote and live swap path guarded by RPC verification and live prerequisites
 - [x] Versioned SQL migration runner with explicit schema readiness checks
@@ -19,12 +19,12 @@ Use this before any controlled live-test or any rollout beyond paper mode.
 
 ## Verify Before Controlled Live-Test
 
-- [ ] `cd bot && npm run premerge` (lint + full `npm test`)
+- [ ] `cd bot && npm run premerge` (lint, golden tasks, and chaos gate)
 - [ ] `cd bot && npm run build`
 - [ ] `cd bot && npm run db:status`
 - [ ] `cd bot && npm run db:migrate` if the status is not `ready`
 - [ ] `cd bot && npm run recovery:db-validate -- --input=<known-good-snapshot.json> --journal-path=/var/data/journal.jsonl` reports `status=ready` with DB `exact_match`
-- [ ] `cd bot && npm run recovery:db-rehearse:render` has succeeded recently, or `cd bot && npm run recovery:db-rehearse -- --source-database-url=<canonical-db> --target-database-url=<scratch-db> --source-context=production --target-context=disposable-rehearsal` has been run manually as fallback
+- [ ] `cd bot && npm run recovery:db-rehearse:render` has succeeded recently and the latest evidence source is the Render-native automation path
 - [ ] `cd bot && npm run recovery:worker-state -- --journal-path=/var/data/journal.jsonl`
 - [ ] `cd bot && npm run live:preflight`
 - [ ] `LIVE_TRADING=true`
@@ -41,7 +41,7 @@ Use this before any controlled live-test or any rollout beyond paper mode.
 - [ ] dashboard operator auth is configured with `DASHBOARD_SESSION_SECRET` and `DASHBOARD_OPERATOR_DIRECTORY_JSON`
 - [ ] dashboard login returns a signed session cookie for at least one admin operator and the control proxy forwards the resulting identity
 - [ ] If `databaseRehearsal.status=warning`, check the open freshness alert reason, notification delivery state, and automation health before promotion
-- [ ] If `databaseRehearsal.status=stale` or `failed`, do not promote until the Render rehearsal refresh or manual fallback has written fresh evidence to Postgres and the operator-facing freshness alert has recovered or been understood
+- [ ] If `databaseRehearsal.status=stale` or `failed`, do not promote until the Render rehearsal refresh has written fresh evidence to Postgres and the latest evidence source is the Render-native path again
 - [ ] `POST /emergency-stop` and `POST /control/reset` behave as documented
 - [ ] the dashboard reflects the same runtime truth as the bot
 - [ ] dry or paper rehearsal has been reviewed in the journal and worker visibility snapshot
