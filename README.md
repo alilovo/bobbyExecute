@@ -22,6 +22,7 @@ Governance-first Solana trading bot with deterministic execution, append-only jo
 - [`docs/bobbyexecution/README.md`](docs/bobbyexecution/README.md)
 - [`bot/README.md`](bot/README.md)
 - [`RENDER_DEPLOYMENT.md`](RENDER_DEPLOYMENT.md)
+- [`docs/bobbyexecution/operator_deploy_runbook.md`](docs/bobbyexecution/operator_deploy_runbook.md)
 - [`docs/bobbyexecution/production_readiness_checklist.md`](docs/bobbyexecution/production_readiness_checklist.md)
 - [`docs/bobbyexecution/recovery_and_upgrade_runbook.md`](docs/bobbyexecution/recovery_and_upgrade_runbook.md)
 - [`docs/bobbyexecution/live_test_runbook.md`](docs/bobbyexecution/live_test_runbook.md)

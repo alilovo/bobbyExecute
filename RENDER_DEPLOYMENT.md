@@ -13,6 +13,8 @@ If you want the shortest implementation path, do this in order:
 4. Deploy the dashboard as a Render `web` service.
 5. Fill the secret env vars in the Render dashboard.
 
+For a single operator-facing deploy lane, follow [`docs/bobbyexecution/operator_deploy_runbook.md`](docs/bobbyexecution/operator_deploy_runbook.md).
+
 ## Current Render Topology
 
 The deployed baseline now matches the worker split:
