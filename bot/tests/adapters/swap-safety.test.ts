@@ -1,6 +1,7 @@
 /**
  * M0: Safety Switch - executeSwap must block live path by default.
  */
+import { PublicKey, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { executeSwap } from "@bot/adapters/dex-execution/swap.js";
 import type { TradeIntent } from "@bot/core/contracts/trade.js";
@@ -17,16 +18,47 @@ const baseIntent: TradeIntent = {
   dryRun: false,
 };
 
+function makeSerializedTransaction(): string {
+  const payer = new PublicKey("11111111111111111111111111111111");
+  const message = new TransactionMessage({
+    payerKey: payer,
+    recentBlockhash: "11111111111111111111111111111111",
+    instructions: [],
+  }).compileToV0Message();
+  const tx = new VersionedTransaction(message);
+  return Buffer.from(tx.serialize()).toString("base64");
+}
+
 describe("Swap Safety (M0)", () => {
-  const origEnv = process.env.LIVE_TRADING;
+  const origEnv = {
+    LIVE_TRADING: process.env.LIVE_TRADING,
+    RPC_MODE: process.env.RPC_MODE,
+    TRADING_ENABLED: process.env.TRADING_ENABLED,
+    LIVE_TEST_MODE: process.env.LIVE_TEST_MODE,
+    JUPITER_API_KEY: process.env.JUPITER_API_KEY,
+  };
 
   beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
     delete process.env.LIVE_TRADING;
+    delete process.env.RPC_MODE;
+    delete process.env.TRADING_ENABLED;
+    delete process.env.LIVE_TEST_MODE;
+    delete process.env.JUPITER_API_KEY;
   });
 
   afterEach(() => {
-    if (origEnv !== undefined) process.env.LIVE_TRADING = origEnv;
+    if (origEnv.LIVE_TRADING !== undefined) process.env.LIVE_TRADING = origEnv.LIVE_TRADING;
     else delete process.env.LIVE_TRADING;
+    if (origEnv.RPC_MODE !== undefined) process.env.RPC_MODE = origEnv.RPC_MODE;
+    else delete process.env.RPC_MODE;
+    if (origEnv.TRADING_ENABLED !== undefined) process.env.TRADING_ENABLED = origEnv.TRADING_ENABLED;
+    else delete process.env.TRADING_ENABLED;
+    if (origEnv.LIVE_TEST_MODE !== undefined) process.env.LIVE_TEST_MODE = origEnv.LIVE_TEST_MODE;
+    else delete process.env.LIVE_TEST_MODE;
+    if (origEnv.JUPITER_API_KEY !== undefined) process.env.JUPITER_API_KEY = origEnv.JUPITER_API_KEY;
+    else delete process.env.JUPITER_API_KEY;
+    vi.unstubAllGlobals();
   });
 
   it("returns dry result when LIVE_TRADING unset and dryRun=false", async () => {
@@ -73,5 +105,82 @@ describe("Swap Safety (M0)", () => {
   it("interprets LIVE_TRADING=true case-insensitively", async () => {
     process.env.LIVE_TRADING = "True";
     await expect(executeSwap(baseIntent)).rejects.toThrow();
+  });
+
+  it("passes JUPITER_API_KEY through live quote and swap requests", async () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+    process.env.TRADING_ENABLED = "true";
+    process.env.LIVE_TEST_MODE = "true";
+    process.env.JUPITER_API_KEY = "jupiter-test-key";
+
+    const fetchFn = globalThis.fetch as ReturnType<typeof vi.fn>;
+    fetchFn
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          outAmount: "95000000",
+          otherAmountThreshold: "94050000",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          swapTransaction: makeSerializedTransaction(),
+        }),
+      });
+
+    const deps = {
+      rpcClient: {
+        sendRawTransaction: vi.fn(async () => "sig-live-swap"),
+        getTransactionReceipt: vi.fn(async () => ({ status: "confirmed" })),
+      },
+      walletPublicKey: "11111111111111111111111111111111",
+      signTransaction: vi.fn(async (tx) => tx),
+    };
+
+    const result = await executeSwap(
+      { ...baseIntent, executionMode: "live", dryRun: false },
+      undefined,
+      deps
+    );
+
+    expect(result.success).toBe(true);
+
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    const quoteInit = fetchFn.mock.calls[0][1] as RequestInit;
+    const swapInit = fetchFn.mock.calls[1][1] as RequestInit;
+    expect(quoteInit.headers).toEqual(expect.objectContaining({ "x-api-key": "jupiter-test-key" }));
+    expect(swapInit.headers).toEqual(expect.objectContaining({ "x-api-key": "jupiter-test-key" }));
+  });
+
+  it("fails clearly when JUPITER_API_KEY is missing in live mode", async () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+    process.env.TRADING_ENABLED = "true";
+    process.env.LIVE_TEST_MODE = "true";
+    delete process.env.JUPITER_API_KEY;
+
+    const fetchFn = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const deps = {
+      rpcClient: {
+        sendRawTransaction: vi.fn(async () => "sig-live-swap"),
+        getTransactionReceipt: vi.fn(async () => ({ status: "confirmed" })),
+      },
+      walletPublicKey: "11111111111111111111111111111111",
+      signTransaction: vi.fn(async (tx) => tx),
+    };
+
+    const result = await executeSwap(
+      { ...baseIntent, executionMode: "live", dryRun: false },
+      undefined,
+      deps
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.failureStage).toBe("quote");
+    expect(result.failureCode).toBe("live_quote_failed");
+    expect(result.error).toMatch(/JUPITER_API_KEY|Jupiter API key/);
+    expect(fetchFn).not.toHaveBeenCalled();
   });
 });

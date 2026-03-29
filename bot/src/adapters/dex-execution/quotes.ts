@@ -5,6 +5,7 @@
 import type { TradeIntent } from "../../core/contracts/trade.js";
 import type { QuoteResult } from "./types.js";
 import { resilientFetch } from "../http-resilience.js";
+import { buildJupiterAuthHeaders } from "./jupiter-auth.js";
 
 const JUPITER_QUOTE_BASE = process.env.JUPITER_QUOTE_URL ?? "https://api.jup.ag/swap/v1";
 
@@ -56,9 +57,15 @@ export async function getQuote(intent: TradeIntent): Promise<QuoteResult> {
   });
 
   const url = `${JUPITER_QUOTE_BASE}/quote?${params.toString()}`;
-  const res = await resilientFetch(url, undefined, {
-    adapterId: "jupiter-quote",
-  });
+  const res = await resilientFetch(
+    url,
+    {
+      headers: buildJupiterAuthHeaders(),
+    },
+    {
+      adapterId: "jupiter-quote",
+    }
+  );
 
   if (!res.ok) {
     const body = await res.text();

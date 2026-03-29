@@ -31,6 +31,40 @@ describe("Adapter integration (Wave 7)", () => {
     expect(health.length).toBe(3);
   });
 
+  it("passes MORALIS_API_KEY through the factory to Moralis requests", async () => {
+    const fetchFn = globalThis.fetch as ReturnType<typeof vi.fn>;
+    fetchFn.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ result: [] }),
+    } as unknown as Response);
+
+    const { moralis } = createAdaptersWithCircuitBreaker({
+      moralis: {
+        baseUrl: "https://solana-gateway.moralis.io",
+        apiKey: "moralis-test-key",
+        chain: "solana",
+      },
+      resilience: { maxRetries: 0 },
+    });
+
+    await moralis.getTokenBalances("11111111111111111111111111111111");
+
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    const [callUrl, callInit] = fetchFn.mock.calls[0] as [string, RequestInit];
+    expect(callUrl).toContain("solana-gateway.moralis.io");
+    expect(callInit.headers).toEqual(expect.objectContaining({ "X-Api-Key": "moralis-test-key" }));
+  });
+
+  it("fails clearly when MORALIS_API_KEY is missing", async () => {
+    const { moralis } = createAdaptersWithCircuitBreaker({
+      resilience: { maxRetries: 0 },
+    });
+
+    await expect(
+      moralis.getTokenBalances("11111111111111111111111111111111")
+    ).rejects.toThrow(/MORALIS_API_KEY|Moralis API key/);
+  });
+
   it("adapter failure propagates to circuit breaker", async () => {
     const fivexx = {
       ok: false,

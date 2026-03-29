@@ -9,6 +9,7 @@ import type { QuoteResult } from "./types.js";
 import { isLiveTradingEnabled, assertLiveTradingRequiresRealRpc } from "../../config/safety.js";
 import { getQuote } from "./quotes.js";
 import { resilientFetch } from "../http-resilience.js";
+import { buildJupiterAuthHeaders } from "./jupiter-auth.js";
 
 const JUPITER_SWAP_BASE = process.env.JUPITER_SWAP_URL ?? "https://api.jup.ag/swap/v1";
 const DEFAULT_QUOTE_MAX_AGE_MS = 15_000;
@@ -348,7 +349,10 @@ export async function executeSwap(
         `${JUPITER_SWAP_BASE}/swap`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...buildJupiterAuthHeaders(),
+          },
           body: JSON.stringify(swapBody),
         },
         { adapterId: "jupiter-swap" }

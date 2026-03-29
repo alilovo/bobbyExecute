@@ -35,7 +35,7 @@ export function createPaperRuntime(config: Config, runtimeDeps?: PaperRuntimeDep
       recoveryTimeMs: config.circuitBreakerRecoveryMs,
     },
     dexpaprika: { baseUrl: config.dexpaprikaBaseUrl, network: "solana" },
-    moralis: { baseUrl: config.moralisBaseUrl, chain: "solana" },
+    moralis: { baseUrl: config.moralisBaseUrl, apiKey: config.moralisApiKey, chain: "solana" },
   });
   const paperMarketAdapters =
     runtimeDeps?.paperMarketAdapters ??

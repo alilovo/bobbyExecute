@@ -6,6 +6,9 @@ import { getQuote } from "@bot/adapters/dex-execution/quotes.js";
 import type { TradeIntent } from "@bot/core/contracts/trade.js";
 
 describe("getQuote", () => {
+  const originalJupiterQuoteUrl = process.env.JUPITER_QUOTE_URL;
+  const originalJupiterApiKey = process.env.JUPITER_API_KEY;
+
   const baseIntent: TradeIntent = {
     traceId: "test-trace",
     timestamp: "2025-03-01T12:00:00.000Z",
@@ -21,10 +24,21 @@ describe("getQuote", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
     process.env.JUPITER_QUOTE_URL = "";
+    process.env.JUPITER_API_KEY = "test-jupiter-key";
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    if (originalJupiterQuoteUrl === undefined) {
+      delete process.env.JUPITER_QUOTE_URL;
+    } else {
+      process.env.JUPITER_QUOTE_URL = originalJupiterQuoteUrl;
+    }
+    if (originalJupiterApiKey === undefined) {
+      delete process.env.JUPITER_API_KEY;
+    } else {
+      process.env.JUPITER_API_KEY = originalJupiterApiKey;
+    }
   });
 
   it("returns QuoteResult with amountOut, minAmountOut, rawQuotePayload from Jupiter response", async () => {
@@ -53,6 +67,8 @@ describe("getQuote", () => {
     expect(callUrl).toContain("api.jup.ag");
     expect(callUrl).toContain("inputMint=");
     expect(callUrl).toContain("amount=1000000000");
+    const callInit = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit;
+    expect(callInit.headers).toEqual(expect.objectContaining({ "x-api-key": "test-jupiter-key" }));
   });
 
   it("converts human amount (1 SOL) to raw for Jupiter", async () => {
@@ -78,5 +94,12 @@ describe("getQuote", () => {
     });
 
     await expect(getQuote(baseIntent)).rejects.toThrow(/Jupiter quote failed \(400\)/);
+  });
+
+  it("fails clearly when JUPITER_API_KEY is missing", async () => {
+    delete process.env.JUPITER_API_KEY;
+
+    await expect(getQuote(baseIntent)).rejects.toThrow(/JUPITER_API_KEY|Jupiter API key/);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

@@ -208,7 +208,7 @@ async function buildDefaultIngestHandler(config: Config): Promise<() => Promise<
       recoveryTimeMs: config.circuitBreakerRecoveryMs,
     },
     dexpaprika: { baseUrl: config.dexpaprikaBaseUrl, network: "solana" },
-    moralis: { baseUrl: config.moralisBaseUrl, chain: "solana" },
+    moralis: { baseUrl: config.moralisBaseUrl, apiKey: config.moralisApiKey, chain: "solana" },
   });
 
   return createIngestHandler({

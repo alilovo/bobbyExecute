@@ -11,6 +11,7 @@ import { validateFreshness } from "../freshness.js";
 
 const BASE_URL = "https://deep-index.moralis.io/api/v2.2";
 const DEFAULT_MAX_STALENESS_MS = 30_000;
+const MORALIS_API_KEY_HEADER = "X-Api-Key";
 
 export interface MoralisClientConfig {
   baseUrl?: string;
@@ -36,11 +37,17 @@ export class MoralisClient {
   }
 
   private headers(): Record<string, string> {
-    const h: Record<string, string> = { "Content-Type": "application/json" };
-    if (this.apiKey) {
-      h["X-API-Key"] = this.apiKey;
+    const apiKey = this.apiKey.trim();
+    if (!apiKey) {
+      throw new Error(
+        "Moralis API key missing: set MORALIS_API_KEY to use Moralis requests."
+      );
     }
-    return h;
+
+    return {
+      "Content-Type": "application/json",
+      [MORALIS_API_KEY_HEADER]: apiKey,
+    };
   }
 
   private async _fetch(url: string): Promise<Response> {
