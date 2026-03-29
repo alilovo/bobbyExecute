@@ -1,0 +1,48 @@
+{
+  "consumerRepo": "bobbyExecute",
+  "sharedCoreSource": "C:/workspace/main_projects/codex-workflow-core",
+  "sharedCoreMode": "standalone-local-repo",
+  "sharedCoreVersion": "0.1.4",
+  "packageFingerprint": "bda9998180a9a0feae960b38fa4c1f3d3084a0fafd461cdd08612aa6bfa570b0",
+  "adoptedSkills": [
+    "repo-intake-sot-mapper",
+    "runtime-policy-auditor",
+    "planning-slice-builder",
+    "implementation-contract-extractor",
+    "test-matrix-builder",
+    "post-implementation-review-writer",
+    "patch-strategy-designer",
+    "failure-mode-enumerator",
+    "release-narrative-builder"
+  ],
+  "deferredSkills": [
+    "paper-to-live-readiness-reviewer",
+    "journal-to-learning-extractor"
+  ],
+  "localOverlayFiles": [
+    ".codex/repo-intake-inputs.json",
+    "docs/codex-workflow-consumer.md",
+    "docs/repo-specific-canonical-sources.md",
+    "AGENTS.md",
+    ".codex/runtime-policy-inputs.json"
+  ],
+  "localOnlyOverrides": [
+    "bot/",
+    "dor-bot/",
+    "governance/",
+    "ops/",
+    "docs/bobbyexecution/"
+  ],
+  "validationExpectations": [
+    "shared-core path exists",
+    "shared-core version matches package.json",
+    "shared-core fingerprint matches package fingerprint",
+    "shared-core validator passes",
+    "adopted skills exist in the shared core",
+    "consumer overlay docs exist",
+    "repo-specific canonical sources are explicit",
+    "repo-intake local input contract validates",
+    "runtime-policy local input contract validates"
+  ],
+  "notes": "Initial consumer overlay created from codex-workflow-core."
+}

@@ -1,0 +1,40 @@
+{
+  "skill": "repo-intake-sot-mapper",
+  "repoRoot": ".",
+  "canonicalSourceFiles": [
+    "README.md",
+    "AGENTS.md",
+    "bot/package.json",
+    "dashboard/package.json",
+    "docs/codex-workflow-consumer.md",
+    "docs/repo-specific-canonical-sources.md",
+    ".codex/shared-core-consumer.json"
+  ],
+  "primaryDocs": [
+    "README.md",
+    "docs/"
+  ],
+  "governanceFiles": [
+    "AGENTS.md"
+  ],
+  "likelyEntrypoints": [
+    "bot/",
+    "dashboard/",
+    "scripts/",
+    "ops/",
+    "governance/"
+  ],
+  "testCommands": [
+    "npm --prefix bot run premerge",
+    "npm --prefix bot test",
+    "npm --prefix dashboard test",
+    "node scripts/tools/validate-shared-core-consumer.mjs"
+  ],
+  "ignorePaths": [
+    "node_modules",
+    "dist",
+    "coverage",
+    ".git"
+  ],
+  "notes": "Consumer-local inputs for repo-intake-sot-mapper in bobbyExecute."
+}

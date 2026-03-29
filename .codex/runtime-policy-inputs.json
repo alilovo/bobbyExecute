@@ -1,0 +1,64 @@
+{
+  "skill": "runtime-policy-auditor",
+  "repoRoot": ".",
+  "runtimePolicyDocs": [
+    "AGENTS.md",
+    "docs/codex-workflow-consumer.md",
+    "docs/repo-specific-canonical-sources.md",
+    "governance/SoT.md",
+    "governance/cursor_rule.md",
+    "governance/file_path.md",
+    "docs/bobbyexecution/README.md",
+    "docs/bobbyexecution/risk_and_chaos_governance.md",
+    "docs/bobbyexecution/runtime_observability_protocol.md",
+    "ops/agent-team/autonomy_policy.md"
+  ],
+  "runtimeConfigFiles": [
+    "render.yaml",
+    "Dockerfile",
+    ".env.example",
+    "bot/package.json",
+    "dashboard/package.json"
+  ],
+  "controlSurfaceFiles": [
+    "docs/bobbyexecution/incident_and_killswitch_runbook.md",
+    "docs/bobbyexecution/operator_deploy_runbook.md",
+    "docs/bobbyexecution/recovery_and_upgrade_runbook.md",
+    "docs/bobbyexecution/live_test_runbook.md",
+    "docs/bobbyexecution/runtime_observability_protocol.md"
+  ],
+  "killSwitchFiles": [
+    "docs/bobbyexecution/incident_and_killswitch_runbook.md",
+    "governance/SoT.md",
+    "docs/bobbyexecution/risk_and_chaos_governance.md"
+  ],
+  "approvalBoundaryFiles": [
+    "governance/SoT.md",
+    "governance/cursor_rule.md",
+    "governance/file_path.md",
+    "ops/agent-team/policy_approval_rules.yaml",
+    "ops/agent-team/review-request.md",
+    "docs/bobbyexecution/production_readiness_checklist.md"
+  ],
+  "postureOrModeDefinitions": [
+    "governance/SoT.md",
+    "docs/bobbyexecution/production_readiness_checklist.md",
+    "docs/bobbyexecution/runtime_observability_protocol.md"
+  ],
+  "healthOrStatusSurfaceFiles": [
+    "docs/bobbyexecution/runtime_observability_protocol.md",
+    "docs/bobbyexecution/incident_and_killswitch_runbook.md",
+    "docs/bobbyexecution/production_readiness_checklist.md"
+  ],
+  "optionalEnvReferenceFiles": [
+    ".env.example",
+    "render.yaml"
+  ],
+  "ignorePaths": [
+    ".git",
+    "node_modules",
+    "dist",
+    "coverage"
+  ],
+  "notes": "Consumer-local runtime policy inputs for governance, control routes, and fail-closed posture. This contract is not a live-readiness contract."
+}

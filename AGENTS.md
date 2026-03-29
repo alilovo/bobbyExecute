@@ -23,3 +23,9 @@ Governance-first Solana trading bot. Primary codebase is TypeScript in `bot/`. S
 - `snappyjs` and `@types/snappyjs` must be resolvable after install (memory compression). The setup script verifies this.
 - `dor-bot/` is a Python legacy component — not required for the core test/lint/build pipeline.
 - The `premerge` script (`npm run premerge`) is the canonical quality gate: lint → golden tasks → chaos gate. Always run it before committing.
+## Codex Shared-Core Consumer
+- If `.codex/shared-core-consumer.json` exists, read docs/codex-workflow-consumer.md and docs/repo-specific-canonical-sources.md first.
+- If `.codex/repo-intake-inputs.json` exists, keep it aligned with the repo-intake skill before mapping the repo.
+- If `.codex/runtime-policy-inputs.json` exists, keep it aligned with `runtime-policy-auditor` before auditing runtime policy.
+- Use the standalone shared-core source only through the consumer manifest.
+- Do not edit C:/workspace/main_projects/codex-workflow-core/ from this repository.
