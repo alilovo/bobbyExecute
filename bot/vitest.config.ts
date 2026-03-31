@@ -7,6 +7,7 @@ export default defineConfig({
       "@bot": resolve(__dirname, "src"),
       "@": resolve(__dirname, "../dashboard/src"),
       "server-only": resolve(__dirname, "../dashboard/src/test/server-only.ts"),
+      "next/server": resolve(__dirname, "../dashboard/src/test/next-server-stub.ts"),
     },
   },
   test: {
