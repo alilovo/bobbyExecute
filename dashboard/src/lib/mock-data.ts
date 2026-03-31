@@ -162,6 +162,8 @@ export function mockDecisions(): DecisionsResponse {
       token: TOKENS[Math.floor(Math.random() * TOKENS.length)],
       confidence: action === 'allow' ? 0.7 + Math.random() * 0.3 : Math.random() * 0.6,
       reasons,
+      provenanceKind: 'derived' as const,
+      source: 'action_log_projection' as const,
     };
   });
   return { decisions };

@@ -24,7 +24,9 @@ bootstrap()
     const host = addr?.address ?? "0.0.0.0";
     const port = addr?.port ?? 3333;
     console.log(`Server listening on http://${host}:${port}`);
-    console.log("Endpoints: GET /health, GET /kpi/summary, GET /kpi/decisions, GET /kpi/adapters, GET /kpi/metrics");
+    console.log(
+      "Endpoints: GET /health, GET /kpi/summary, GET /kpi/decisions, GET /kpi/decisions/:id/advisory, GET /kpi/adapters, GET /kpi/metrics"
+    );
 
     const shutdown = async () => {
       await server.close();

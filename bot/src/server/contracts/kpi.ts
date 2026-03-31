@@ -350,6 +350,38 @@ export interface KpiDecisionsResponse {
   decisions: KpiDecision[];
 }
 
+/** Advisory LLM annotation — non-authoritative; optional when `ADVISORY_LLM_ENABLED=true`. */
+export interface KpiAdvisoryLLMResponseBody {
+  summary: string;
+  reasoning: string;
+  riskNotes?: string[];
+  anomalies?: string[];
+  confidence: number;
+  provider: string;
+  model: string;
+}
+
+export interface KpiAdvisoryAuditEntry {
+  traceId: string;
+  provider: string;
+  model: string;
+  latencyMs: number;
+  success: boolean;
+  cacheKey?: string;
+  error?: string;
+}
+
+export interface KpiDecisionAdvisoryResponse {
+  traceId: string;
+  enabled: boolean;
+  canonical: import("../../core/contracts/decision-envelope.js").DecisionEnvelope | null;
+  advisory: KpiAdvisoryLLMResponseBody | null;
+  /** Optional second provider output when `compare=true`; never merged into truth. */
+  advisorySecondary?: KpiAdvisoryLLMResponseBody | null;
+  audits: KpiAdvisoryAuditEntry[];
+  message?: string;
+}
+
 export interface KpiAdapter {
   id: string;
   status: "healthy" | "degraded" | "down";

@@ -101,6 +101,37 @@ export interface DecisionsResponse {
   decisions: Decision[];
 }
 
+/** Non-authoritative LLM annotation; may be absent. */
+export interface AdvisoryLLMResponseBody {
+  summary: string;
+  reasoning: string;
+  riskNotes?: string[];
+  anomalies?: string[];
+  confidence: number;
+  provider: string;
+  model: string;
+}
+
+export interface AdvisoryAuditEntry {
+  traceId: string;
+  provider: string;
+  model: string;
+  latencyMs: number;
+  success: boolean;
+  cacheKey?: string;
+  error?: string;
+}
+
+export interface DecisionAdvisoryResponse {
+  traceId: string;
+  enabled: boolean;
+  canonical: unknown;
+  advisory: AdvisoryLLMResponseBody | null;
+  advisorySecondary?: AdvisoryLLMResponseBody | null;
+  audits: AdvisoryAuditEntry[];
+  message?: string;
+}
+
 export interface MetricsResponse {
   p95LatencyMs: Record<string, number>;
 }

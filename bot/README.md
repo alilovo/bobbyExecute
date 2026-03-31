@@ -68,6 +68,7 @@ npm run live:test
 - `GET /health`
 - `GET /kpi/summary` (includes `metricProvenance` for operator-visible honesty: wired vs derived vs default scalars)
 - `GET /kpi/decisions` — prefers **canonical** rows (`decision.envelope.v3` with `reasonClass`, `sources`, `freshness`, `evidenceRef`) from runtime `recentHistory.recentCycles[].decisionEnvelope` when the worker exposes snapshots; legacy action-log projections fill gaps and are labeled `derived`.
+- `GET /kpi/decisions/:traceId/advisory` — optional advisory annotation (off unless `ADVISORY_LLM_ENABLED=true`; never authoritative).
 - `GET /kpi/adapters`
 - `GET /kpi/metrics`
 - Public bot surface is read-only and does not expose runtime replay or incident routes.
@@ -92,8 +93,10 @@ npm run live:test
 
 ## Advisory LLM (non-trading)
 
-- Optional OpenAI/xAI wiring lives under `src/advisory-llm/` and is exported only as `@onchain-trading-bot/core/advisory-llm`.
-- It is **not** imported by bootstrap, worker, server, or `src/index.ts` — not part of the deterministic trading hot path.
+- Optional **read-only** annotation lives under `src/advisory-llm/` and is exported only as `@onchain-trading-bot/core/advisory-llm`.
+- **Default off:** `ADVISORY_LLM_ENABLED` must be `true` to call providers. Use `ADVISORY_LLM_PROVIDER` (`openai`|`xai`), `ADVISORY_LLM_TIMEOUT_MS`, `ADVISORY_LLM_MAX_TOKENS`.
+- HTTP: `GET /kpi/decisions/:traceId/advisory` (optional `?compare=true` for a second provider run — outputs are **not** merged into one truth).
+- It is **not** imported by the trading engine, coordinator, runtime loop, or `src/index.ts`. The public server registers the route; the advisory module loads **only when that route is called** (dynamic `import()`), so there is no boot dependency when unused.
 
 ## Schema And Recovery
 
