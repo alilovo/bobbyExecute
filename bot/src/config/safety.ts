@@ -75,6 +75,18 @@ export function assertLiveTradingPrerequisites(config: Config): void {
     throw new Error("LIVE_TRADING=true requires WALLET_ADDRESS.");
   }
 
+  if (config.signerMode !== "remote") {
+    throw new Error("LIVE_TRADING=true requires SIGNER_MODE=remote.");
+  }
+
+  if (!config.signerUrl) {
+    throw new Error("LIVE_TRADING=true requires SIGNER_URL when SIGNER_MODE=remote.");
+  }
+
+  if (!config.signerAuthToken) {
+    throw new Error("LIVE_TRADING=true requires SIGNER_AUTH_TOKEN when SIGNER_MODE=remote.");
+  }
+
   if (!config.controlToken) {
     throw new Error("LIVE_TRADING=true requires CONTROL_TOKEN.");
   }

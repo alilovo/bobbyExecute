@@ -30,6 +30,8 @@ environments:
             value: "false"
           - key: RUNTIME_POLICY_AUTHORITY
             value: ts-env
+          - key: SIGNER_MODE
+            value: disabled
           - key: REVIEW_POLICY_MODE
             value: required
           - key: RPC_MODE
@@ -125,6 +127,8 @@ environments:
             value: "false"
           - key: RUNTIME_POLICY_AUTHORITY
             value: ts-env
+          - key: SIGNER_MODE
+            value: disabled
           - key: REVIEW_POLICY_MODE
             value: required
           - key: RPC_MODE
@@ -288,6 +292,8 @@ environments:
             value: "false"
           - key: RUNTIME_POLICY_AUTHORITY
             value: ts-env
+          - key: SIGNER_MODE
+            value: disabled
           - key: REVIEW_POLICY_MODE
             value: required
           - key: RPC_MODE
@@ -383,6 +389,8 @@ environments:
             value: "false"
           - key: RUNTIME_POLICY_AUTHORITY
             value: ts-env
+          - key: SIGNER_MODE
+            value: disabled
           - key: REVIEW_POLICY_MODE
             value: required
           - key: RPC_MODE

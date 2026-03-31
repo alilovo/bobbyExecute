@@ -1,6 +1,5 @@
 import type { Config } from "../config/config-schema.js";
 import type { RuntimeController } from "./controller.js";
-import { createExecutionHandler } from "../agents/execution.agent.js";
 import { createLiveRuntime, type LiveRuntimeDeps } from "./live-runtime.js";
 import { createPaperRuntime, type PaperRuntimeDeps } from "./paper-runtime.js";
 import { assertLiveTradingPrerequisites, parseRolloutPostureConfig } from "../config/safety.js";
@@ -24,11 +23,8 @@ export function assertLiveEligibility(config: Config, runtimeDeps: RuntimeDeps =
     throw new Error(`rollout posture '${process.env.ROLLOUT_POSTURE?.trim() ?? rolloutPosture}' does not permit live deployment`);
   }
 
-  const executionHandlerFactory = runtimeDeps.executionHandlerFactory ?? createExecutionHandler;
-  if (executionHandlerFactory === createExecutionHandler) {
-    if (!runtimeDeps.signTransaction) {
-      throw new Error("LIVE_BOOT_ABORTED_EXECUTION_SIGNER_UNAVAILABLE");
-    }
+  if (config.signerMode !== "remote") {
+    throw new Error("LIVE_BOOT_ABORTED_SIGNER_UNAVAILABLE");
   }
 
   for (const [name, repo] of [

@@ -1,15 +1,15 @@
 ---
 name: render-setup-orchestrator
-description: Design, review, and implement safe Render deployment topologies for repositories or app specs. Use when Codex needs to analyze an app for Render, produce or refine render.yaml Blueprints, define env/secret models, split staging vs production, orchestrate migrations/recovery/cron/workers, write operator runbooks, validate readiness, or review deployment and failure modes.
+description: Design, review, debug, and implement safe Render deployment topologies for repositories or app specs. Use when Codex needs to analyze an app for Render, produce or refine render.yaml Blueprints, define env/secret models, split staging vs production, orchestrate migrations/recovery/cron/workers, write operator runbooks, validate readiness, triage production incidents, or review deployment and failure modes.
 ---
 
 # Render Setup Orchestrator
 
-Use this skill for Render-specific deployment planning, setup, review, or hardening. Prefer this skill when Render is the target platform or when `render.yaml` is part of the task.
+Use this skill for Render-specific deployment planning, setup, review, hardening, or incident triage. Prefer this skill when Render is the target platform or when `render.yaml` is part of the task.
 
 ## Core Mission
 
-Design a Render-native topology that is reproducible, fail-closed, operator-friendly, staging-first, and production-safe.
+Design a Render-native topology that is reproducible, fail-closed, operator-friendly, staging-first, and production-safe. When incidents happen, localize the fault domain first instead of treating the repository as one flat application.
 
 ## Non-Negotiable Rules
 
@@ -21,10 +21,55 @@ Design a Render-native topology that is reproducible, fail-closed, operator-frie
 - Prefer Postgres as canonical durable truth when the app already uses it.
 - Keep public surface area minimal.
 - Fail closed on missing secrets, ambiguous source/target data assumptions, unsafe DB source/target assumptions, or incomplete launch prerequisites.
+- Treat Render incident diagnosis as a service-role problem first: web service, private control service, worker, dashboard, Postgres, and Key Value are separate fault domains.
 - Never expose deploy hooks, API keys, or privileged control to browser runtime.
 - Never use cron jobs as canonical storage.
 - Never use worker disk as shared cross-service truth.
 - Never rely on silent schema mutation as the only upgrade model.
+
+## BobbyExecution Incident Triage
+
+Use this triage mode when the issue is a production incident, failed deploy, boot failure, crash loop, stale heartbeat, stale snapshot, governance block, dependency outage, or env/config mismatch.
+
+Follow this order:
+
+1. Classify the failure.
+   - Identify the affected Render service.
+   - Identify the service role: public web, private control, background worker, dashboard, Postgres, or Key Value.
+   - Classify the symptom: build/deploy failure, boot failure, runtime crash loop, stale visibility, policy block, dependency failure, or config validation failure.
+2. Check Render surfaces first.
+   - Inspect the latest deploy/event history for the affected service.
+   - Read startup and runtime logs.
+   - Correlate restart timing with deploy timing.
+   - Confirm whether the service is actually running or repeatedly failing after boot.
+3. Separate web health from runtime health.
+   - A `200` on the public bot `/health` only proves the web surface is alive.
+   - It does not prove the runtime worker, control plane, or governance state is healthy.
+   - Governance may block promotion even when the public bot is alive if runtime state is `error`, `stopped`, or `stale`.
+4. Verify config and fail-closed gates.
+   - Inspect required env presence and shape on the affected service only.
+   - Compare paper, observe, live, and live-limited semantics against repo code.
+   - Treat `runtime_error`, `live_not_allowed`, and `live_health_not_healthy` as likely fail-closed states until evidence proves otherwise.
+5. Verify state backends and the visibility path.
+   - Check Postgres if runtime status, history, or rehearsal evidence depends on durable state.
+   - Check Key Value if fast overlay or mirror state is expected.
+   - Check worker heartbeat and visibility snapshot freshness before blaming the dashboard.
+   - Distinguish a dead worker from stale reporting.
+6. Map governance errors to root cause.
+   - `runtime_error` usually means the runtime or its applied state is broken, not just the bot web service.
+   - `live_not_allowed` usually means a policy gate or posture mismatch, not an infrastructure outage.
+   - `live_health_not_healthy` usually means missing or stale runtime evidence, not a browser problem.
+7. Choose the safest recovery path.
+   - Redeploy only the affected service when the issue is build, boot, or config related.
+   - Restart only the worker when the build is healthy and the issue is a crash loop or stale heartbeat.
+   - Stop and escalate when evidence is insufficient or a backend dependency is down.
+   - Never force promotion past a fail-closed governance gate.
+
+Reference playbooks:
+
+- [`docs/bobbyexecution/render_incident_triage_playbook.md`](../../docs/bobbyexecution/render_incident_triage_playbook.md)
+- [`docs/bobbyexecution/render_incident_quick_checklist.md`](../../docs/bobbyexecution/render_incident_quick_checklist.md)
+- [`docs/bobbyexecution/render_incident_evidence_template.md`](../../docs/bobbyexecution/render_incident_evidence_template.md)
 
 ## Discovery Checklist
 
@@ -33,6 +78,7 @@ Design a Render-native topology that is reproducible, fail-closed, operator-frie
 3. Start from existing `render.yaml`, README, deployment docs, env examples, scripts, and operator notes if present.
 4. Treat repo-local governance or deployment docs as canonical inputs when they exist.
 5. Stop and ask a narrow question if service boundaries, DB source/target, or secret ownership remain ambiguous.
+6. For incidents, prefer runtime and Render logs over dashboard impressions, and always confirm the service role before diagnosing the symptom.
 
 ## Working Sequence
 
@@ -113,6 +159,16 @@ When the user asks for a review or audit, prioritize correctness and launch real
 - State the launch verdict clearly.
 - Finish with the exact next wave of work.
 - Separate production blockers from staging-only gaps.
+
+## Incident Review Mode
+
+When the user asks about an incident or production failure:
+
+- identify the fault domain before proposing a fix
+- state whether the failure is deploy, boot, crash loop, stale reporting, policy block, backend outage, or a combination
+- show the evidence chain that proves the diagnosis
+- distinguish healthy web surfaces from unhealthy runtime/control surfaces
+- recommend the safest next action only after evidence is sufficient
 
 ## Style
 

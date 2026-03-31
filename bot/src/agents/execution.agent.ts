@@ -2,7 +2,6 @@
  * Execution agent - executes swap via DEX adapter.
  * Wires getQuote, optional RPC verification, executeSwap.
  */
-import type { VersionedTransaction } from "@solana/web3.js";
 import type { TradeIntent } from "../core/contracts/trade.js";
 import type { ExecutionReport } from "../core/contracts/trade.js";
 import type { RpcClient } from "../adapters/rpc-verify/client.js";
@@ -12,6 +11,7 @@ import type { QuoteResult } from "../adapters/dex-execution/types.js";
 import { executeSwap, type SwapDeps } from "../adapters/dex-execution/swap.js";
 import { verifyBeforeTrade } from "../adapters/rpc-verify/verify.js";
 import { isLiveTradingEnabled } from "../config/safety.js";
+import type { Signer } from "../adapters/signer/index.js";
 import {
   evaluateMicroLiveIntent,
   getMicroLiveControlSnapshot,
@@ -27,7 +27,7 @@ import type {
 export interface ExecutionHandlerDeps {
   rpcClient?: RpcClient;
   walletAddress?: string;
-  signTransaction?: (tx: VersionedTransaction) => Promise<VersionedTransaction>;
+  signer?: Signer;
   buildSwapTransaction?: SwapDeps["buildSwapTransaction"];
   verifyTransaction?: SwapDeps["verifyTransaction"];
   quoteFetcher?: (intent: TradeIntent) => Promise<QuoteResult>;
@@ -51,13 +51,13 @@ export async function createExecutionHandler(
   return async (intent) => {
     const rpcClient = deps?.rpcClient;
     const walletAddress = deps?.walletAddress;
-    const signTransaction = deps?.signTransaction;
+    const signer = deps?.signer;
     const sendRawTransaction = rpcClient?.sendRawTransaction;
 
     const liveIntent = intent.executionMode === "live";
     const hasVerifyDeps = !!(rpcClient && walletAddress);
-    const hasLiveSwapDeps = !!(sendRawTransaction && walletAddress && signTransaction);
-    const hasAnyLiveDeps = !!(rpcClient || walletAddress || signTransaction);
+    const hasLiveSwapDeps = !!(sendRawTransaction && walletAddress && signer);
+    const hasAnyLiveDeps = !!(rpcClient || walletAddress || signer);
     let microLiveAttempt: LiveExecutionAttempt | undefined;
     let evidenceSequence = 0;
 
@@ -215,7 +215,7 @@ export async function createExecutionHandler(
         timestamp: intent.timestamp,
         tradeIntentId: intent.idempotencyKey,
         success: false,
-        error: "Live execution requires rpcClient, walletAddress, and signTransaction.",
+        error: "Live execution requires rpcClient, walletAddress, and signer.",
         dryRun: false,
         executionMode: "live",
         paperExecution: false,
@@ -230,7 +230,7 @@ export async function createExecutionHandler(
             hasRpcClient: !!rpcClient,
             hasWalletAddress: !!walletAddress,
             hasSendRawTransaction: !!sendRawTransaction,
-            hasSignTransaction: !!signTransaction,
+            hasSigner: !!signer,
           },
         },
       });
@@ -284,7 +284,7 @@ export async function createExecutionHandler(
       ? {
           rpcClient: swapRpcClient,
           walletPublicKey: walletAddress!,
-          signTransaction: signTransaction!,
+          signer: signer!,
           buildSwapTransaction: deps?.buildSwapTransaction,
           verifyTransaction: deps?.verifyTransaction,
         }

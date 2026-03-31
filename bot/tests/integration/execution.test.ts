@@ -1,7 +1,7 @@
 /**
  * Wave 5: Live execution route hardening integration tests.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PublicKey, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { createExecutionHandler } from "../../src/agents/execution.agent.js";
 import { createRpcClient } from "../../src/adapters/rpc-verify/client.js";
@@ -45,14 +45,38 @@ function makeFreshQuote(overrides: Record<string, unknown> = {}) {
 }
 
 function makeSerializedTransaction(): string {
-  const payer = new PublicKey("11111111111111111111111111111111");
+  return makeSerializedTransactionForPayer("11111111111111111111111111111111");
+}
+
+function makeSerializedTransactionForPayer(payerBase58: string): string {
   const message = new TransactionMessage({
-    payerKey: payer,
+    payerKey: new PublicKey(payerBase58),
     recentBlockhash: "11111111111111111111111111111111",
     instructions: [],
   }).compileToV0Message();
   const tx = new VersionedTransaction(message);
   return Buffer.from(tx.serialize()).toString("base64");
+}
+
+function makeSigner() {
+  return {
+    mode: "remote" as const,
+    keyId: "remote-key-1",
+    sign: vi.fn(async (request: {
+      walletAddress: string;
+      keyId?: string;
+      transactions: Array<{ id: string; kind: "transaction" | "message"; encoding: "base64"; payload: string }>;
+    }) => ({
+      walletAddress: request.walletAddress,
+      keyId: request.keyId,
+      signedTransactions: request.transactions.map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        encoding: item.encoding,
+        signedPayload: item.payload,
+      })),
+    })),
+  };
 }
 
 describe("Execution integration (Wave 5 live route)", () => {
@@ -114,7 +138,7 @@ describe("Execution integration (Wave 5 live route)", () => {
         getTransactionReceipt: async () => ({ status: "confirmed" }),
       },
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       quoteFetcher: async () => {
         throw new Error("quote endpoint unavailable");
       },
@@ -141,7 +165,7 @@ describe("Execution integration (Wave 5 live route)", () => {
         getTransactionReceipt: async () => ({ status: "confirmed" }),
       },
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       quoteFetcher: async () =>
         makeFreshQuote({
           fetchedAt: "2024-01-01T00:00:00.000Z",
@@ -167,7 +191,7 @@ describe("Execution integration (Wave 5 live route)", () => {
         getTransactionReceipt: async () => ({ status: "confirmed" }),
       },
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       quoteFetcher: async () => makeFreshQuote({ minAmountOut: "0" }),
     });
     const result = await handler(liveIntent);
@@ -190,7 +214,7 @@ describe("Execution integration (Wave 5 live route)", () => {
         getTransactionReceipt: async () => ({ status: "confirmed" }),
       },
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       quoteFetcher: async () => makeFreshQuote(),
       buildSwapTransaction: async () => ({ swapTransaction: "not-base64" }),
     });
@@ -214,8 +238,11 @@ describe("Execution integration (Wave 5 live route)", () => {
         getTransactionReceipt: async () => ({ status: "confirmed" }),
       },
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async () => {
+      signer: {
+        mode: "remote" as const,
+        sign: vi.fn(async () => {
         throw new Error("wallet signer unavailable");
+        }),
       },
       quoteFetcher: async () => makeFreshQuote(),
       buildSwapTransaction: async () => ({ swapTransaction: makeSerializedTransaction() }),
@@ -224,6 +251,45 @@ describe("Execution integration (Wave 5 live route)", () => {
 
     expect(result.success).toBe(false);
     expect(result.failureCode).toBe("live_signing_unavailable");
+    expect(result.failureStage).toBe("signing");
+  });
+
+  it("live fails closed when the remote signer wallet address does not match", async () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+    armMicroLive("test");
+
+    const handler = await createExecutionHandler({
+      rpcClient: {
+        sendRawTransaction: async () => "sig",
+        getTokenInfo: async () => ({ mint: "mint", decimals: 9, exists: true }),
+        getBalance: async () => ({ address: "a", balance: "10000000000", decimals: 9 }),
+        getTransactionReceipt: async () => ({ status: "confirmed" }),
+      },
+      walletAddress: "11111111111111111111111111111111",
+      signer: {
+        mode: "remote" as const,
+        sign: vi.fn(async (request: {
+          walletAddress: string;
+          keyId?: string;
+          transactions: Array<{ id: string; kind: "transaction" | "message"; encoding: "base64"; payload: string }>;
+        }) => ({
+          walletAddress: "22222222222222222222222222222222",
+          keyId: request.keyId,
+          signedTransactions: request.transactions.map((item) => ({
+            id: item.id,
+            kind: item.kind,
+            encoding: item.encoding,
+            signedPayload: makeSerializedTransactionForPayer("22222222222222222222222222222222"),
+          })),
+        })),
+      },
+      quoteFetcher: async () => makeFreshQuote(),
+      buildSwapTransaction: async () => ({ swapTransaction: makeSerializedTransaction() }),
+    });
+    const result = await handler(liveIntent);
+
+    expect(result.success).toBe(false);
     expect(result.failureStage).toBe("signing");
   });
 
@@ -240,7 +306,7 @@ describe("Execution integration (Wave 5 live route)", () => {
         getTransactionReceipt: async () => ({ status: "confirmed" }),
       },
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       quoteFetcher: async () => makeFreshQuote(),
       buildSwapTransaction: async () => ({ swapTransaction: makeSerializedTransaction() }),
     });
@@ -266,7 +332,7 @@ describe("Execution integration (Wave 5 live route)", () => {
         getBalance: async () => ({ address: "a", balance: "10000000000", decimals: 9 }),
       },
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       quoteFetcher: async () => makeFreshQuote(),
       buildSwapTransaction: async () => ({ swapTransaction: makeSerializedTransaction() }),
       verifyTransaction: () => new Promise(() => undefined),
@@ -291,7 +357,7 @@ describe("Execution integration (Wave 5 live route)", () => {
         getTransactionReceipt: async () => ({ status: "confirmed" }),
       },
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       quoteFetcher: async () => makeFreshQuote(),
       buildSwapTransaction: async () => ({ swapTransaction: makeSerializedTransaction() }),
       verifyTransaction: async () => ({ status: "confirmed" }),
@@ -323,7 +389,7 @@ describe("Execution integration (Wave 5 live route)", () => {
         getTransactionReceipt: async () => ({ status: "failed" }),
       },
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       quoteFetcher: async () => makeFreshQuote(),
       buildSwapTransaction: async () => ({ swapTransaction: makeSerializedTransaction() }),
       verifyTransaction: async () => ({ status: "failed" }),
@@ -353,7 +419,7 @@ describe("Execution integration (Wave 5 live route)", () => {
     const handler = await createExecutionHandler({
       rpcClient: createRpcClient(),
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
     });
 
     const result = await handler(liveIntent);

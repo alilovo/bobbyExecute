@@ -12,6 +12,9 @@ Use this index to find the current operator, runtime, and architecture docs.
 - [`recovery_and_upgrade_runbook.md`](recovery_and_upgrade_runbook.md)
 - [`live_test_runbook.md`](live_test_runbook.md)
 - [`incident_and_killswitch_runbook.md`](incident_and_killswitch_runbook.md)
+- [`render_incident_triage_playbook.md`](render_incident_triage_playbook.md)
+- [`render_incident_quick_checklist.md`](render_incident_quick_checklist.md)
+- [`render_incident_evidence_template.md`](render_incident_evidence_template.md)
 
 ## Runtime and Safety
 

@@ -13,6 +13,10 @@ export type ExecutionMode = z.infer<typeof ExecutionModeSchema>;
 export const RpcModeSchema = z.enum(["stub", "real"]);
 export type RpcMode = z.infer<typeof RpcModeSchema>;
 
+/** Signer mode: disabled (no signing boundary), remote (server-to-server signer) */
+export const SignerModeSchema = z.enum(["disabled", "remote"]);
+export type SignerMode = z.infer<typeof SignerModeSchema>;
+
 export const ConfigSchema = z
   .object({
     // Environment
@@ -37,6 +41,13 @@ export const ConfigSchema = z
       .default("stub"),
 
     rpcUrl: z.string().url().optional().default("https://api.mainnet-beta.solana.com"),
+
+    // Signing boundary
+    signerMode: z.enum(["disabled", "remote"]).default("disabled"),
+    signerUrl: z.string().url().optional(),
+    signerAuthToken: z.string().optional(),
+    signerKeyId: z.string().min(1).optional(),
+    signerTimeoutMs: z.coerce.number().int().min(100).default(10_000),
 
     // Adapter endpoints (optional in dev/test)
     dexpaprikaBaseUrl: z
@@ -105,6 +116,27 @@ export const ConfigSchema = z
       });
     }
 
+    if (data.signerMode !== "remote") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "LIVE_TRADING=true (executionMode=live) requires SIGNER_MODE=remote.",
+      });
+    } else {
+      if (!data.signerUrl) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "LIVE_TRADING=true (executionMode=live) requires SIGNER_URL when SIGNER_MODE=remote.",
+        });
+      }
+
+      if (!data.signerAuthToken) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "LIVE_TRADING=true (executionMode=live) requires SIGNER_AUTH_TOKEN when SIGNER_MODE=remote.",
+        });
+      }
+    }
+
     if (!data.controlToken) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -161,6 +193,11 @@ export function parseConfig(env: Record<string, string | undefined>): Config {
     moralisApiKey: env.MORALIS_API_KEY,
     jupiterApiKey: env.JUPITER_API_KEY,
     walletAddress: env.WALLET_ADDRESS,
+    signerMode: env.SIGNER_MODE,
+    signerUrl: env.SIGNER_URL,
+    signerAuthToken: env.SIGNER_AUTH_TOKEN,
+    signerKeyId: env.SIGNER_KEY_ID,
+    signerTimeoutMs: env.SIGNER_TIMEOUT_MS,
     controlToken: env.CONTROL_TOKEN,
     operatorReadToken: env.OPERATOR_READ_TOKEN,
     journalPath: env.JOURNAL_PATH,

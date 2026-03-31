@@ -19,6 +19,26 @@ const baseIntent = {
   executionMode: "live" as const,
 };
 
+function makeSigner() {
+  return {
+    mode: "remote" as const,
+    sign: async (request: {
+      walletAddress: string;
+      keyId?: string;
+      transactions: Array<{ id: string; kind: "transaction" | "message"; encoding: "base64"; payload: string }>;
+    }) => ({
+      walletAddress: request.walletAddress,
+      keyId: request.keyId,
+      signedTransactions: request.transactions.map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        encoding: item.encoding,
+        signedPayload: item.payload,
+      })),
+    }),
+  };
+}
+
 describe("Execution evidence persistence", () => {
   let tempDir: string;
 
@@ -43,7 +63,7 @@ describe("Execution evidence persistence", () => {
     const handler = await createExecutionHandler({
       rpcClient: createRpcClient(),
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       executionEvidenceRepository: repository,
     });
 

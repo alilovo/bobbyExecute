@@ -1,11 +1,11 @@
 description: >
-  Use this skill when the task is specifically about setting up, reviewing, or hardening a Render deployment.
+  Use this skill when the task is specifically about setting up, reviewing, hardening, or incident-triaging a Render deployment.
   Trigger for requests involving render.yaml, Render service topology, web/private service/worker/cron job design,
   staging/production environment setup, Render Postgres or Key Value wiring, environment variables and secrets,
-  deploy hooks, migration/recovery orchestration on Render, or operator runbooks for Render deployment.
+  deploy hooks, migration/recovery orchestration on Render, incident diagnosis, or operator runbooks for Render deployment.
   Do not trigger for generic DevOps, non-Render cloud setup, or unrelated application logic unless Render is a core part of the task.
 
 interface:
   display_name: "Render Setup Orchestrator"
   short_description: "Render-specific deployment setup and review"
-  default_prompt: "Use $render-setup-orchestrator to design a staging-first Render topology, render.yaml, and operator runbook for this repo."
+  default_prompt: "Use $render-setup-orchestrator to design, debug, or harden a staging-first Render topology, render.yaml, and operator runbook for this repo."

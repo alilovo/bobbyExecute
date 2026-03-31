@@ -72,6 +72,7 @@ import { createAdaptersWithCircuitBreaker } from "../adapters/adapters-with-cb.j
 import { createIngestHandler, type IngestAgentConfig } from "../agents/ingest.agent.js";
 import { createExecutionHandler, type ExecutionHandlerDeps } from "../agents/execution.agent.js";
 import { createRpcClient, type RpcClient } from "../adapters/rpc-verify/client.js";
+import { createSignerFromConfig, type Signer } from "../adapters/signer/index.js";
 import { runScoringEngine } from "../scoring/scoring-engine.js";
 import { recognizePatterns } from "../patterns/pattern-engine.js";
 import { runRiskEngine } from "../risk/risk-engine.js";
@@ -96,7 +97,7 @@ export interface LiveRuntimeDeps {
   decisionCoordinator?: DecisionCoordinator;
   runtimeConfigManager?: RuntimeConfigManager;
   rpcClient?: RpcClient;
-  signTransaction?: ExecutionHandlerDeps["signTransaction"];
+  signer?: Signer;
   buildSwapTransaction?: ExecutionHandlerDeps["buildSwapTransaction"];
   verifyTransaction?: ExecutionHandlerDeps["verifyTransaction"];
   journalWriter?: JournalWriter;
@@ -311,16 +312,12 @@ export async function createLiveRuntime(config: Config, runtimeDeps: LiveRuntime
     new FileSystemExecutionRepository(`${derivePersistenceBasePath(config)}.execution-evidence.jsonl`);
   const ingestHandler = runtimeDeps.ingestHandler ?? (await buildDefaultIngestHandler(config));
   const rpcClient = runtimeDeps.rpcClient ?? createRpcClient({ rpcUrl: config.rpcUrl });
+  const signer = runtimeDeps.signer ?? createSignerFromConfig(config);
   const executionHandlerFactory = runtimeDeps.executionHandlerFactory ?? createExecutionHandler;
-  if (executionHandlerFactory === createExecutionHandler) {
-    if (!runtimeDeps.signTransaction || !rpcClient.sendRawTransaction) {
-      throw new Error("LIVE_BOOT_ABORTED_EXECUTION_SIGNER_UNAVAILABLE");
-    }
-  }
   const executionHandler = await executionHandlerFactory({
     rpcClient,
     walletAddress: config.walletAddress,
-    signTransaction: runtimeDeps.signTransaction,
+    signer,
     buildSwapTransaction: runtimeDeps.buildSwapTransaction,
     verifyTransaction: runtimeDeps.verifyTransaction,
     executionEvidenceRepository,

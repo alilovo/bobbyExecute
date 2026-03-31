@@ -6,6 +6,7 @@ The Blueprint is the source of truth for the current deployment baseline.
 ## Deployment Entry
 
 Use [`docs/bobbyexecution/operator_deploy_runbook.md`](docs/bobbyexecution/operator_deploy_runbook.md) for the operator-facing staging-to-production sequence. This guide keeps the topology and Render wiring notes current; it does not repeat the launch drill.
+For production incidents, use [`docs/bobbyexecution/render_incident_triage_playbook.md`](docs/bobbyexecution/render_incident_triage_playbook.md) and the companion quick checklist instead of trying to debug from deploy notes alone.
 
 ## Current Render Topology
 

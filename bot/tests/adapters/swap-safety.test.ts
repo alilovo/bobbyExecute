@@ -29,6 +29,26 @@ function makeSerializedTransaction(): string {
   return Buffer.from(tx.serialize()).toString("base64");
 }
 
+function makeSigner() {
+  return {
+    mode: "remote" as const,
+    sign: vi.fn(async (request: {
+      walletAddress: string;
+      keyId?: string;
+      transactions: Array<{ id: string; kind: "transaction" | "message"; encoding: "base64"; payload: string }>;
+    }) => ({
+      walletAddress: request.walletAddress,
+      keyId: request.keyId,
+      signedTransactions: request.transactions.map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        encoding: item.encoding,
+        signedPayload: item.payload,
+      })),
+    })),
+  };
+}
+
 describe("Swap Safety (M0)", () => {
   const origEnv = {
     LIVE_TRADING: process.env.LIVE_TRADING,
@@ -136,7 +156,7 @@ describe("Swap Safety (M0)", () => {
         getTransactionReceipt: vi.fn(async () => ({ status: "confirmed" })),
       },
       walletPublicKey: "11111111111111111111111111111111",
-      signTransaction: vi.fn(async (tx) => tx),
+      signer: makeSigner(),
     };
 
     const result = await executeSwap(
@@ -168,7 +188,7 @@ describe("Swap Safety (M0)", () => {
         getTransactionReceipt: vi.fn(async () => ({ status: "confirmed" })),
       },
       walletPublicKey: "11111111111111111111111111111111",
-      signTransaction: vi.fn(async (tx) => tx),
+      signer: makeSigner(),
     };
 
     const result = await executeSwap(

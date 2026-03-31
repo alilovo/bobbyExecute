@@ -29,6 +29,27 @@ const baseIntent: TradeIntent = {
   dryRun: false,
 };
 
+function makeSigner() {
+  return {
+    mode: "remote" as const,
+    keyId: "remote-key-1",
+    sign: vi.fn(async (request: {
+      walletAddress: string;
+      keyId?: string;
+      transactions: Array<{ id: string; kind: "transaction" | "message"; encoding: "base64"; payload: string }>;
+    }) => ({
+      walletAddress: request.walletAddress,
+      keyId: request.keyId,
+      signedTransactions: request.transactions.map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        encoding: item.encoding,
+        signedPayload: item.payload,
+      })),
+    })),
+  };
+}
+
 describe("createExecutionHandler", () => {
   afterEach(() => {
     delete process.env.LIVE_TRADING;
@@ -81,7 +102,7 @@ describe("createExecutionHandler", () => {
     expect(result.error).toBeDefined();
   });
 
-  it("fails closed for live intent when signTransaction is missing", async () => {
+  it("fails closed for live intent when signer is missing", async () => {
     process.env.LIVE_TRADING = "true";
     process.env.RPC_MODE = "real";
     armMicroLive("test");
@@ -134,7 +155,7 @@ describe("createExecutionHandler", () => {
         getTransactionReceipt: async () => ({}),
       },
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       quoteFetcher,
       swapExecutor,
     });
@@ -163,7 +184,7 @@ describe("createExecutionHandler", () => {
         getTransactionReceipt: async () => ({ status: "confirmed" }),
       },
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
     });
     const result = await handler({ ...baseIntent, executionMode: "live" });
 
@@ -181,7 +202,7 @@ describe("createExecutionHandler", () => {
     const handler = await createExecutionHandler({
       rpcClient: createRpcClient(),
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
     });
     const result = await handler({ ...baseIntent, executionMode: "live" });
 
@@ -199,7 +220,7 @@ describe("createExecutionHandler", () => {
     const handler = await createExecutionHandler({
       rpcClient: createRpcClient(),
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       executionEvidenceRepository: executionRepository,
       incidentRecorder: new RepositoryIncidentRecorder(incidentRepository),
     });
@@ -227,7 +248,7 @@ describe("createExecutionHandler", () => {
     const handler = await createExecutionHandler({
       rpcClient: createRpcClient(),
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       executionEvidenceRepository: executionRepository,
     });
     const result = await handler({ ...baseIntent, executionMode: "live", idempotencyKey: "rolled-back-live" });
@@ -247,7 +268,7 @@ describe("createExecutionHandler", () => {
     const handler = await createExecutionHandler({
       rpcClient: createRpcClient(),
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
     });
     const result = await handler({ ...baseIntent, executionMode: "live", idempotencyKey: "invalid-rollout" });
 
@@ -265,7 +286,7 @@ describe("createExecutionHandler", () => {
     const handler = await createExecutionHandler({
       rpcClient: createRpcClient(),
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
     });
     const result = await handler({
       ...baseIntent,
@@ -293,7 +314,7 @@ describe("createExecutionHandler", () => {
         getTransactionReceipt: async () => ({ status: "confirmed" }),
       },
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       quoteFetcher: vi.fn().mockResolvedValue({
         quoteId: "q-live",
         amountOut: "200",
@@ -333,8 +354,11 @@ describe("createExecutionHandler", () => {
     const handler = await createExecutionHandler({
       rpcClient: createRpcClient(),
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async () => {
-        throw new Error("signing unavailable");
+      signer: {
+        mode: "remote" as const,
+        sign: vi.fn(async () => {
+          throw new Error("signing unavailable");
+        }),
       },
       quoteFetcher: vi.fn().mockResolvedValue({
         quoteId: "q-live",
@@ -371,7 +395,7 @@ describe("createExecutionHandler", () => {
     const handler = await createExecutionHandler({
       rpcClient: createRpcClient(),
       walletAddress: "11111111111111111111111111111111",
-      signTransaction: async (tx) => tx,
+      signer: makeSigner(),
       quoteFetcher: vi.fn().mockResolvedValue({
         quoteId: "q-live",
         amountOut: "200",

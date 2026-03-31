@@ -10,6 +10,7 @@ import { isLiveTradingEnabled, assertLiveTradingRequiresRealRpc } from "../../co
 import { getQuote } from "./quotes.js";
 import { resilientFetch } from "../http-resilience.js";
 import { buildJupiterAuthHeaders } from "./jupiter-auth.js";
+import { SignerError, type Signer } from "../signer/index.js";
 
 const JUPITER_SWAP_BASE = process.env.JUPITER_SWAP_URL ?? "https://api.jup.ag/swap/v1";
 const DEFAULT_QUOTE_MAX_AGE_MS = 15_000;
@@ -24,6 +25,12 @@ type LiveFailureCode =
   | "live_quote_stale"
   | "live_swap_build_failed"
   | "live_swap_payload_invalid"
+  | "live_signer_disabled"
+  | "live_signer_timeout"
+  | "live_signer_unavailable"
+  | "live_signer_auth_failed"
+  | "live_signer_response_invalid"
+  | "live_signer_wallet_mismatch"
   | "live_signing_unavailable"
   | "live_send_failed"
   | "live_send_ambiguous"
@@ -45,8 +52,8 @@ export interface SwapDeps {
     getTransactionReceipt?(signature: string): Promise<unknown>;
   };
   walletPublicKey: string;
-  /** Keypair for signing. If absent, live swap will fail. */
-  signTransaction?: (tx: VersionedTransaction) => Promise<VersionedTransaction>;
+  /** Signing boundary for live transactions. If absent, live swap will fail. */
+  signer?: Signer;
   /** Optional custom swap payload builder for testability or alternate providers. */
   buildSwapTransaction?: (input: { quoteResponse: Record<string, unknown>; userPublicKey: string }) => Promise<{ swapTransaction: string }>;
   /** Optional verifier override for post-send confirmation. */
@@ -192,6 +199,48 @@ function normalizeLiveSuccessArtifacts(
   };
 }
 
+function assertSignedTransactionMatchesWallet(tx: VersionedTransaction, walletPublicKey: string): void {
+  const payerKey = tx.message.staticAccountKeys[0]?.toBase58();
+  if (payerKey !== walletPublicKey) {
+    throw new SignerError(
+      "SIGNER_WALLET_MISMATCH",
+      "Signed transaction payer did not match the requested walletAddress."
+    );
+  }
+}
+
+function mapSignerFailureCode(code: string): LiveFailureCode {
+  switch (code) {
+    case "SIGNER_DISABLED":
+      return "live_signer_disabled";
+    case "SIGNER_TIMEOUT":
+      return "live_signer_timeout";
+    case "SIGNER_AUTH_FAILED":
+      return "live_signer_auth_failed";
+    case "SIGNER_WALLET_MISMATCH":
+      return "live_signer_wallet_mismatch";
+    case "SIGNER_BAD_RESPONSE":
+    case "SIGNER_REQUEST_INVALID":
+      return "live_signer_response_invalid";
+    case "SIGNER_UNAVAILABLE":
+    default:
+      return "live_signer_unavailable";
+  }
+}
+
+function getSignerFailureCode(error: unknown): LiveFailureCode | undefined {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+
+  const code = (error as { code?: unknown }).code;
+  if (typeof code !== "string") {
+    return undefined;
+  }
+
+  return mapSignerFailureCode(code);
+}
+
 /**
  * Execute swap.
  * Paper/dryRun: returns success without network calls.
@@ -255,16 +304,16 @@ export async function executeSwap(
     liveAllowed,
     hasRpcClient: !!deps?.rpcClient,
     hasSendRawTransaction: !!deps?.rpcClient?.sendRawTransaction,
-    hasSignTransaction: !!deps?.signTransaction,
+    hasSigner: !!deps?.signer,
     hasWalletPublicKey: !!deps?.walletPublicKey,
   };
 
-  if (!deps?.rpcClient?.sendRawTransaction || !deps?.signTransaction) {
+  if (!deps?.rpcClient?.sendRawTransaction || !deps?.signer) {
     return makeLiveFailure(
       intent,
       "preflight",
       "live_dependency_incomplete",
-      "Real swap execution requires rpcClient.sendRawTransaction and signTransaction.",
+      "Real swap execution requires rpcClient.sendRawTransaction and signer.",
       artifacts
     );
   }
@@ -432,9 +481,42 @@ export async function executeSwap(
 
   let signedTx: VersionedTransaction;
   try {
-    signedTx = await deps.signTransaction(tx);
+    const signingResult = await deps.signer.sign({
+      purpose: "live_swap",
+      walletAddress: deps.walletPublicKey,
+      keyId: deps.signer.keyId,
+      transactions: [
+        {
+          id: "swap-transaction",
+          kind: "transaction",
+          encoding: "base64",
+          payload: txB64,
+        },
+      ],
+    });
+
+    const signedItem = signingResult.signedTransactions.find((item) => item.id === "swap-transaction");
+    if (!signedItem) {
+      throw new SignerError(
+        "SIGNER_BAD_RESPONSE",
+        "Remote signer response did not include the swap transaction."
+      );
+    }
+
+    try {
+      const signedTxBuf = Buffer.from(signedItem.signedPayload, "base64");
+      signedTx = VersionedTransaction.deserialize(signedTxBuf);
+      assertSignedTransactionMatchesWallet(signedTx, deps.walletPublicKey);
+    } catch (error) {
+      throw new SignerError(
+        "SIGNER_BAD_RESPONSE",
+        error instanceof Error ? error.message : String(error),
+        error
+      );
+    }
   } catch (error) {
-    return makeLiveFailure(intent, "signing", "live_signing_unavailable", error instanceof Error ? error.message : String(error), {
+    const failureCode = getSignerFailureCode(error) ?? "live_signing_unavailable";
+    return makeLiveFailure(intent, "signing", failureCode, error instanceof Error ? error.message : String(error), {
       ...artifacts,
       quote: {
         fetchedAt: resolvedQuote.fetchedAt,
@@ -445,6 +527,11 @@ export async function executeSwap(
         provider: deps.buildSwapTransaction ? "custom" : "jupiter",
         ok: true,
         hasSwapTransaction: true,
+      },
+      signing: {
+        attempted: true,
+        completed: false,
+        failureCode,
       },
     });
   }
