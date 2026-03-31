@@ -59,7 +59,7 @@ export const ConfigSchema = z
       .string()
       .url()
       .optional()
-      .default("https://solana-gateway.moralis.io"),
+      .default("https://deep-index.moralis.io/api/v2.2"),
     moralisApiKey: z.string().optional(),
     jupiterApiKey: z.string().optional(),
 
@@ -174,6 +174,23 @@ function parseRpcMode(env: Record<string, string | undefined>): RpcMode {
   return m === "real" ? "real" : "stub";
 }
 
+function normalizeMoralisBaseUrl(raw: string | undefined): string | undefined {
+  if (raw == null) {
+    return undefined;
+  }
+
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    return undefined;
+  }
+
+  if (trimmed === "https://solana-gateway.moralis.io") {
+    return "https://deep-index.moralis.io/api/v2.2";
+  }
+
+  return trimmed;
+}
+
 /**
  * Parse config from env. Throws on validation failure (fail-closed).
  * Invalid combo (LIVE_TRADING=true with RPC_MODE=stub) is rejected by refine.
@@ -189,7 +206,7 @@ export function parseConfig(env: Record<string, string | undefined>): Config {
     rpcMode: parseRpcMode(env),
     rpcUrl: env.RPC_URL ?? "https://api.mainnet-beta.solana.com",
     dexpaprikaBaseUrl: env.DEXPAPRIKA_BASE_URL,
-    moralisBaseUrl: env.MORALIS_BASE_URL,
+    moralisBaseUrl: normalizeMoralisBaseUrl(env.MORALIS_BASE_URL),
     moralisApiKey: env.MORALIS_API_KEY,
     jupiterApiKey: env.JUPITER_API_KEY,
     walletAddress: env.WALLET_ADDRESS,

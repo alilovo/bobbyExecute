@@ -139,6 +139,8 @@ environments:
             value: "5"
           - key: CIRCUIT_BREAKER_RECOVERY_MS
             value: "60000"
+          - key: MORALIS_BASE_URL
+            value: https://deep-index.moralis.io/api/v2.2
           - key: JOURNAL_PATH
             value: /var/data/journal.jsonl
           - key: WORKER_HEARTBEAT_INTERVAL_MS
@@ -401,6 +403,8 @@ environments:
             value: "5"
           - key: CIRCUIT_BREAKER_RECOVERY_MS
             value: "60000"
+          - key: MORALIS_BASE_URL
+            value: https://deep-index.moralis.io/api/v2.2
           - key: JOURNAL_PATH
             value: /var/data/journal.jsonl
           - key: WORKER_HEARTBEAT_INTERVAL_MS
