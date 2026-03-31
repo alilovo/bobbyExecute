@@ -340,6 +340,9 @@ function buildNotificationSummary(events: WorkerRestartAlertEventRecord[]): Work
 }
 
 export class WorkerRestartNotificationService {
+  /** Monotonic offset so rapid successive events never share identical ISO timestamps (sort/tie-break stability). */
+  private eventTimeCounter = 0;
+
   constructor(private readonly deps: WorkerRestartNotificationServiceOptions) {}
 
   private get cooldownMs(): number {
@@ -439,7 +442,7 @@ export class WorkerRestartNotificationService {
       notificationResponseStatus: input.responseStatus,
       notificationResponseBody: input.responseBody,
       notificationScope: input.scope,
-      createdAt: nowIso(),
+      createdAt: new Date(Date.now() + ++this.eventTimeCounter).toISOString(),
     });
   }
 
