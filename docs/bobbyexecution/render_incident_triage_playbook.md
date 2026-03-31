@@ -2,6 +2,8 @@
 
 This playbook is the production debugging companion to the Render deployment skill.
 
+Open [`runtime_error_stale_stopped_first_response.md`](runtime_error_stale_stopped_first_response.md) first for the specific runtime_error / stale / stopped production pattern.
+
 Use it when an operator sees any of the following:
 
 - deploy or build failure
@@ -267,4 +269,3 @@ If the public bot is healthy but the control or dashboard surfaces show `FAIL`, 
 - do not promote live while the runtime is unhealthy or stale
 - stop and escalate if the logs do not show a clear fault domain
 - do not treat a healthy dashboard as proof of worker readiness
-

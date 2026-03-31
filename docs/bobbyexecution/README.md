@@ -13,6 +13,7 @@ Use this index to find the current operator, runtime, and architecture docs.
 - [`live_test_runbook.md`](live_test_runbook.md)
 - [`incident_and_killswitch_runbook.md`](incident_and_killswitch_runbook.md)
 - [`render_incident_triage_playbook.md`](render_incident_triage_playbook.md)
+- [`runtime_error_stale_stopped_first_response.md`](runtime_error_stale_stopped_first_response.md)
 - [`render_incident_quick_checklist.md`](render_incident_quick_checklist.md)
 - [`render_incident_evidence_template.md`](render_incident_evidence_template.md)
 
