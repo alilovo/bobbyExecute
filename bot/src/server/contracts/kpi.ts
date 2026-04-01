@@ -350,6 +350,47 @@ export interface KpiDecisionsResponse {
   decisions: KpiDecision[];
 }
 
+/**
+ * Advisory LLM annotation — non-authoritative; optional when `ADVISORY_LLM_ENABLED=true`.
+ * `summary` / `reasoning` are LLM commentary — not canonical reasonClass, blockReason, or execution rationale.
+ */
+export interface KpiAdvisoryLLMResponseBody {
+  /** Short LLM commentary; not a canonical decision summary. */
+  summary: string;
+  /** Narrative explanation only; not canonical reasonClass / block reason / risk rationale. */
+  reasoning: string;
+  riskNotes?: string[];
+  anomalies?: string[];
+  /**
+   * Model self-rating / advisory confidence only (0–1).
+   * Not canonical decision confidence, signal confidence, or execution confidence.
+   */
+  confidence: number;
+  provider: string;
+  model: string;
+}
+
+export interface KpiAdvisoryAuditEntry {
+  traceId: string;
+  provider: string;
+  model: string;
+  latencyMs: number;
+  success: boolean;
+  cacheKey?: string;
+  error?: string;
+}
+
+export interface KpiDecisionAdvisoryResponse {
+  traceId: string;
+  enabled: boolean;
+  canonical: import("../../core/contracts/decision-envelope.js").DecisionEnvelope | null;
+  advisory: KpiAdvisoryLLMResponseBody | null;
+  /** Optional second provider output when `compare=true`; never merged into truth. */
+  advisorySecondary?: KpiAdvisoryLLMResponseBody | null;
+  audits: KpiAdvisoryAuditEntry[];
+  message?: string;
+}
+
 export interface KpiAdapter {
   id: string;
   status: "healthy" | "degraded" | "down";

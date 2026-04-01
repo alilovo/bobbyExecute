@@ -525,6 +525,92 @@ describe("Server (Wave 3)", () => {
     expect(Array.isArray(body.decisions)).toBe(true);
   });
 
+  it("GET /kpi/decisions/:id/advisory returns 404 without v3 envelope in snapshot", async () => {
+    const res = await fetch(`${baseUrl}/kpi/decisions/missing-trace/advisory`);
+    expect(res.status).toBe(404);
+  });
+
+  it("GET /kpi/decisions/:id/advisory returns enabled false when advisory LLM is off", async () => {
+    const traceId = "advisory-test-trace";
+    const srv = await createServer({
+      port: PORT + 11,
+      host: "127.0.0.1",
+      getRuntimeSnapshot: () => ({
+        status: "running",
+        mode: "paper",
+        paperModeActive: true,
+        cycleInFlight: false,
+        counters: {
+          cycleCount: 1,
+          decisionCount: 1,
+          executionCount: 0,
+          blockedCount: 0,
+          errorCount: 0,
+        },
+        lastState: null,
+        recentHistory: {
+          recentCycleCount: 1,
+          cycleOutcomes: { success: 1, blocked: 0, error: 0 },
+          attemptsByMode: { dry: 0, paper: 1, live: 0 },
+          refusalCounts: {},
+          failureStageCounts: {},
+          verificationHealth: { passed: 0, failed: 0, failureReasons: {} },
+          incidentCounts: {},
+          controlActions: [],
+          stateTransitions: [],
+          recentCycles: [
+            {
+              traceId,
+              cycleTimestamp: "2026-04-01T00:00:00.000Z",
+              mode: "paper",
+              outcome: "success",
+              stage: "monitor",
+              blocked: false,
+              intakeOutcome: "ok",
+              executionOccurred: true,
+              verificationOccurred: true,
+              decisionOccurred: true,
+              errorOccurred: false,
+              decisionEnvelope: {
+                schemaVersion: "decision.envelope.v3",
+                entrypoint: "engine",
+                flow: "trade",
+                executionMode: "paper",
+                traceId,
+                stage: "monitor",
+                blocked: false,
+                reasonClass: "SUCCESS",
+                sources: ["fixture"],
+                freshness: {
+                  marketAgeMs: 0,
+                  walletAgeMs: 0,
+                  maxAgeMs: 60_000,
+                  observedAt: "2026-04-01T00:00:00.000Z",
+                },
+                evidenceRef: {},
+                decisionHash: "a".repeat(64),
+                resultHash: "b".repeat(64),
+              },
+            },
+          ],
+          recentIncidents: [],
+        },
+      }),
+    });
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:${PORT + 11}/kpi/decisions/${encodeURIComponent(traceId)}/advisory`
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.enabled).toBe(false);
+      expect(body.canonical?.traceId).toBe(traceId);
+      expect(body.advisory).toBeNull();
+    } finally {
+      await srv.close();
+    }
+  });
+
   it("GET /kpi/adapters returns adapter health", async () => {
     const res = await fetch(`${baseUrl}/kpi/adapters`);
     expect(res.status).toBe(200);

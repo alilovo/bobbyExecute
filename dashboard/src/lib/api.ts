@@ -3,6 +3,7 @@ import type {
   SummaryResponse,
   AdaptersResponse,
   DecisionsResponse,
+  DecisionAdvisoryResponse,
   MetricsResponse,
   DashboardLoginRequest,
   DashboardLoginResponse,
@@ -174,6 +175,22 @@ export const api = {
 
   decisions: (limit = 50): Promise<DecisionsResponse> =>
     USE_MOCK ? Promise.resolve(mockDecisions()) : fetchApi(`/kpi/decisions?limit=${limit}`),
+
+  /** Experimental: advisory text only; requires bot `ADVISORY_LLM_ENABLED=true` and canonical v3 for traceId. */
+  decisionAdvisory: (traceId: string, compare = false): Promise<DecisionAdvisoryResponse> => {
+    if (USE_MOCK) {
+      return Promise.resolve({
+        traceId,
+        enabled: false,
+        canonical: null,
+        advisory: null,
+        advisorySecondary: null,
+        audits: [],
+      });
+    }
+    const q = compare ? '?compare=true' : '';
+    return fetchApi(`/kpi/decisions/${encodeURIComponent(traceId)}/advisory${q}`);
+  },
 
   metrics: (): Promise<MetricsResponse> =>
     USE_MOCK ? Promise.resolve(mockMetrics()) : fetchApi('/kpi/metrics'),

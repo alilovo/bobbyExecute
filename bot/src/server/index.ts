@@ -5,6 +5,7 @@
 import Fastify from "fastify";
 import { healthRoutes } from "./routes/health.js";
 import { kpiRoutes } from "./routes/kpi.js";
+import { advisoryKpiRoutes } from "./routes/kpi-advisory.js";
 import { controlRoutes } from "./routes/control.js";
 import type { CircuitBreaker } from "../governance/circuit-breaker.js";
 import type { ActionLogger } from "../observability/action-log.js";
@@ -124,6 +125,13 @@ async function createVisibilityServer(
     runtimeEnvironment: config.runtimeEnvironment,
   };
   await fastify.register(kpiRoutes(kpiDeps));
+  await fastify.register(
+    advisoryKpiRoutes({
+      getRuntimeSnapshot: config.getRuntimeSnapshot,
+      runtimeVisibilityRepository: config.runtimeVisibilityRepository,
+      runtimeEnvironment: config.runtimeEnvironment,
+    })
+  );
   if (options.includeControlRoutes) {
     const governanceRepository =
       config.governanceRepository ?? (await createControlGovernanceRepository(config.databaseUrl));

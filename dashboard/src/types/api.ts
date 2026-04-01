@@ -101,6 +101,46 @@ export interface DecisionsResponse {
   decisions: Decision[];
 }
 
+/**
+ * Non-authoritative LLM annotation; may be absent.
+ * Not canonical reasonClass, block reason, or execution rationale.
+ */
+export interface AdvisoryLLMResponseBody {
+  /** LLM commentary; not canonical decision summary. */
+  summary: string;
+  /** Narrative only; not canonical decision reasoning. */
+  reasoning: string;
+  riskNotes?: string[];
+  anomalies?: string[];
+  /**
+   * Model self-rating / advisory confidence only (0–1).
+   * Not trade, signal, or canonical decision confidence.
+   */
+  confidence: number;
+  provider: string;
+  model: string;
+}
+
+export interface AdvisoryAuditEntry {
+  traceId: string;
+  provider: string;
+  model: string;
+  latencyMs: number;
+  success: boolean;
+  cacheKey?: string;
+  error?: string;
+}
+
+export interface DecisionAdvisoryResponse {
+  traceId: string;
+  enabled: boolean;
+  canonical: unknown;
+  advisory: AdvisoryLLMResponseBody | null;
+  advisorySecondary?: AdvisoryLLMResponseBody | null;
+  audits: AdvisoryAuditEntry[];
+  message?: string;
+}
+
 export interface MetricsResponse {
   p95LatencyMs: Record<string, number>;
 }

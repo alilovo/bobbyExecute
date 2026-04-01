@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useDecisions } from '@/hooks/use-decisions';
+import { api } from '@/lib/api';
 import type { Decision, DecisionAction } from '@/types/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,6 +26,13 @@ export default function DecisionsPage() {
   const [selected, setSelected] = useState<Decision | null>(null);
 
   const decisions = data?.decisions ?? [];
+
+  const advisoryQuery = useQuery({
+    queryKey: ['decision-advisory', selected?.id],
+    queryFn: () => api.decisionAdvisory(selected!.id, false),
+    enabled: Boolean(selected?.provenanceKind === 'canonical' && selected?.schemaVersion === 'decision.envelope.v3'),
+    staleTime: 60_000,
+  });
 
   const filtered = useMemo(() => {
     return decisions.filter((d) => {
@@ -160,7 +169,7 @@ export default function DecisionsPage() {
                             {d.provenanceKind === 'canonical' ? 'canonical' : 'derived'}
                           </Badge>
                           {d.reasonClass ? (
-                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono">
+                            <Badge variant="info" className="text-[9px] px-1.5 py-0 font-mono">
                               {d.reasonClass}
                             </Badge>
                           ) : null}
@@ -281,6 +290,59 @@ export default function DecisionsPage() {
                         </div>
                       ) : null}
                     </div>
+                  </div>
+                )}
+
+                {selected.provenanceKind === 'canonical' && selected.schemaVersion === 'decision.envelope.v3' && (
+                  <div className="rounded-md border border-border-subtle/80 bg-bg-primary/40 p-3 space-y-2">
+                    <p className="text-[10px] font-medium uppercase tracking-wider text-amber-600/90">
+                      AI Advisory (Experimental)
+                    </p>
+                    <p className="text-[11px] text-text-muted leading-relaxed">
+                      Non-authoritative interpretation only. Absent if the bot has advisory LLM disabled or no v3 snapshot.
+                    </p>
+                    {advisoryQuery.isLoading && (
+                      <p className="text-xs text-text-muted">Loading advisory…</p>
+                    )}
+                    {advisoryQuery.isError && (
+                      <p className="text-xs text-text-muted">Advisory unavailable.</p>
+                    )}
+                    {advisoryQuery.data && !advisoryQuery.data.enabled && (
+                      <p className="text-xs text-text-muted">
+                        Advisory LLM is off on the bot (<code className="text-[10px]">ADVISORY_LLM_ENABLED</code>).
+                      </p>
+                    )}
+                    {advisoryQuery.data?.enabled && advisoryQuery.data.advisory && (
+                      <div className="space-y-2 text-xs text-text-secondary">
+                        <p>
+                          <span className="text-text-muted">Advisory summary (non-authoritative):</span>{' '}
+                          {advisoryQuery.data.advisory.summary}
+                        </p>
+                        <p>
+                          <span className="text-text-muted">Advisory narrative (non-authoritative):</span>{' '}
+                          {advisoryQuery.data.advisory.reasoning}
+                        </p>
+                        <div className="rounded border border-border-subtle/60 bg-bg-primary/30 px-2 py-1.5">
+                          <p className="text-[10px] text-text-muted">
+                            <span className="font-medium text-text-secondary">Advisory confidence</span>
+                            {': '}
+                            {advisoryQuery.data.advisory.confidence.toFixed(3)}
+                          </p>
+                          <p className="text-[10px] text-text-muted mt-0.5 leading-snug">
+                            Self-rated LLM confidence only; not trade or decision confidence.
+                          </p>
+                        </div>
+                        {advisoryQuery.data.audits?.[0] && (
+                          <p className="text-[10px] text-text-muted font-mono">
+                            {advisoryQuery.data.audits[0].provider} · {advisoryQuery.data.audits[0].latencyMs}ms ·{' '}
+                            {advisoryQuery.data.audits[0].success ? 'ok' : advisoryQuery.data.audits[0].error ?? 'fail'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {advisoryQuery.data?.enabled && !advisoryQuery.data.advisory && (
+                      <p className="text-xs text-text-muted">No advisory text (timeout, error, or invalid schema).</p>
+                    )}
                   </div>
                 )}
 
