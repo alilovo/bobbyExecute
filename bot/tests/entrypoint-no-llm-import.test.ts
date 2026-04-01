@@ -33,11 +33,26 @@ describe("runtime entrypoints do not import advisory LLM", () => {
     const text = await readSrc("core/engine.ts");
     expect(text).not.toMatch(/advisory-llm/);
   });
+
+  it("core engine does not reference v2 discovery scaffolding", async () => {
+    const text = await readSrc("core/engine.ts");
+    expect(text).not.toMatch(/discovery\/contracts|intelligence\/context|intelligence\/cqd|intelligence\/signals/);
+  });
+
+  it("execution agent does not reference v2 discovery scaffolding", async () => {
+    const text = await readSrc("agents/execution.agent.ts");
+    expect(text).not.toMatch(/discovery\/contracts|intelligence\/context|intelligence\/cqd|intelligence\/signals/);
+  });
 });
 
 describe("package root export surface", () => {
   it("index.ts does not re-export advisory LLM", async () => {
     const text = await readSrc("index.ts");
     expect(text).not.toMatch(/advisory-llm|generateResponse|llmClient/);
+  });
+
+  it("index.ts does not re-export v2 discovery scaffolding", async () => {
+    const text = await readSrc("index.ts");
+    expect(text).not.toMatch(/\.\/discovery\/|\.\/intelligence\/.*contracts|\.\/decision\/contracts|\.\/learning\/contracts/);
   });
 });
