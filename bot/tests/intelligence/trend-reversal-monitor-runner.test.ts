@@ -71,6 +71,7 @@ describe("TrendReversalMonitorRunner", () => {
     expect(result.emittedObservations[0]).toMatchObject({
       schema_version: "trend_reversal_observation.v1",
       token: "BONK",
+      state: "reclaim_attempt",
       evidenceRefs: ["disc-1"],
     });
 
@@ -93,12 +94,31 @@ describe("TrendReversalMonitorRunner", () => {
     const monitorCandidate = vi.fn().mockReturnValue({
       schema_version: "trend_reversal_observation.v1",
       token: "POPCAT",
-      observationState: "STRUCTURE_SHIFT_FORMING",
-      structureContext: { reclaimZone: [1, 2] },
-      monitoringConfidence: 0.99,
-      invalidationFlags: [],
+      chain: "solana",
+      observedAt: new Date(99).toISOString(),
+      inputRef: "monitor-ref",
+      state: "structure_shift_possible",
+      confidence: 0.99,
+      structureSignals: {
+        higherLowForming: true,
+        reclaimingLevel: true,
+        rejectionAtResistance: false,
+        breakdownInvalidation: false,
+      },
+      participationSignals: {
+        buyerStrengthIncreasing: true,
+        volumeExpansion: true,
+        holderGrowthVisible: true,
+      },
+      riskSignals: {
+        liquidityDrop: false,
+        distributionRisk: false,
+        exhaustionWickPattern: false,
+      },
+      invalidationReasons: [],
       evidenceRefs: ["disc-9"],
-      observedAt: 99,
+      missingFields: [],
+      sourceCoverage: {},
     });
 
     const runner = new TrendReversalMonitorRunner({
@@ -110,6 +130,6 @@ describe("TrendReversalMonitorRunner", () => {
     const result = await runner.runOnce();
 
     expect(monitorCandidate).toHaveBeenCalledTimes(1);
-    expect(result.emittedObservations[0]?.observationState).toBe("STRUCTURE_SHIFT_FORMING");
+    expect(result.emittedObservations[0]?.state).toBe("structure_shift_possible");
   });
 });

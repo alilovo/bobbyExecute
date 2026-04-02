@@ -3,10 +3,13 @@ Pre-authority v2 forensics foundation.
 This directory now owns the typed Signal / Forensics input layer:
 - `SignalPackV1`
 - `TrendReversalMonitorInputV1`
+- `TrendReversalObservationV1`
+- `TrendReversalMonitorWorker`
 - deterministic builders for market structure, holder / flow visibility, manipulation visibility, and signal assembly
 
-It also keeps the later trend-reversal observation sidecar contract in the same namespace, but none of these artifacts create decision authority.
-The local `index.ts` barrel is intentionally narrow and stays input-oriented.
+It also keeps the later trend-reversal observation worker contract in the same namespace, but none of these artifacts create decision authority.
+The local `index.ts` barrel is intentionally narrow and stays pre-authority.
+The downstream `../signals/` bridge consumes these artifacts next, but remains descriptive and non-authoritative.
 
 Stage 5.5 placement:
 - after `DataQualityV1`

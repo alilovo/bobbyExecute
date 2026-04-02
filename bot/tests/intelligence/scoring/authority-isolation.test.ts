@@ -10,27 +10,29 @@ async function readSrc(rel: string): Promise<string> {
   return readFile(join(srcRoot, rel), "utf8");
 }
 
-const FORBIDDEN_FORENSICS_PATTERN =
-  /intelligence\/forensics|signal_pack\.v1|trend_reversal_monitor_input\.v1|trend-reversal-monitor-worker|buildSignalPackV1|buildTrendReversalMonitorInputV1/;
+const FORBIDDEN_SCORE_PATTERN =
+  /intelligence\/scoring|score_card\.v1|score_component\.v1|buildScoreCardV1/;
 
-describe("forensics foundation stays out of authority paths", () => {
+describe("score card bridge stays out of authority paths", () => {
   const authorityFiles = [
     "core/engine.ts",
     "core/orchestrator.ts",
-    "governance/policy-engine.ts",
-    "patterns/pattern-engine.ts",
-    "core/decision/decision-result-derivation.ts",
+    "core/intelligence/mci-bci-formulas.ts",
     "core/contracts/scorecard.ts",
-    "core/contracts/pattern.ts",
-    "agents/execution.agent.ts",
-    "agents/signal.agent.ts",
+    "core/decision/decision-result-derivation.ts",
+    "scoring/scoring-engine.ts",
+    "signals/signal-engine.ts",
+    "patterns/pattern-engine.ts",
+    "runtime/dry-run-runtime.ts",
+    "runtime/live-runtime.ts",
+    "execution/execution-engine.ts",
     "index.ts",
   ];
 
   for (const rel of authorityFiles) {
-    it(`${rel} does not import the forensics foundation`, async () => {
+    it(`${rel} does not import the scoring bridge`, async () => {
       const text = await readSrc(rel);
-      expect(text).not.toMatch(FORBIDDEN_FORENSICS_PATTERN);
+      expect(text).not.toMatch(FORBIDDEN_SCORE_PATTERN);
     });
   }
 });

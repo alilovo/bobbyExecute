@@ -36,17 +36,17 @@ describe("runtime entrypoints do not import advisory LLM", () => {
 
   it("core orchestrator does not reference v2 discovery scaffolding", async () => {
     const text = await readSrc("core/orchestrator.ts");
-    expect(text).not.toMatch(/discovery\/contracts|discovery\/source-observation|discovery\/discovery-evidence|discovery\/candidate-discovery|intelligence\/context|intelligence\/cqd|intelligence\/quality|intelligence\/signals|intelligence\/universe\/build-universe-result/);
+    expect(text).not.toMatch(/discovery\/contracts|discovery\/source-observation|discovery\/discovery-evidence|discovery\/candidate-discovery|intelligence\/context|intelligence\/cqd|intelligence\/quality|intelligence\/signals|intelligence\/scoring|intelligence\/universe\/build-universe-result/);
   });
 
   it("core engine does not reference v2 discovery scaffolding", async () => {
     const text = await readSrc("core/engine.ts");
-    expect(text).not.toMatch(/discovery\/contracts|discovery\/source-observation|discovery\/discovery-evidence|discovery\/candidate-discovery|intelligence\/context|intelligence\/cqd|intelligence\/quality|intelligence\/signals|intelligence\/universe\/build-universe-result/);
+    expect(text).not.toMatch(/discovery\/contracts|discovery\/source-observation|discovery\/discovery-evidence|discovery\/candidate-discovery|intelligence\/context|intelligence\/cqd|intelligence\/quality|intelligence\/signals|intelligence\/scoring|intelligence\/universe\/build-universe-result/);
   });
 
   it("execution agent does not reference v2 discovery scaffolding", async () => {
     const text = await readSrc("agents/execution.agent.ts");
-    expect(text).not.toMatch(/discovery\/contracts|discovery\/source-observation|discovery\/discovery-evidence|discovery\/candidate-discovery|intelligence\/context|intelligence\/cqd|intelligence\/quality|intelligence\/signals|intelligence\/universe\/build-universe-result/);
+    expect(text).not.toMatch(/discovery\/contracts|discovery\/source-observation|discovery\/discovery-evidence|discovery\/candidate-discovery|intelligence\/context|intelligence\/cqd|intelligence\/quality|intelligence\/signals|intelligence\/scoring|intelligence\/universe\/build-universe-result/);
   });
 
   it("execution agent does not reference sidecar discovery or worker pipeline paths", async () => {
@@ -78,6 +78,6 @@ describe("package root export surface", () => {
 
   it("index.ts does not re-export v2 discovery scaffolding", async () => {
     const text = await readSrc("index.ts");
-    expect(text).not.toMatch(/\.\/discovery\/|\.\/intelligence\/.*contracts|\.\/intelligence\/quality|\.\/intelligence\/cqd|\.\/decision\/contracts|\.\/learning\/contracts/);
+    expect(text).not.toMatch(/\.\/discovery\/|\.\/intelligence\/signals|\.\/intelligence\/scoring|\.\/intelligence\/.*contracts|\.\/intelligence\/quality|\.\/intelligence\/cqd|\.\/decision\/contracts|\.\/learning\/contracts/);
   });
 });

@@ -10,10 +10,10 @@ async function readSrc(rel: string): Promise<string> {
   return readFile(join(srcRoot, rel), "utf8");
 }
 
-const FORBIDDEN_FORENSICS_PATTERN =
-  /intelligence\/forensics|signal_pack\.v1|trend_reversal_monitor_input\.v1|trend-reversal-monitor-worker|buildSignalPackV1|buildTrendReversalMonitorInputV1/;
+const FORBIDDEN_SIGNAL_PATTERN =
+  /intelligence\/signals|constructed_signal_set\.v1|constructed_signal\.v1|buildConstructedSignalSetV1|deriveStructureSignals|deriveParticipationSignals|deriveFragilitySignals|deriveManipulationSignals/;
 
-describe("forensics foundation stays out of authority paths", () => {
+describe("constructed signal bridge stays out of authority paths", () => {
   const authorityFiles = [
     "core/engine.ts",
     "core/orchestrator.ts",
@@ -28,9 +28,9 @@ describe("forensics foundation stays out of authority paths", () => {
   ];
 
   for (const rel of authorityFiles) {
-    it(`${rel} does not import the forensics foundation`, async () => {
+    it(`${rel} does not import the constructed signal bridge`, async () => {
       const text = await readSrc(rel);
-      expect(text).not.toMatch(FORBIDDEN_FORENSICS_PATTERN);
+      expect(text).not.toMatch(FORBIDDEN_SIGNAL_PATTERN);
     });
   }
 });

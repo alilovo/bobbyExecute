@@ -8,6 +8,9 @@ import { CQDSnapshotV1Schema } from "@bot/intelligence/cqd/contracts/cqd.snapsho
 import { DataQualityV1Schema as CoreDataQualityV1Schema } from "@bot/core/contracts/dataquality.js";
 import { CQDSnapshotV1Schema as CoreCQDSnapshotV1Schema } from "@bot/core/contracts/cqd.js";
 import { ContextPackV1Schema } from "@bot/intelligence/context/contracts/context-pack.v1.js";
+import { ScoreCardV1Schema } from "@bot/intelligence/scoring/contracts/score-card.v1.js";
+import { buildScoreCardV1 } from "@bot/intelligence/scoring/build-score-card.js";
+import * as scoringContracts from "@bot/intelligence/scoring/contracts/index.js";
 import * as discoveryContracts from "@bot/discovery/contracts/index.js";
 import { SignalPackV1Schema, TrendReversalMonitorInputV1Schema } from "@bot/intelligence/forensics/contracts/index.js";
 import { buildSignalPackV1, buildTrendReversalMonitorInputV1 } from "@bot/intelligence/forensics/build-signal-pack.js";
@@ -17,6 +20,9 @@ import * as contextContracts from "@bot/intelligence/context/contracts/index.js"
 import * as cqdContracts from "@bot/intelligence/cqd/contracts/index.js";
 import * as qualityContracts from "@bot/intelligence/quality/contracts/index.js";
 import * as forensicsContracts from "@bot/intelligence/forensics/contracts/index.js";
+import * as signalsContracts from "@bot/intelligence/signals/contracts/index.js";
+import { buildConstructedSignalSetV1 } from "@bot/intelligence/signals/build-constructed-signal-set.js";
+import { ConstructedSignalSetV1Schema } from "@bot/intelligence/signals/contracts/constructed-signal-set.v1.js";
 
 describe("v2 contract scaffolding", () => {
   it("parses foundational pre-authority contract scaffolds", () => {
@@ -236,18 +242,58 @@ describe("v2 contract scaffolding", () => {
     const trendObservation = TrendReversalObservationV1Schema.parse({
       schema_version: "trend_reversal_observation.v1",
       token: "SOL",
-      observationState: "RECLAIM_ATTEMPT",
-      structureContext: {
-        reclaimZone: [95, 105],
-        lowerHigh: 101,
-        drawdownPct: 23.4,
+      chain: "solana",
+      observedAt: new Date(nowMs).toISOString(),
+      inputRef: "input-ref",
+      state: "reclaim_attempt",
+      confidence: 0.82,
+      structureSignals: {
+        higherLowForming: null,
+        reclaimingLevel: true,
+        rejectionAtResistance: false,
+        breakdownInvalidation: false,
       },
-      monitoringConfidence: 0.82,
-      invalidationFlags: [],
+      participationSignals: {
+        buyerStrengthIncreasing: true,
+        volumeExpansion: false,
+        holderGrowthVisible: true,
+      },
+      riskSignals: {
+        liquidityDrop: false,
+        distributionRisk: false,
+        exhaustionWickPattern: false,
+      },
+      invalidationReasons: [],
       evidenceRefs: [evidence.evidenceId],
-      observedAt: nowMs,
+      missingFields: [],
+      sourceCoverage: {
+        market: {
+          status: "OK",
+          isStale: false,
+        },
+      },
     });
-    expect(trendObservation.observationState).toBe("RECLAIM_ATTEMPT");
+    expect(trendObservation.state).toBe("reclaim_attempt");
+
+    const constructedSignalSet = buildConstructedSignalSetV1({
+      token: "SOL",
+      traceId: "constructed-signal-set-1",
+      dataQuality: quality,
+      cqdSnapshot: cqd,
+      signalPack,
+      trendReversalObservation: trendObservation,
+      contextAvailability: {
+        supplementalHintsAvailable: true,
+        missingSupplementalHints: [],
+      },
+      evidenceRefs: [evidence.evidenceId],
+    });
+    expect(ConstructedSignalSetV1Schema.parse(constructedSignalSet)).toEqual(constructedSignalSet);
+
+    const scoreCard = buildScoreCardV1({
+      constructedSignalSet,
+    });
+    expect(ScoreCardV1Schema.parse(scoreCard)).toEqual(scoreCard);
   });
 
   it("keeps intelligence contract barrels clean and singular", () => {
@@ -291,12 +337,37 @@ describe("v2 contract scaffolding", () => {
       "SignalPackVolumeSchema",
       "TrendReversalMonitorInputAvailabilitySchema",
       "TrendReversalMonitorInputV1Schema",
+      "TrendReversalObservationParticipationSignalsSchema",
+      "TrendReversalObservationRiskSignalsSchema",
+      "TrendReversalObservationSourceCoverageEntrySchema",
       "TrendReversalObservationStateSchema",
+      "TrendReversalObservationStructureSignalsSchema",
       "TrendReversalObservationV1Schema",
-      "TrendReversalStructureContextSchema",
       "assertSignalPackV1",
       "assertTrendReversalMonitorInputV1",
       "assertTrendReversalObservationV1",
+    ].sort());
+    expect(Object.keys(scoringContracts).sort()).toEqual([
+      "ScoreCardAggregateScoresSchema",
+      "ScoreCardBuildStatusSchema",
+      "ScoreCardSourceCoverageEntrySchema",
+      "ScoreCardV1Schema",
+      "ScoreComponentIdSchema",
+      "ScoreComponentStatusSchema",
+      "ScoreComponentV1Schema",
+      "assertScoreCardV1",
+      "assertScoreComponentV1",
+    ].sort());
+    expect(Object.keys(signalsContracts).sort()).toEqual([
+      "ConstructedSignalDirectionSchema",
+      "ConstructedSignalSetBuildStatusSchema",
+      "ConstructedSignalSetSourceCoverageEntrySchema",
+      "ConstructedSignalSetV1Schema",
+      "ConstructedSignalStatusSchema",
+      "ConstructedSignalTypeSchema",
+      "ConstructedSignalV1Schema",
+      "assertConstructedSignalSetV1",
+      "assertConstructedSignalV1",
     ].sort());
   });
 });

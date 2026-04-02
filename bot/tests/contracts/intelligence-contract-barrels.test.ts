@@ -33,6 +33,16 @@ const BARREL_MODULES = [
     specifier: "@bot/intelligence/forensics/contracts/index.js",
     exportCount: 3,
   },
+  {
+    path: "src/intelligence/scoring/contracts/index.ts",
+    specifier: "@bot/intelligence/scoring/contracts/index.js",
+    exportCount: 2,
+  },
+  {
+    path: "src/intelligence/signals/contracts/index.ts",
+    specifier: "@bot/intelligence/signals/contracts/index.js",
+    exportCount: 2,
+  },
 ];
 
 const EXPECTED_EXPORTS: Record<string, string[]> = {
@@ -76,12 +86,37 @@ const EXPECTED_EXPORTS: Record<string, string[]> = {
     "SignalPackVolumeSchema",
     "TrendReversalMonitorInputAvailabilitySchema",
     "TrendReversalMonitorInputV1Schema",
-    "TrendReversalObservationStateSchema",
+    "TrendReversalObservationParticipationSignalsSchema",
+    "TrendReversalObservationRiskSignalsSchema",
+    "TrendReversalObservationSourceCoverageEntrySchema",
     "TrendReversalObservationV1Schema",
-    "TrendReversalStructureContextSchema",
+    "TrendReversalObservationStateSchema",
+    "TrendReversalObservationStructureSignalsSchema",
     "assertSignalPackV1",
     "assertTrendReversalMonitorInputV1",
     "assertTrendReversalObservationV1",
+  ],
+  "src/intelligence/scoring/contracts/index.ts": [
+    "ScoreCardAggregateScoresSchema",
+    "ScoreCardBuildStatusSchema",
+    "ScoreCardSourceCoverageEntrySchema",
+    "ScoreCardV1Schema",
+    "ScoreComponentIdSchema",
+    "ScoreComponentStatusSchema",
+    "ScoreComponentV1Schema",
+    "assertScoreCardV1",
+    "assertScoreComponentV1",
+  ],
+  "src/intelligence/signals/contracts/index.ts": [
+    "ConstructedSignalDirectionSchema",
+    "ConstructedSignalSetBuildStatusSchema",
+    "ConstructedSignalSetSourceCoverageEntrySchema",
+    "ConstructedSignalSetV1Schema",
+    "ConstructedSignalStatusSchema",
+    "ConstructedSignalTypeSchema",
+    "ConstructedSignalV1Schema",
+    "assertConstructedSignalSetV1",
+    "assertConstructedSignalV1",
   ],
 };
 
