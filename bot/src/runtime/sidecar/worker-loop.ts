@@ -15,6 +15,7 @@ export interface SidecarWorkerLoopDeps {
   discoveryIntervalMs?: number;
   monitorIntervalMs?: number;
   discoveryTimeoutMs?: number;
+  autoStart?: boolean;
   runDiscoveryWorker: () => Promise<unknown>;
   monitorRunner?: TrendReversalMonitorRunner;
 }
@@ -169,15 +170,17 @@ export function startSidecarWorkerLoop(
     };
   };
 
-  void tickAll();
+  if (deps.autoStart !== false) {
+    void tickAll();
 
-  discoveryTimer = setInterval(() => {
-    void tickDiscovery();
-  }, deps.discoveryIntervalMs ?? DEFAULT_DISCOVERY_INTERVAL_MS);
+    discoveryTimer = setInterval(() => {
+      void tickDiscovery();
+    }, deps.discoveryIntervalMs ?? DEFAULT_DISCOVERY_INTERVAL_MS);
 
-  monitorTimer = setInterval(() => {
-    void tickMonitor();
-  }, deps.monitorIntervalMs ?? DEFAULT_MONITOR_INTERVAL_MS);
+    monitorTimer = setInterval(() => {
+      void tickMonitor();
+    }, deps.monitorIntervalMs ?? DEFAULT_MONITOR_INTERVAL_MS);
+  }
 
   return {
     registry,

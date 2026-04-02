@@ -10,6 +10,7 @@ describe("sidecar worker loop", () => {
   it("filters discovery output into the registry and journals candidates", async () => {
     const journalWriter = new InMemoryJournalWriter();
     const loop = startSidecarWorkerLoop({
+      autoStart: false,
       journalWriter,
       discoveryIntervalMs: 60_000,
       monitorIntervalMs: 60_000,
@@ -50,6 +51,7 @@ describe("sidecar worker loop", () => {
 
   it("runs the monitor only against active registry entries", async () => {
     const loop = startSidecarWorkerLoop({
+      autoStart: false,
       discoveryIntervalMs: 60_000,
       monitorIntervalMs: 60_000,
       now: () => 2_000,
@@ -76,6 +78,7 @@ describe("sidecar worker loop", () => {
   it("fails closed with logging when discovery throws", async () => {
     const warn = vi.fn();
     const loop = startSidecarWorkerLoop({
+      autoStart: false,
       discoveryIntervalMs: 60_000,
       monitorIntervalMs: 60_000,
       logger: { info: vi.fn(), warn, error: vi.fn() },

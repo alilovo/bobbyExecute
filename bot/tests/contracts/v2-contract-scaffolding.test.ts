@@ -132,7 +132,7 @@ describe("v2 contract scaffolding", () => {
     });
     expect(context.narrativeTags[0]).toBe("launch_wave");
 
-    const observation = TrendReversalObservationV1Schema.parse({
+    const trendObservation = TrendReversalObservationV1Schema.parse({
       schema_version: "trend_reversal_observation.v1",
       token: "SOL",
       observationState: "RECLAIM_ATTEMPT",
@@ -146,7 +146,7 @@ describe("v2 contract scaffolding", () => {
       evidenceRefs: [evidence.evidenceId],
       observedAt: nowMs,
     });
-    expect(observation.observationState).toBe("RECLAIM_ATTEMPT");
+    expect(trendObservation.observationState).toBe("RECLAIM_ATTEMPT");
   });
 
   it("keeps intelligence contract barrels clean and singular", () => {
