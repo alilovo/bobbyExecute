@@ -40,6 +40,16 @@ Ingest -> Signal -> Risk -> Execute -> Verify -> Journal -> Monitor
 - `DecisionResult` remains fail-closed and does not depend on an autonomous LLM judgment loop.
 - Agent roles are still thin: executor and monitor are active profiles, while research, risk, and auditor remain scaffolding rather than a separate authoritative council.
 
+## Reserved V2 Planning Slot
+
+- `Stage 5.5` is reserved for `TrendReversalMonitorWorker`, a deterministic, non-LLM observational sidecar.
+- Prereqs: `DataQualityV1`, `CQDSnapshotV1`, and the later signal/forensics foundation from W2-01.
+- The first artifact is `TrendReversalObservationV1`, kept standalone instead of merging into `SignalPackV1` yet.
+- Allowed downstream uses are watchlist prioritization, candidate enrichment, setup qualification context, alerting, journaling, and optional advisory request enqueue.
+- Forbidden downstream uses are `DecisionResult`, `DecisionTokenV1`, `PositionPlan`, `TradeIntent`, score mutation, pattern override, policy/risk override, and execution authorization.
+- The placement sequence is W1-02, W1-03, W2-01, W2-02 shadow introduction, W2-03 downstream qualification hooks, W3+ optional advisory consumption, and W4+ optional typed bridge into signal construction.
+- See [`trend-reversal-worker-alignment.md`](trend-reversal-worker-alignment.md).
+
 ## Persistence and Replay
 
 - Memory snapshots are compressed and hash-chained.

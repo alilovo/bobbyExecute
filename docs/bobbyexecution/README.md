@@ -27,6 +27,7 @@ Use this index to find the current operator, runtime, and architecture docs.
 ## Architecture and Reference
 
 - [`../architecture/master-trading-bot-intelligence-spec.md`](../architecture/master-trading-bot-intelligence-spec.md)
+- [`../architecture/trend-reversal-worker-alignment.md`](../architecture/trend-reversal-worker-alignment.md)
 - [`../trading/trading-edge_chaos-scenarios.md`](../trading/trading-edge_chaos-scenarios.md)
 
 ## Local Setup and Deploy
