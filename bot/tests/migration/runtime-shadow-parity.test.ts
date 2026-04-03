@@ -44,8 +44,10 @@ describe("runtime shadow parity scaffold", () => {
     expect(summary.decisionOccurred).toBe(true);
     expect(summary.decision).toBeDefined();
     expect(summary.shadowArtifactChain).toBeDefined();
+    expect(summary.authorityArtifactChain).toBeDefined();
 
     const shadow = summary.shadowArtifactChain!;
+    const authority = summary.authorityArtifactChain!;
     expect(shadow.artifactMode).toBe("shadow");
     expect(shadow.derivedOnly).toBe(true);
     expect(shadow.nonAuthoritative).toBe(true);
@@ -57,6 +59,14 @@ describe("runtime shadow parity scaffold", () => {
     expect(shadow.parity.oldAuthority.tradeIntentId).toBe(summary.tradeIntentId);
     expect(shadow.parity.shadowDerived).toHaveProperty("blocked");
     expect(shadow.parity.deltas).toHaveProperty("blockedMismatch");
+    expect(authority.artifactMode).toBe("authority");
+    expect(authority.derivedOnly).toBe(false);
+    expect(authority.nonAuthoritative).toBe(false);
+    expect(authority.authorityInfluence).toBe(true);
+    expect(authority.canonicalDecisionHistory).toBe(false);
+    expect(authority.decision.blocked).toBe(false);
+    expect(authority.decision.direction).toBe("buy");
+    expect(authority.artifacts.cqdHash).toMatch(/^[a-f0-9]{64}$/);
 
     await runtime.stop();
   });

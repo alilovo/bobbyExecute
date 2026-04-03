@@ -1,8 +1,9 @@
 /**
- * Scoring Engine - MCI/BCI/Hybrid from SignalPack.
+ * Scoring Engine - compatibility-only MCI/BCI/Hybrid bridge from SignalPack.
  * Normalized planning package: deterministic output for same input.
- * @deprecated migration target: deterministic pre-authority scoring lineage.
- * Legacy non-surviving lineage; not canonical future path.
+ * @deprecated compatibility-only migration surface for legacy parity fixtures.
+ * Not part of the canonical BobbyExecute v2 authority path.
+ * Retained temporarily for migration parity and test-only compatibility.
  */
 import { computeScoreCard } from "../core/intelligence/mci-bci-formulas.js";
 import type { ScoreCard } from "../core/contracts/scorecard.js";
@@ -17,8 +18,9 @@ export interface ScoringInput {
 
 /**
  * Compute ScoreCard from SignalPack. Deterministic for same inputs.
- * @deprecated migration target: deterministic pre-authority score-card builder.
- * Transitional compatibility surface only; do not add new callers outside runtime freeze set.
+ * @deprecated compatibility-only migration surface for legacy parity fixtures.
+ * Not part of the canonical BobbyExecute v2 authority path.
+ * Do not add new callers outside the frozen compatibility/test allowlist.
  */
 export function runScoringEngine(input: ScoringInput): ScoreCard {
   const timestamp = input.timestamp ?? new Date().toISOString();

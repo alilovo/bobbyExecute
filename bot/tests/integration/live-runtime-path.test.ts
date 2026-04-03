@@ -159,7 +159,7 @@ describe("live runtime path", () => {
           quoteToken: "USDC",
           priceUsd: 150,
           volume24h: 1000,
-          liquidity: 0.5,
+          liquidity: 1_000_000,
           freshnessMs: 0,
           status: "ok",
         },
@@ -218,5 +218,10 @@ describe("live runtime path", () => {
     expect(summary.shadowArtifactChain?.nonAuthoritative).toBe(true);
     expect(summary.shadowArtifactChain?.authorityInfluence).toBe(false);
     expect(summary.shadowArtifactChain?.parity.oldAuthority.tradeIntentId).toBe(summary.tradeIntentId);
+    expect(summary.authorityArtifactChain).toBeDefined();
+    expect(summary.authorityArtifactChain?.artifactMode).toBe("authority");
+    expect(summary.authorityArtifactChain?.derivedOnly).toBe(false);
+    expect(summary.authorityArtifactChain?.authorityInfluence).toBe(true);
+    expect(summary.authorityArtifactChain?.decision.blocked).toBe(false);
   });
 });

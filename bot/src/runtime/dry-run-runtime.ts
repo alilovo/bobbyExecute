@@ -4,7 +4,6 @@ import { SystemClock } from "../core/clock.js";
 import type { Config } from "../config/config-schema.js";
 import type { RuntimeConfigManager } from "./runtime-config-manager.js";
 import type { ExecutionReport, RpcVerificationReport, TradeIntent } from "../core/contracts/trade.js";
-import { runSignalEngine } from "../signals/signal-engine.js";
 import type { MarketSnapshot } from "../core/contracts/market.js";
 import type { WalletSnapshot } from "../core/contracts/wallet.js";
 import { isKillSwitchHalted, triggerKillSwitch } from "../governance/kill-switch.js";
@@ -12,6 +11,7 @@ import { CircuitBreaker } from "../governance/circuit-breaker.js";
 import { FileSystemJournalWriter, type JournalWriter } from "../journal-writer/writer.js";
 import type { JournalEntry } from "../core/contracts/journal.js";
 import type { DecisionCoordinator } from "../core/contracts/decision-envelope.js";
+import { runRiskEngine } from "../risk/risk-engine.js";
 import {
   fetchMarketData,
   type AdapterOrchestratorConfig,
@@ -47,6 +47,10 @@ import {
 } from "./live-control.js";
 import { resetKillSwitch } from "../governance/kill-switch.js";
 import { buildRuntimeShadowArtifactChain } from "./shadow-artifact-chain.js";
+import {
+  buildRuntimeAuthorityArtifactChain,
+  type RuntimeAuthorityArtifactResolution,
+} from "./authority-artifact-chain.js";
 
 export type RuntimeStatus = "idle" | "running" | "paused" | "stopped" | "error";
 
@@ -83,6 +87,7 @@ export interface RuntimeRecentCycleSummary {
   errorOccurred: boolean;
   /** Canonical decision envelope when the cycle was produced by Engine (all modes). */
   decisionEnvelope?: import("../core/contracts/decision-envelope.js").DecisionEnvelope;
+  authorityArtifactChain?: import("../persistence/runtime-cycle-summary-repository.js").RuntimeCycleAuthorityArtifactChainSummary;
   decision?: {
     allowed: boolean;
     direction?: string;
@@ -260,6 +265,7 @@ export function buildRuntimeReviewSummary(
       decisionOccurred: summary.decisionOccurred,
       errorOccurred: summary.errorOccurred,
       decisionEnvelope: summary.decisionEnvelope,
+      authorityArtifactChain: summary.authorityArtifactChain,
       decision: summary.decision,
     })),
     recentIncidents: recentIncidentsWindow.map((incident) => ({
@@ -832,6 +838,9 @@ export class DryRunRuntime {
     let currentCycleIntakeOutcome: RuntimeCycleIntakeOutcome = "invalid";
     let currentCycleTimestamp = this.clock.now().toISOString();
     let currentCycleTraceId = `runtime-${currentCycleTimestamp}`;
+    let cycleMarket: MarketSnapshot | undefined;
+    let cycleWallet: WalletSnapshot | undefined;
+    let authorityResolution: RuntimeAuthorityArtifactResolution | undefined;
 
     try {
       await this.runtimeConfigManager?.refresh();
@@ -938,88 +947,75 @@ export class DryRunRuntime {
       this.lastState = await this.engine.run(
         async () => {
           if (paperIntake?.kind === "ready") {
-            return {
-              market: paperIntake.market,
-              wallet: paperIntake.wallet,
-            };
+            cycleMarket = paperIntake.market;
+            cycleWallet = paperIntake.wallet;
+            return { market: cycleMarket, wallet: cycleWallet };
           }
-          return {
-            market: {
-              schema_version: "market.v1",
-              traceId: `runtime-${now}`,
-              timestamp: now,
-              source: "dexpaprika",
-              poolId: "phase1-dry-run-pool",
-              baseToken: "SOL",
-              quoteToken: "USD",
-              priceUsd: 100,
-              volume24h: 1_000_000,
-              liquidity: 10_000_000,
-              freshnessMs: 0,
-              status: "ok",
-            },
-            wallet: {
-              traceId: `runtime-${now}`,
-              timestamp: now,
-              source: "moralis",
-              walletAddress: this.config.walletAddress ?? "dry-run-wallet",
-              balances: [],
-              totalUsd: 0,
-            },
+          cycleMarket = {
+            schema_version: "market.v1",
+            traceId: `runtime-${now}`,
+            timestamp: now,
+            source: "dexpaprika",
+            poolId: "phase1-dry-run-pool",
+            baseToken: "SOL",
+            quoteToken: "USD",
+            priceUsd: 100,
+            volume24h: 1_000_000,
+            liquidity: 10_000_000,
+            freshnessMs: 0,
+            status: "ok",
           };
+          cycleWallet = {
+            traceId: `runtime-${now}`,
+            timestamp: now,
+            source: "moralis",
+            walletAddress: this.config.walletAddress ?? "dry-run-wallet",
+            balances: [],
+            totalUsd: 0,
+          };
+          return { market: cycleMarket, wallet: cycleWallet };
         },
         async (market) => {
-          if (this.mode === "paper") {
-            const out = runSignalEngine({
-              market,
-              scoreCard: {
-                traceId: market.traceId,
-                timestamp: market.timestamp,
-                mci: 0.7,
-                bci: 0.5,
-                hybrid: 0.8,
-                crossSourceConfidenceScore: 0.95,
-                ageAdjusted: true,
-                doublePenaltyApplied: false,
-                version: "1.0",
-                decisionHash: "dry-runtime-paper",
-              },
-              patternResult: {
-                traceId: market.traceId,
-                timestamp: market.timestamp,
-                patterns: [],
-                flags: [],
-                confidence: 0.5,
-                evidence: [],
-              },
-              dataQuality: { completeness: 1 },
-              traceId: market.traceId,
-              timestamp: market.timestamp,
-              dryRun: false,
-              executionMode: "paper",
-            });
-            if (out.blocked) {
-              return { blocked: true, blockedReason: out.reason };
-            }
-            return {
-              direction: "buy",
-              confidence: 0.8,
-              intent: out.intent,
-            };
+          const traceId = market.traceId || cycleWallet?.traceId || currentCycleTraceId;
+          if (!cycleWallet) {
+            return { blocked: true, blockedReason: "AUTHORITY_CHAIN_MISSING_WALLET" };
+          }
+          authorityResolution = buildRuntimeAuthorityArtifactChain({
+            mode: this.mode,
+            traceId,
+            cycleTimestamp: currentCycleTimestamp,
+            market,
+            wallet: cycleWallet,
+          });
+          if (authorityResolution.blocked || !authorityResolution.intent || !authorityResolution.signal) {
+            return { blocked: true, blockedReason: authorityResolution.blockedReason ?? "AUTHORITY_CHAIN_BLOCKED" };
           }
           return {
-            direction: "hold",
-            confidence: 0,
+            direction: authorityResolution.signal.direction,
+            confidence: authorityResolution.signal.confidence,
+            intent: authorityResolution.intent,
+            cqd: authorityResolution.signal.cqd,
           };
         },
-        async () => {
-          if (this.mode === "paper") {
-            return { allowed: true };
+        async (_intent: TradeIntent, _market: MarketSnapshot, _wallet: WalletSnapshot) => {
+          if (!authorityResolution?.riskInput) {
+            return {
+              allowed: false,
+              reason: authorityResolution?.blockedReason ?? "AUTHORITY_CHAIN_MISSING_RISK_INPUT",
+            };
           }
-          return {
-            allowed: false,
-            reason: "RUNTIME_PHASE1_FAIL_CLOSED_UNTIL_PIPELINE_WIRED",
-          };
+          const runtimeRisk = runRiskEngine({
+            ...authorityResolution.riskInput,
+          });
+          if (this.mode === "dry") {
+            return {
+              ...runtimeRisk,
+              reason: runtimeRisk.reason ?? "RUNTIME_PHASE1_FAIL_CLOSED_UNTIL_PIPELINE_WIRED",
+              blockReason:
+                runtimeRisk.blockReason ?? "RUNTIME_PHASE1_FAIL_CLOSED_UNTIL_PIPELINE_WIRED",
+            };
+          }
+          return runtimeRisk;
         },
         async (intent: TradeIntent): Promise<ExecutionReport> => {
           if (this.mode === "paper") {
@@ -1095,7 +1091,8 @@ export class DryRunRuntime {
               signalConfidence: this.lastState.signal?.confidence,
               tradeIntentId: this.lastState.tradeIntent?.idempotencyKey,
             },
-          })
+          }),
+          authorityResolution?.summary
         )
       );
     } catch (error) {
@@ -1164,6 +1161,7 @@ export class DryRunRuntime {
         paperExecutionProduced: false,
         errorOccurred: true,
         error: errorMessage,
+        authorityArtifactChain: authorityResolution?.summary,
         tradeIntentId: this.lastState.tradeIntent?.idempotencyKey,
         execution: this.lastState.executionReport
           ? {
@@ -1342,7 +1340,8 @@ export class DryRunRuntime {
   private toCycleSummary(
     state: EngineState,
     intakeOutcome: RuntimeCycleIntakeOutcome,
-    shadowArtifactChain?: RuntimeCycleSummary["shadowArtifactChain"]
+    shadowArtifactChain?: RuntimeCycleSummary["shadowArtifactChain"],
+    authorityArtifactChain?: RuntimeCycleSummary["authorityArtifactChain"]
   ): RuntimeCycleSummary {
     return {
       cycleTimestamp: this.lastCycleAt ?? state.timestamp,
@@ -1396,6 +1395,7 @@ export class DryRunRuntime {
       degradedState: this.getCycleDegradedStateSummary(),
       adapterHealth: this.getCycleAdapterHealthSummary(),
       shadowArtifactChain,
+      authorityArtifactChain,
       incidentIds: [],
     };
   }

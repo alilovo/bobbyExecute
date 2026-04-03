@@ -51,32 +51,25 @@ function findImporters(specifier: string): string[] {
 
 describe("migration lineage freeze boundaries", () => {
   it("marks deprecated-in-place legacy modules explicitly", () => {
-    const deprecatedFiles = [
-      "core/orchestrator.ts",
-      "core/tool-router.ts",
-      "memory/index.ts",
-      "memory/log-append.ts",
-      "memory/memory-db.ts",
-      "signals/signal-engine.ts",
-      "scoring/scoring-engine.ts",
-      "core/universe/token-universe-builder.ts",
-    ];
+    const deprecatedFiles = new Map<string, string>([
+      ["core/orchestrator.ts", "@deprecated migration target"],
+      ["core/tool-router.ts", "@deprecated migration target"],
+      ["memory/index.ts", "@deprecated migration target"],
+      ["memory/log-append.ts", "@deprecated migration target"],
+      ["memory/memory-db.ts", "@deprecated migration target"],
+      ["signals/signal-engine.ts", "@deprecated compatibility-only"],
+      ["scoring/scoring-engine.ts", "@deprecated compatibility-only"],
+      ["core/universe/token-universe-builder.ts", "@deprecated migration target"],
+    ]);
 
-    for (const relPath of deprecatedFiles) {
-      expect(readSrc(relPath), `${relPath} must carry explicit deprecation marker`).toContain(
-        "@deprecated migration target"
-      );
+    for (const [relPath, marker] of deprecatedFiles) {
+      expect(readSrc(relPath), `${relPath} must carry explicit deprecation marker`).toContain(marker);
     }
   });
 
   it("freezes legacy scoring/signal caller sets (no new callers)", () => {
-    expect(findImporters("../signals/signal-engine.js")).toEqual([
-      "runtime/dry-run-runtime.ts",
-      "runtime/live-runtime.ts",
-    ]);
-    expect(findImporters("../scoring/scoring-engine.js")).toEqual([
-      "runtime/live-runtime.ts",
-    ]);
+    expect(findImporters("../signals/signal-engine.js")).toEqual([]);
+    expect(findImporters("../scoring/scoring-engine.js")).toEqual([]);
   });
 
   it("keeps authority modules free from orchestrator/tool-router/memory imports", () => {

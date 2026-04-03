@@ -91,4 +91,28 @@ describe("runtime shadow authority boundary", () => {
     const rootIndex = readSrc("index.ts");
     expect(rootIndex).not.toMatch(/export .*"\.\/runtime\/shadow-artifact-chain\.js"/);
   });
+
+  it("keeps live and dry runtimes on the surviving authority helper instead of legacy signal/scoring modules", () => {
+    const runtimeFiles = ["runtime/live-runtime.ts", "runtime/dry-run-runtime.ts"];
+    const legacyAuthoritySpecifiers = [
+      "../signals/signal-engine.js",
+      "../scoring/scoring-engine.js",
+      "../patterns/pattern-engine.js",
+    ];
+
+    for (const relPath of runtimeFiles) {
+      const fileText = readSrc(relPath);
+      const imports = parseImports(fileText);
+
+      expect(imports).toContain("./authority-artifact-chain.js");
+      expect(fileText).toContain("buildRuntimeAuthorityArtifactChain");
+
+      for (const specifier of legacyAuthoritySpecifiers) {
+        expect(
+          imports,
+          `${relPath} must not import legacy authority modules`
+        ).not.toContain(specifier);
+      }
+    }
+  });
 });

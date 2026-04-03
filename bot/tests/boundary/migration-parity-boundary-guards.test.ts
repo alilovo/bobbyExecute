@@ -52,13 +52,8 @@ function findImporters(specifier: string): string[] {
 describe("migration parity boundary guards", () => {
   it("freezes no-new-caller baselines for deprecated lineages", () => {
     const expectedImporters: Record<string, string[]> = {
-      "../signals/signal-engine.js": [
-        "runtime/dry-run-runtime.ts",
-        "runtime/live-runtime.ts",
-      ],
-      "../scoring/scoring-engine.js": [
-        "runtime/live-runtime.ts",
-      ],
+      "../signals/signal-engine.js": [],
+      "../scoring/scoring-engine.js": [],
       "./core/orchestrator.js": [
         "index.ts",
       ],
