@@ -2,8 +2,7 @@
  * M5: Cross-Source Validator - discrepancy detection, confidence on missing metrics.
  * Shared freshness banding is reused by Wave-1 quality gating.
  */
-import type { NormalizedTokenV1 } from "../contracts/tokenuniverse.js";
-import { calculateTokenConfidence } from "../contracts/tokenuniverse.js";
+import type { NormalizedTokenV1 } from "../contracts/normalized-token.js";
 
 export interface ValidationResult {
   token: NormalizedTokenV1;
@@ -63,6 +62,22 @@ export function freshnessPenaltyForMs(freshnessMs: number): number {
 
 export function freshnessScoreForMs(freshnessMs: number): number {
   return Math.max(0, 1 - freshnessPenaltyForMs(freshnessMs));
+}
+
+function calculateTokenConfidence(
+  sources: string[],
+  sourceQualities: Record<string, number>
+): number {
+  if (!Array.isArray(sources) || sources.length === 0) {
+    return 0;
+  }
+
+  const sourceCountScore = Math.min(1, sources.length / 3);
+  const avgQuality = sources.reduce((sum, source) => {
+    return sum + (sourceQualities[source] ?? 0.5);
+  }, 0) / sources.length;
+
+  return Math.min(1, Math.max(0, sourceCountScore * 0.4 + avgQuality * 0.6));
 }
 
 /**

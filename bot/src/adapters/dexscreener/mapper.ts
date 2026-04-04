@@ -6,7 +6,7 @@
  * - MarketSnapshot (for individual pairs)
  * - NormalizedTokenV1[] (for TokenUniverse)
  */
-import type { NormalizedTokenV1 } from "../../core/contracts/tokenuniverse.js";
+import type { NormalizedTokenV1 } from "../../core/contracts/normalized-token.js";
 import type { MarketSnapshot } from "../../core/contracts/market.js";
 import type { DexScreenerPairInfo, DexScreenerTokenResponse } from "./types.js";
 

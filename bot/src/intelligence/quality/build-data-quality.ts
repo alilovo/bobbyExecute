@@ -13,7 +13,6 @@ import {
   type DataQualityV1,
   type SourceQuality,
 } from "../../core/contracts/dataquality.js";
-import { calculateTokenConfidence } from "../../core/contracts/tokenuniverse.js";
 import {
   classifyFreshnessBand,
   freshnessScoreForMs,
@@ -210,6 +209,20 @@ function deriveLiquidityFeature(features: Record<string, number>): number {
   return best;
 }
 
+function computeSourceReliability(sourceQualityMap: Record<string, number>): number {
+  const sourceNames = Object.keys(sourceQualityMap);
+  if (sourceNames.length === 0) {
+    return 0;
+  }
+
+  const sourceCountScore = Math.min(1, sourceNames.length / 3);
+  const avgQuality = sourceNames.reduce((sum, source) => {
+    return sum + (sourceQualityMap[source] ?? 0.5);
+  }, 0) / sourceNames.length;
+
+  return Math.min(1, Math.max(0, sourceCountScore * 0.4 + avgQuality * 0.6));
+}
+
 function deriveReasonCodes(input: {
   missingCriticalFields: string[];
   routeViable: boolean;
@@ -329,7 +342,7 @@ export function buildDataQualityV1(input: BuildDataQualityV1Input): DataQualityV
   );
   const disagreedSourceFields = Object.keys(disagreedSources).sort((left, right) => left.localeCompare(right));
   const sourceReliability = Object.keys(sourceQualityMap).length > 0
-    ? calculateTokenConfidence(Object.keys(sourceQualityMap), sourceQualityMap)
+    ? computeSourceReliability(sourceQualityMap)
     : 0;
   const completeness = clamp01(evidence.completeness);
   const freshness = observations.length > 0

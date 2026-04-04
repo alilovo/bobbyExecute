@@ -1,8 +1,7 @@
 /**
  * M5: Normalizer - maps adapter responses to NormalizedTokenV1.
  */
-import type { NormalizedTokenV1 } from "../contracts/tokenuniverse.js";
-import { generateCanonicalId } from "../contracts/tokenuniverse.js";
+import type { NormalizedTokenV1 } from "../contracts/normalized-token.js";
 
 export interface AdapterTokenInput {
   mint: string;
@@ -13,6 +12,10 @@ export interface AdapterTokenInput {
   pairId?: string;
   name?: string;
   decimals?: number;
+}
+
+function generateCanonicalId(chain: string, mint: string): string {
+  return `${chain.toLowerCase()}:${mint.toLowerCase()}`;
 }
 
 /**
