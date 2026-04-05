@@ -12,6 +12,7 @@ Authority: authoritative for which local documents define BobbyExecute truth.
 - `docs/04_sidecars/README.md`
 - `docs/05_governance/README.md`
 - `docs/06_journal_replay/README.md`
+- `docs/06_journal_replay/staging-live-preflight-runbook.md`
 - `docs/codex-workflow-consumer.md`
 - `.codex/repo-intake-inputs.json`
 - `.codex/runtime-policy-inputs.json`

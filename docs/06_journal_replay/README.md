@@ -118,3 +118,7 @@ Verified files:
 ## 10. Next Step
 
 Expose replay surfaces only when the canonical artifact source, route contract, and provenance labels are explicit.
+
+Operator staging rehearsal reference:
+
+- [`staging-live-preflight-runbook.md`](./staging-live-preflight-runbook.md) captures the environment-backed live-preflight procedure, evidence checklist, and fail-closed criteria.
