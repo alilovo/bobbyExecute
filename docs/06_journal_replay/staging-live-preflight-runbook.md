@@ -52,6 +52,11 @@ This runbook reuses verified repository surfaces instead of inventing new logic:
 
 ## 6. Staging Live-Preflight Procedure
 
+Companion preparation and evidence artifacts:
+
+- `docs/06_journal_replay/boot-critical-artifact-preparation.md`
+- `docs/06_journal_replay/staging-live-preflight-evidence-template.md`
+
 ### 6.1 Required env vars
 
 | Variable | Required value | Why it is required |
@@ -142,7 +147,8 @@ Boot-critical files must exist, be non-empty, and parse to the expected shapes. 
 - `SIGNER_MODE` is not `remote`.
 - `SIGNER_URL`, `SIGNER_AUTH_TOKEN`, `WALLET_ADDRESS`, `CONTROL_TOKEN`, `OPERATOR_READ_TOKEN`, `MORALIS_API_KEY`, or `JUPITER_API_KEY` are missing.
 - `CONTROL_TOKEN` equals `OPERATOR_READ_TOKEN`.
-- `ROLLOUT_POSTURE` is invalid or set to `paper_only` or `paused_or_rolled_back`.
+- `ROLLOUT_POSTURE` is invalid.
+- `ROLLOUT_POSTURE` is `paper_only` or `paused_or_rolled_back` when attempting to proceed from preflight to live runtime start (fail-closed live posture).
 - Any boot-critical file under `JOURNAL_PATH` is missing or structurally invalid.
 
 ### 6.8 Exact execution order
@@ -153,8 +159,10 @@ Boot-critical files must exist, be non-empty, and parse to the expected shapes. 
 4. Provision the mounted disk or directory for `JOURNAL_PATH`, then create or restore the nine required artifact files above.
 5. Apply explicit staging overrides such as `ROLLOUT_POSTURE=micro_live`, `RPC_URL`, and the three live-test caps.
 6. Optional but useful: run `npm --prefix bot run recovery:worker-state` to inspect the same file-backed state view that live preflight consumes.
-7. Run `npm --prefix bot run live:preflight` from the repository root.
-8. If the command succeeds and you are advancing the worker, start the live runtime separately and capture the live-test round transition evidence from `bot/src/runtime/live-runtime.ts` and `bot/src/runtime/live-control.ts`.
+7. Record preflight inputs and recovery evidence in `docs/06_journal_replay/staging-live-preflight-evidence-template.md`.
+8. Run `npm --prefix bot run live:preflight` from the repository root.
+9. Record preflight output and gate decision in the same evidence template.
+10. If the command succeeds and you are advancing the worker, start the live runtime separately and capture the live-test round transition evidence from `bot/src/runtime/live-runtime.ts` and `bot/src/runtime/live-control.ts`.
 
 ### 6.9 Operator checklist
 

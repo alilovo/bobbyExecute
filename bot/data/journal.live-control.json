@@ -1,0 +1,12 @@
+{
+  "degraded": false,
+  "recentTradeAtMs": [],
+  "recentFailureAtMs": [],
+  "manualRearmRequired": false,
+  "roundStatus": "idle",
+  "blocked": false,
+  "armed": false,
+  "inFlight": 0,
+  "dailyKey": "2026-04-05",
+  "dailyNotional": 0
+}
