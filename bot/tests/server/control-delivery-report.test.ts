@@ -390,7 +390,7 @@ describe("control delivery reporting routes", () => {
     harnesses.push(harness);
 
     const journalResponse = await fetch(
-      `${harness.baseUrl}/control/restart-alert-deliveries?environment=production&destinationName=secondary&status=failed&severity=critical`,
+      `${harness.baseUrl}/control/restart-alert-deliveries?environment=production&destinationName=secondary&status=failed&severity=critical&from=${encodeURIComponent(WINDOW_START)}&to=${encodeURIComponent(WINDOW_END)}`,
       {
         headers: controlHeaders(),
       }

@@ -96,7 +96,6 @@ describe("runtime shadow authority boundary", () => {
     const runtimeFiles = ["runtime/live-runtime.ts", "runtime/dry-run-runtime.ts"];
     const legacyAuthoritySpecifiers = [
       "../signals/signal-engine.js",
-      "../scoring/scoring-engine.js",
       "../patterns/pattern-engine.js",
     ];
 

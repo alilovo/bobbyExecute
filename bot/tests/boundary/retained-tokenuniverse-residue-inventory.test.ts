@@ -6,6 +6,8 @@ const SRC_ROOT = resolve(process.cwd(), "src");
 const TEST_ROOT = resolve(process.cwd(), "tests");
 const TOKEN_UNIVERSE_SOURCE = resolve(SRC_ROOT, "core/contracts/tokenuniverse.ts");
 const TOKEN_UNIVERSE_SOURCE_JS = TOKEN_UNIVERSE_SOURCE.replace(/\.ts$/, ".js");
+const TOKEN_UNIVERSE_BUILDER_SOURCE = resolve(SRC_ROOT, "core/universe/token-universe-builder.ts");
+const TOKEN_UNIVERSE_BUILDER_SOURCE_JS = TOKEN_UNIVERSE_BUILDER_SOURCE.replace(/\.ts$/, ".js");
 
 function walkTsFiles(root: string): string[] {
   const entries = readdirSync(root);
@@ -86,6 +88,17 @@ function findImporters(root: string, targetPaths: string[]): string[] {
 }
 
 describe("removed token-universe residue inventory", () => {
+  it("keeps token-universe-builder as explicitly test-only residue", () => {
+    expect(statExists(TOKEN_UNIVERSE_BUILDER_SOURCE)).toBe(true);
+    expect(statExists(TOKEN_UNIVERSE_BUILDER_SOURCE_JS)).toBe(false);
+
+    const srcImporters = findImporters(SRC_ROOT, [TOKEN_UNIVERSE_BUILDER_SOURCE, TOKEN_UNIVERSE_BUILDER_SOURCE_JS]);
+    const testImporters = findImporters(TEST_ROOT, [TOKEN_UNIVERSE_BUILDER_SOURCE, TOKEN_UNIVERSE_BUILDER_SOURCE_JS]);
+
+    expect(srcImporters).toEqual([]);
+    expect(testImporters).toEqual(["core/universe-builder.test.ts", "migration/parity-harness.ts"]);
+  });
+
   it("confirms token-universe residue has been removed", () => {
     expect(statExists(TOKEN_UNIVERSE_SOURCE)).toBe(false);
     expect(statExists(TOKEN_UNIVERSE_SOURCE_JS)).toBe(false);

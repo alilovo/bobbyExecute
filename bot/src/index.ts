@@ -4,8 +4,6 @@
  * Changes: Added DexScreenerAdapter exports for Milestone 1
  */
 export { Clock, SystemClock, FakeClock } from "./core/clock.js";
-/** @deprecated migration target: `core/engine.ts` + `runtime/*`; legacy non-surviving lineage. */
-export { ToolRouter } from "./core/tool-router.js";
 export { Engine } from "./core/engine.js";
 /** @deprecated migration target: `core/engine.ts` + `runtime/*`; legacy non-surviving lineage. */
 export { Orchestrator } from "./core/orchestrator.js";
@@ -14,8 +12,6 @@ export { canonicalize } from "./core/determinism/canonicalize.js";
 
 export * from "./core/contracts/index.js";
 export { RiskBreakdownSchema } from "./core/contracts/riskbreakdown.js";
-/** @deprecated migration target: `intelligence/universe/build-universe-result.ts`; legacy non-surviving lineage. */
-export { buildTokenUniverse, type UniverseBuilderConfig, type RawTokenInput } from "./core/universe/token-universe-builder.js";
 export { normalizeToTokenV1 } from "./core/normalize/normalizer.js";
 export {
   validateCrossSource,
@@ -63,8 +59,6 @@ export { InMemoryIdempotencyStore } from "./storage/inmemory-kv.js";
 export * from "./eventbus/index.js";
 export * from "./journal-writer/index.js";
 export * from "./config-loader/index.js";
-/** @deprecated migration target: runtime cycle summaries + journal/evidence repositories; legacy non-surviving lineage. */
-export * from "./memory/index.js";
 export { checkHealth, type HealthReport } from "./observability/health.js";
 export { recordLatency, getP95 } from "./observability/metrics.js";
 export { incrementIncident, getIncidentCount } from "./observability/incidents.js";

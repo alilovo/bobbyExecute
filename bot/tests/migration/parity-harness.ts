@@ -7,7 +7,6 @@ import { DATA_QUALITY_MIN_COMPLETENESS } from "@bot/core/contracts/dataquality.j
 import { buildTokenUniverse } from "@bot/core/universe/token-universe-builder.js";
 import type { MarketSnapshot } from "@bot/core/contracts/market.js";
 import type { PatternResult } from "@bot/core/contracts/pattern.js";
-import { runScoringEngine } from "@bot/scoring/scoring-engine.js";
 import { runSignalEngine } from "@bot/signals/signal-engine.js";
 import { createSourceObservation } from "@bot/discovery/source-observation.js";
 import { buildDiscoveryEvidence } from "@bot/discovery/discovery-evidence.js";
@@ -22,6 +21,7 @@ import {
 import { buildTrendReversalObservationV1 } from "@bot/intelligence/forensics/trend-reversal-monitor-worker.js";
 import { buildConstructedSignalSetV1 } from "@bot/intelligence/signals/build-constructed-signal-set.js";
 import { buildScoreCardV1 } from "@bot/intelligence/scoring/build-score-card.js";
+import { computeScoreCard } from "@bot/core/intelligence/mci-bci-formulas.js";
 import type { TestSignal, TestSignalPack } from "../fixtures/mci-bci-test-shapes.js";
 import type {
   MigrationParityFixture,
@@ -322,11 +322,7 @@ function runLegacyLineage(
   };
 
   const scoreCard = withFixedNow(shared.fixedNowMs, () =>
-    runScoringEngine({
-      signalPack,
-      traceId: `legacy-score:${fixture.id}`,
-      timestamp: shared.timestampIso,
-    })
+    computeScoreCard(`legacy-score:${fixture.id}`, shared.timestampIso, signalPack)
   );
   const patternResult: PatternResult = {
     traceId: `legacy-pattern:${fixture.id}`,

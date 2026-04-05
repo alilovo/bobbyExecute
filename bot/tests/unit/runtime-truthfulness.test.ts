@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runScoringEngine } from "../../src/scoring/scoring-engine.js";
+import { computeScoreCard } from "../../src/core/intelligence/mci-bci-formulas.js";
 import { runSignalEngine } from "../../src/signals/signal-engine.js";
 import { runExecution } from "../../src/execution/execution-engine.js";
 import { fetchMarketWithFallback, type MarketAdapterFetch } from "../../src/adapters/orchestrator/adapter-orchestrator.js";
@@ -86,13 +86,13 @@ const paperIntent: TradeIntent = {
 
 describe("runtime truthfulness closure", () => {
   it("scoring is deterministic for equal input", () => {
-    const a = runScoringEngine({ signalPack, traceId: "same", timestamp: now });
-    const b = runScoringEngine({ signalPack, traceId: "same", timestamp: now });
+    const a = computeScoreCard("same", now, signalPack);
+    const b = computeScoreCard("same", now, signalPack);
     expect(a).toStrictEqual(b);
   });
 
   it("signal engine blocks on low data quality completeness", () => {
-    const score = runScoringEngine({ signalPack, traceId: "s", timestamp: now });
+    const score = computeScoreCard("s", now, signalPack);
     const out = runSignalEngine({
       market,
       scoreCard: score,

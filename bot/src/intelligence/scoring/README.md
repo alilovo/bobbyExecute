@@ -9,5 +9,5 @@ Rules:
 - preserve input refs, evidence refs, and source coverage
 - do not add policy, pattern classification, sizing, decision, or execution semantics here
 
-Legacy authority scoring remains in `src/scoring/scoring-engine.ts` and `src/core/contracts/scorecard.ts`.
+Legacy authority scoring residue remains in `src/core/contracts/scorecard.ts`.
 The intelligence scoring layer is additive and pre-decision only.

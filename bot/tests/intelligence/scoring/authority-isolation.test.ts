@@ -20,7 +20,6 @@ describe("score card bridge stays out of authority paths", () => {
     "core/intelligence/mci-bci-formulas.ts",
     "core/contracts/scorecard.ts",
     "core/decision/decision-result-derivation.ts",
-    "scoring/scoring-engine.ts",
     "signals/signal-engine.ts",
     "patterns/pattern-engine.ts",
     "runtime/dry-run-runtime.ts",

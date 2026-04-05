@@ -12,8 +12,8 @@ import { RepositoryIncidentRecorder } from "../../src/observability/incidents.js
 import { DryRunRuntime } from "../../src/runtime/dry-run-runtime.js";
 import type { MarketSnapshot } from "../../src/core/contracts/market.js";
 import type { WalletSnapshot } from "../../src/core/contracts/wallet.js";
+import { computeScoreCard } from "../../src/core/intelligence/mci-bci-formulas.js";
 import { runSignalEngine } from "../../src/signals/signal-engine.js";
-import { runScoringEngine } from "../../src/scoring/scoring-engine.js";
 import { recognizePatterns } from "../../src/patterns/pattern-engine.js";
 import type { TestSignalPack } from "../fixtures/mci-bci-test-shapes.js";
 
@@ -108,7 +108,7 @@ describe("decision path convergence (PR-B1)", () => {
         async () => ({ market, wallet }),
         async () => {
           const sp = buildSignalPack(market, market.traceId, market.timestamp);
-          const sc = runScoringEngine({ signalPack: sp, traceId: market.traceId, timestamp: market.timestamp });
+          const sc = computeScoreCard(market.traceId, market.timestamp, sp);
           const pr = recognizePatterns(market.traceId, market.timestamp, sc, sp);
           const out = runSignalEngine({
             market,

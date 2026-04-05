@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 const SRC_ROOT = resolve(process.cwd(), "src");
@@ -31,6 +31,10 @@ function readSrc(relPath: string): string {
   return readFileSync(resolve(SRC_ROOT, relPath), "utf8");
 }
 
+function fileExists(relPath: string): boolean {
+  return existsSync(resolve(SRC_ROOT, relPath));
+}
+
 function parseImports(text: string): string[] {
   const imports: string[] = [];
   const pattern = /from\s+["']([^"']+)["']/g;
@@ -53,12 +57,9 @@ describe("migration lineage freeze boundaries", () => {
   it("marks deprecated-in-place legacy modules explicitly", () => {
     const deprecatedFiles = new Map<string, string>([
       ["core/orchestrator.ts", "@deprecated migration target"],
-      ["core/tool-router.ts", "@deprecated migration target"],
-      ["memory/index.ts", "@deprecated migration target"],
       ["memory/log-append.ts", "@deprecated migration target"],
       ["memory/memory-db.ts", "@deprecated migration target"],
       ["signals/signal-engine.ts", "@deprecated compatibility-only"],
-      ["scoring/scoring-engine.ts", "@deprecated compatibility-only"],
       ["core/universe/token-universe-builder.ts", "@deprecated migration target"],
     ]);
 
@@ -67,9 +68,13 @@ describe("migration lineage freeze boundaries", () => {
     }
   });
 
+  it("removes deleted compatibility shells from the source tree", () => {
+    expect(fileExists("core/tool-router.ts")).toBe(false);
+    expect(fileExists("memory/index.ts")).toBe(false);
+  });
+
   it("freezes legacy scoring/signal caller sets (no new callers)", () => {
     expect(findImporters("../signals/signal-engine.js")).toEqual([]);
-    expect(findImporters("../scoring/scoring-engine.js")).toEqual([]);
   });
 
   it("keeps authority modules free from orchestrator/tool-router/memory imports", () => {
@@ -99,8 +104,9 @@ describe("migration lineage freeze boundaries", () => {
 
     expect(rootIndex).toContain("legacy non-surviving lineage");
     expect(rootIndex).toContain("@deprecated migration target: `core/engine.ts` + `runtime/*`");
-    expect(rootIndex).toContain("@deprecated migration target: `intelligence/universe/build-universe-result.ts`");
-    expect(rootIndex).toContain("runtime cycle summaries + journal/evidence repositories");
+    expect(rootIndex).not.toContain("runtime cycle summaries + journal/evidence repositories");
+    expect(rootIndex).not.toContain("core/universe/token-universe-builder.ts");
+    expect(rootIndex).not.toMatch(/export .*"\.\/core\/universe\/token-universe-builder\.js"/);
     expect(rootIndex).not.toMatch(/export .*"\.\/signals\/signal-engine\.js"/);
     expect(rootIndex).not.toMatch(/export .*"\.\/scoring\/scoring-engine\.js"/);
   });

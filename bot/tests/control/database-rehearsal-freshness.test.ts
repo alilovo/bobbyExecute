@@ -104,7 +104,12 @@ describe("database rehearsal freshness", () => {
     expect(current.manualFallbackActive).toBe(false);
     expect(current.automationHealth).toBe("healthy");
     expect(current.alert?.status).toBe("resolved");
-    expect(evaluateDatabaseRehearsalGate(current.latestEvidence, { targetMode: "live" })?.status).toBe("fresh");
+    expect(
+      evaluateDatabaseRehearsalGate(current.latestEvidence, {
+        targetMode: "live",
+        nowMs: Date.parse("2026-03-27T12:00:00.000Z"),
+      })?.status
+    ).toBe("fresh");
   });
 
   it("marks manual fallback evidence as warning and keeps freshness aligned", async () => {
@@ -126,7 +131,12 @@ describe("database rehearsal freshness", () => {
     expect(current.manualFallbackActive).toBe(true);
     expect(current.automationHealth).toBe("degraded");
     expect(current.reasonCode).toBe("automated_rehearsal_missing");
-    expect(evaluateDatabaseRehearsalGate(current.latestEvidence, { targetMode: "live" })?.status).toBe("fresh");
+    expect(
+      evaluateDatabaseRehearsalGate(current.latestEvidence, {
+        targetMode: "live",
+        nowMs: Date.parse("2026-03-27T12:00:00.000Z"),
+      })?.status
+    ).toBe("fresh");
   });
 
   it("opens and persists stale and failed alert states", async () => {

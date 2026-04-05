@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 const SRC_ROOT = resolve(process.cwd(), "src");
+const TEST_ROOT = resolve(process.cwd(), "tests");
 
 function walkTsFiles(root: string): string[] {
   const entries = readdirSync(root);
@@ -23,12 +24,16 @@ function walkTsFiles(root: string): string[] {
   return files;
 }
 
-function toRel(absPath: string): string {
-  return absPath.slice(SRC_ROOT.length + 1).replaceAll("\\", "/");
+function toRel(root: string, absPath: string): string {
+  return absPath.slice(root.length + 1).replaceAll("\\", "/");
 }
 
 function readSrc(relPath: string): string {
   return readFileSync(resolve(SRC_ROOT, relPath), "utf8");
+}
+
+function fileExists(relPath: string): boolean {
+  return existsSync(resolve(SRC_ROOT, relPath));
 }
 
 function parseImports(text: string): string[] {
@@ -42,35 +47,36 @@ function parseImports(text: string): string[] {
   return imports;
 }
 
-function findImporters(specifier: string): string[] {
-  return walkTsFiles(SRC_ROOT)
+function findImporters(root: string, specifier: string): string[] {
+  return walkTsFiles(root)
     .filter((filePath) => parseImports(readFileSync(filePath, "utf8")).includes(specifier))
-    .map(toRel)
+    .map((filePath) => toRel(root, filePath))
     .sort();
 }
 
 describe("migration parity boundary guards", () => {
   it("freezes no-new-caller baselines for deprecated lineages", () => {
-    const expectedImporters: Record<string, string[]> = {
+    const expectedSrcImporters: Record<string, string[]> = {
       "../signals/signal-engine.js": [],
-      "../scoring/scoring-engine.js": [],
-      "./core/orchestrator.js": [
-        "index.ts",
-      ],
-      "./core/tool-router.js": [
-        "index.ts",
-      ],
-      "./memory/index.js": [
-        "index.ts",
-      ],
-      "./core/universe/token-universe-builder.js": [
-        "index.ts",
-      ],
+      "./core/tool-router.js": [],
+      "./memory/index.js": [],
+      "./core/orchestrator.js": ["index.ts"],
+      "./core/universe/token-universe-builder.js": [],
     };
 
-    for (const [specifier, importers] of Object.entries(expectedImporters)) {
-      expect(findImporters(specifier), `caller drift: ${specifier}`).toEqual(importers);
+    for (const [specifier, importers] of Object.entries(expectedSrcImporters)) {
+      expect(findImporters(SRC_ROOT, specifier), `source caller drift: ${specifier}`).toEqual(importers);
     }
+  });
+
+  it("keeps token-universe-builder callers test-only after root narrowing", () => {
+    const expectedTestImporters = ["core/universe-builder.test.ts", "migration/parity-harness.ts"];
+    expect(findImporters(TEST_ROOT, "@bot/core/universe/token-universe-builder.js")).toEqual(expectedTestImporters);
+  });
+
+  it("removes deleted compatibility shells from the source tree", () => {
+    expect(fileExists("core/tool-router.ts")).toBe(false);
+    expect(fileExists("memory/index.ts")).toBe(false);
   });
 
   it("keeps active authority modules isolated from deprecated and MCP/prompt surfaces", () => {
@@ -114,14 +120,14 @@ describe("migration parity boundary guards", () => {
 
     expect(rootIndex).not.toMatch(/export .*"\.\/signals\/signal-engine\.js"/);
     expect(rootIndex).not.toMatch(/export .*"\.\/scoring\/scoring-engine\.js"/);
+    expect(rootIndex).not.toMatch(/export .*"\.\/core\/tool-router\.js"/);
+    expect(rootIndex).not.toMatch(/export .*"\.\/memory\/index\.js"/);
+    expect(rootIndex).not.toMatch(/export .*"\.\/core\/universe\/token-universe-builder\.js"/);
     expect(rootIndex).not.toMatch(/export .*"\.\/intelligence\/signals\/build-constructed-signal-set\.js"/);
     expect(rootIndex).not.toMatch(/export .*"\.\/intelligence\/scoring\/build-score-card\.js"/);
     expect(rootIndex).not.toMatch(/export .*"\.\/tests\/migration\/parity-harness\.js"/);
 
     expect(rootIndex.match(/\.\/core\/orchestrator\.js/g)?.length ?? 0).toBe(1);
-    expect(rootIndex.match(/\.\/core\/tool-router\.js/g)?.length ?? 0).toBe(1);
-    expect(rootIndex.match(/\.\/memory\/index\.js/g)?.length ?? 0).toBe(1);
-    expect(rootIndex.match(/\.\/core\/universe\/token-universe-builder\.js/g)?.length ?? 0).toBe(1);
   });
 
   it("keeps the core contracts barrel free of token-universe residue", async () => {
@@ -141,13 +147,14 @@ describe("migration parity boundary guards", () => {
 
     expect(Object.keys(rootExports)).not.toContain("ScoreCardSchema");
     expect(Object.keys(rootExports)).not.toContain("SignalPackSchema");
-  });
+    expect(Object.keys(rootExports)).not.toContain("buildTokenUniverse");
+  }, 15000);
 
   it("prevents runtime source from importing migration parity harness fixtures", () => {
     const srcFiles = walkTsFiles(SRC_ROOT);
 
     for (const filePath of srcFiles) {
-      const relPath = toRel(filePath);
+      const relPath = toRel(SRC_ROOT, filePath);
       const imports = parseImports(readFileSync(filePath, "utf8"));
       for (const specifier of imports) {
         expect(

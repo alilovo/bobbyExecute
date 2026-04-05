@@ -100,11 +100,9 @@ describe("mci-bci legacy contract contraction", () => {
     const signalEngineText = readFileSync(SIGNAL_ENGINE_SOURCE, "utf8");
 
     expect(scorecardImporters).not.toContain("core/intelligence/mci-bci-formulas.ts");
-    expect(scorecardImporters).not.toContain("scoring/scoring-engine.ts");
     expect(scorecardImporters).not.toContain("patterns/pattern-engine.ts");
     expect(scorecardImporters).not.toContain("signals/signal-engine.ts");
     expect(signalpackImporters).not.toContain("core/intelligence/mci-bci-formulas.ts");
-    expect(signalpackImporters).not.toContain("scoring/scoring-engine.ts");
     expect(signalpackImporters).not.toContain("patterns/pattern-engine.ts");
     expect(signalpackImporters).not.toContain("signals/signal-engine.ts");
 
@@ -113,12 +111,6 @@ describe("mci-bci legacy contract contraction", () => {
     );
     expect(readFileSync(resolve(SRC_ROOT, "core/intelligence/mci-bci-formulas.ts"), "utf8")).not.toContain(
       "../contracts/signalpack.js"
-    );
-    expect(readFileSync(resolve(SRC_ROOT, "scoring/scoring-engine.ts"), "utf8")).not.toContain(
-      "../core/contracts/scorecard.js"
-    );
-    expect(readFileSync(resolve(SRC_ROOT, "scoring/scoring-engine.ts"), "utf8")).not.toContain(
-      "../core/contracts/signalpack.js"
     );
     expect(patternEngineText).toContain("../core/intelligence/mci-bci-formulas.js");
     expect(patternEngineText).not.toContain("../core/contracts/scorecard.js");
@@ -146,8 +138,6 @@ describe("mci-bci legacy contract contraction", () => {
     ]);
     expect(scorecardTestImporters).not.toContain("core/intelligence/mci-bci-formulas.ts");
     expect(signalpackTestImporters).not.toContain("core/intelligence/mci-bci-formulas.ts");
-    expect(scorecardTestImporters).not.toContain("scoring/scoring-engine.ts");
-    expect(signalpackTestImporters).not.toContain("scoring/scoring-engine.ts");
 
     expect(patternImporters).toEqual(["core/orchestrator.ts", "index.ts"]);
     expect(patternTestImporters).toEqual([

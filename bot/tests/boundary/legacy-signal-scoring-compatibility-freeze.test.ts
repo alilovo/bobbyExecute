@@ -7,11 +7,8 @@ const TEST_ROOT = resolve(process.cwd(), "tests");
 
 const LEGACY_SPECIFIERS = [
   "../signals/signal-engine.js",
-  "../scoring/scoring-engine.js",
   "../../src/signals/signal-engine.js",
-  "../../src/scoring/scoring-engine.js",
   "@bot/signals/signal-engine.js",
-  "@bot/scoring/scoring-engine.js",
 ] as const;
 
 const ALLOWED_TEST_IMPORTERS: Record<string, string[]> = {
@@ -19,12 +16,7 @@ const ALLOWED_TEST_IMPORTERS: Record<string, string[]> = {
     "integration/decision-path-convergence.test.ts",
     "unit/runtime-truthfulness.test.ts",
   ],
-  "../../src/scoring/scoring-engine.js": [
-    "integration/decision-path-convergence.test.ts",
-    "unit/runtime-truthfulness.test.ts",
-  ],
   "@bot/signals/signal-engine.js": ["migration/parity-harness.ts"],
-  "@bot/scoring/scoring-engine.js": ["migration/parity-harness.ts"],
 };
 
 function walkTsFiles(root: string): string[] {
@@ -68,7 +60,7 @@ function findImporters(root: string, specifier: string): string[] {
     .sort();
 }
 
-describe("legacy signal/scoring compatibility freeze", () => {
+describe("legacy signal compatibility freeze", () => {
   it("blocks new production callers and preserves only the explicit test allowlist", () => {
     for (const specifier of LEGACY_SPECIFIERS) {
       expect(findImporters(SRC_ROOT, specifier), `${specifier} must not be imported by production src`).toEqual([]);
