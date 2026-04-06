@@ -37,6 +37,7 @@ export interface WorkerJournalEventRecord {
   event: WorkerEventEnvelope;
   normalization: WorkerEventNormalization;
   stateBefore: WorkerEventGateState;
+  stateAfter: WorkerEventGateState;
   stageOrder: readonly WorkerGateStageName[];
   evaluationHash: string;
   replayKey: string;
@@ -101,6 +102,8 @@ export type WorkerJournalRecord =
 export interface WorkerEventGateReplayTrace {
   event: WorkerEventEnvelope | null;
   normalization: WorkerEventNormalization | null;
+  stateBefore: WorkerEventGateState | null;
+  stateAfter: WorkerEventGateState | null;
   gatePath: WorkerGateStageResult[];
   suppression?: WorkerSuppressionRecord;
   routing?: WorkerModelRoutingDecision;
@@ -166,6 +169,7 @@ export function buildWorkerEventGateJournalRecords(
       event: evaluation.event,
       normalization: evaluation.normalization,
       stateBefore: evaluation.stateBefore,
+      stateAfter: evaluation.stateAfter,
       stageOrder: WORKER_GATE_STAGE_ORDER,
       evaluationHash: evaluation.evaluationHash,
       replayKey: evaluation.replayKey,
@@ -266,6 +270,7 @@ export function buildWorkerEventGateJournalEntries(
               event: record.event,
               normalization: record.normalization,
               stateBefore: record.stateBefore,
+              stateAfter: record.stateAfter,
               stageOrder: record.stageOrder,
               evaluationHash: record.evaluationHash,
               replayKey: record.replayKey,
@@ -276,6 +281,7 @@ export function buildWorkerEventGateJournalEntries(
               event: record.event,
               normalization: record.normalization,
               stateBefore: record.stateBefore,
+              stateAfter: record.stateAfter,
               stageOrder: record.stageOrder,
               evaluationHash: record.evaluationHash,
               replayKey: record.replayKey,
@@ -436,6 +442,8 @@ export function reconstructWorkerEventGateReplay(entries: ReadonlyArray<JournalE
   const replay: WorkerEventGateReplayTrace = {
     event: null,
     normalization: null,
+    stateBefore: null,
+    stateAfter: null,
     gatePath: [],
     blocked: false,
     journalEntries: [...entries],
@@ -451,6 +459,8 @@ export function reconstructWorkerEventGateReplay(entries: ReadonlyArray<JournalE
     if (record.recordType === "event") {
       replay.event = record.event;
       replay.normalization = record.normalization;
+      replay.stateBefore = record.stateBefore;
+      replay.stateAfter = record.stateAfter;
       continue;
     }
 

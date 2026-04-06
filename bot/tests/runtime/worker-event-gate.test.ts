@@ -164,6 +164,8 @@ describe("worker-event-gate runtime", () => {
 
     const replay = reconstructWorkerEventGateReplay(entries);
     expect(replay.event?.eventId).toBe("lowcap-event-duplicate");
+    expect(replay.stateBefore).toStrictEqual(first.stateBefore);
+    expect(replay.stateAfter).toStrictEqual(first.stateAfter);
     expect(replay.suppression?.kind).toBe("dedupe");
     expect(replay.routing?.routeClass).toBe("no_model");
     expect(replay.writeEffect?.effect).toBe("no_write");
@@ -306,6 +308,8 @@ describe("worker-event-gate runtime", () => {
     const replay = reconstructWorkerEventGateReplay(writer.list());
 
     expect(replay.event).toStrictEqual(event);
+    expect(replay.stateBefore).toStrictEqual(evaluation.stateBefore);
+    expect(replay.stateAfter).toStrictEqual(evaluation.stateAfter);
     expect(replay.gatePath.map((stage) => stage.stage)).toStrictEqual(WORKER_GATE_STAGE_ORDER);
     expect(replay.blocked).toBe(false);
     expect(replay.suppression).toBeUndefined();
