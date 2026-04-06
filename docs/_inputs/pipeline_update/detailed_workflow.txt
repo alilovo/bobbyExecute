@@ -1,0 +1,889 @@
+# Three Workflow Architecture Spec — Meta Fetch / Low Cap Hunter / Shadow Intelligence
+
+## Status
+
+Version: v1.0
+Typ: High-detail orchestration and architecture structuring spec
+Ziel: Maschinennahe, architekturorientierte Spezifikation der 3 Workflow-Layer inklusive Governance, Handoffs, Datenverträgen, Zustandslogik und Abschlussanweisung zur Strukturierung der Zielarchitektur.
+
+---
+
+# 1. Zielbild
+
+Das System besteht aus drei sich ergänzenden, aber klar getrennten Workflow-Layern:
+
+1. **Meta Fetch Engine**
+   Strategischer Truth-Layer für Regime-Verständnis, Meta-Snapshot, Kandidaten-Selektion und Watchlist-Bildung.
+
+2. **Low Cap Hunter**
+   Opportunistischer Opt-in-Layer für sehr frühe, handelbare Quick-Flip-Kandidaten im Bereich niedriger Market Caps vor oder sehr früh im Bonding-Prozess.
+
+3. **Shadow Intelligence**
+   Post-Discovery Monitoring-Layer zur frühzeitigen Erkennung von State Changes, Trendwechseln, Breakouts, Re-Accelerations und Qualitätsverschlechterungen.
+
+Diese drei Layer bilden zusammen **keine gleichrangigen Einzelmodule**, sondern eine geordnete, asymmetrische Pipeline mit unterschiedlicher Funktion:
+
+* **Meta Fetch** = strategische Orientierung und Funnel-Steuerung
+* **Low Cap Hunter** = optionaler Frühphasen-Chancen-Layer
+* **Shadow Intelligence** = Zustandsüberwachung über Zeit
+
+Das Gesamtsystem soll als **replaybare Alpha-Maschine** funktionieren, bei der die eigentliche Autorität weiterhin im deterministischen Core verbleibt.
+
+---
+
+# 2. Oberste Architekturprinzipien
+
+## 2.1 Authority Model
+
+Die Architektur folgt strikt diesem Modell:
+
+* Der **deterministische Core** bleibt die einzige autoritative Entscheidungsinstanz.
+* LLM-/Prompt-/MCP-/Sidecar-Layer dürfen **nicht autoritativ** sein.
+* Es darf **keine Dual-Truth-Architektur** geben.
+* Es darf **keine implizite Autoritätsverschiebung** durch Hilfskomponenten geben.
+
+## 2.2 Betriebshaltung
+
+Das Gesamtsystem ist:
+
+* **fail-closed**
+* **journal-first**
+* **replay-capable**
+* **contract-first**
+* **provenance-bound**
+* **state-explicit**
+
+## 2.3 Strategische Priorität
+
+Wenn Zielkonflikte entstehen, gilt diese Priorität:
+
+1. **Meta Fetch Engine**
+2. **Shadow Intelligence**
+3. **Low Cap Hunter**
+
+Begründung:
+
+* Meta Fetch definiert den strategischen Rahmen, die Regime-Lesart und die Funnel-Zulassung.
+* Shadow Intelligence konserviert und überwacht die Qualität über Zeit.
+* Low Cap Hunter ist monetarisierbar, aber absichtlich opportunistisch, opt-in und dem strategischen Kontext untergeordnet.
+
+Kernaussage:
+
+> Das System soll zuerst besser verstehen, dann besser begleiten und erst darauf aufbauend früher monetarisieren.
+
+---
+
+# 3. Workflow-Topologie
+
+## 3.1 Reihenfolge
+
+```text
+meta_fetch_engine -> low_cap_hunter -> shadow_intelligence
+```
+
+Diese Reihenfolge beschreibt die Standard-Orchestrierung der logischen Informationsflüsse, nicht notwendigerweise die einzige Laufreihenfolge einzelner Prozessinstanzen.
+
+## 3.2 Funktionale Interpretation
+
+### Meta Fetch Engine
+
+Liefert:
+
+* Regime-Call
+* Meta-Cluster
+* Invalid-Pattern-Library
+* Ranked Candidates
+* Watchlist
+* Tactical Read
+* strategischen Kontext für alle Folge-Layer
+
+### Low Cap Hunter
+
+Nutzt:
+
+* Meta-Kontext aus Meta Fetch
+* validierte Onchain-Daten
+* validierte X-Timeline-Daten
+
+Ziel:
+
+* sehr frühe Quick-Flip-Kandidaten finden
+* asymmetrische Entries identifizieren
+* Wallet-Liquiditätsaufbau unterstützen
+
+### Shadow Intelligence
+
+Nutzt:
+
+* Watchlist aus Meta Fetch
+* Kandidaten und Monitoring-Seeds aus Low Cap Hunter
+* struktur-, flow- und attention-basierte Zustandsdaten
+
+Ziel:
+
+* State Changes vor offensichtlicher Marktbestätigung erkennen
+* Repricing, Reversal, Reclaim, Breakout, Decay und Second-Leg-Strukturen beobachten
+
+---
+
+# 4. Rollenmodell der drei Workflows
+
+## 4.1 Meta Fetch Engine — strategischer Truth-Layer
+
+### Primäre Funktion
+
+Meta Fetch ist der **strategische Erkenntnis-Layer** des Systems.
+
+Er beantwortet:
+
+* Welche Meta-Cluster sind aktiv?
+* Welche Meme-/Narrativ-Strukturen expandieren?
+* Welche Subcluster sind überlaufen oder tot?
+* Welche Kandidaten sind wirklich relevant?
+* Welche Tokens verdienen aktive Beobachtung?
+
+### Primäre Outputs
+
+* Section A — Meta Snapshot
+* Section B — Ranked Candidates
+* Section C — Discarded but Notable
+* Section D — Tactical Read
+* Section E — Final Verdict
+* Section F — Mandatory Token Footer
+* Watchlist
+* Meta Context Package
+
+### Zusätzliche Verantwortung
+
+Meta Fetch ist **nicht nur Analyse**, sondern **Funnel-Governance**.
+
+Das bedeutet:
+
+* Meta Fetch darf steuern, welche Kandidaten überhaupt in die Watchlist gelangen.
+* Meta Fetch darf definieren, welche Kandidaten für Low Cap Hunter überhaupt relevant werden.
+* Meta Fetch liefert Hypothesen für Shadow Monitoring.
+
+## 4.2 Low Cap Hunter — opportunistischer Opt-in-Layer
+
+### Primäre Funktion
+
+Low Cap Hunter ist ein **hochselektiver Frühphasen-Hunter** für handelbare Quick-Flip-Chancen.
+
+### Default-Zustand
+
+* Standardzustand: **sleeping**
+* Aktivierung: **nur per User-Freigabe**
+* Selbstaktivierung: **verboten**
+
+### Primäres Ziel
+
+Tokens finden, die:
+
+* sehr früh sind
+* um ca. ~10k Mcap liegen
+* pre-bonding oder very early bonding sind
+* nicht toxisch sind
+* gute kurzfristige Asymmetrie für ~2x–10x zeigen
+
+### Sekundäres Ziel
+
+Nicht maximale Signalmenge, sondern **kapitalerhaltendes Compounding**.
+
+## 4.3 Shadow Intelligence — post-discovery Monitoring-Layer
+
+### Primäre Funktion
+
+Shadow Intelligence ist die **State Transition Engine** des Systems.
+
+### Kernaufgabe
+
+Nicht nur beobachten, sondern Zustandswechsel erkennen, die ein einmaliger Snapshot nicht sichtbar macht.
+
+### Shadow als Fusion Watcher
+
+Shadow vereint drei Blickrichtungen:
+
+* **Structure Watcher**
+* **Flow Watcher**
+* **Attention Watcher**
+
+Damit ist Shadow kein bloßes Logging-System, sondern ein post-discovery Analyse-Layer mit Fokus auf zeitliche Dynamik.
+
+---
+
+# 5. Datenquellen und Eingangsraum
+
+## 5.1 Primäre Quellsysteme
+
+### Soziale / semantische Quellen
+
+* X Timeline
+* Replies
+* Quotes
+* Reposts
+* Meme-Derivate
+* Community Language Formation
+* CA-Propagation
+* Creator-/Pseudo-Identity-Signale
+
+### Onchain-Quellen
+
+* Launch-Daten
+* Early Buys
+* Wallet Concentration
+* Bundler-Profile
+* Holder Distribution
+* Deployer Behavior
+* Sell Pressure
+* Repeat Wallet Participation
+* Smart Repeat Patterns
+* Cluster Overlap
+
+### Marktstruktur
+
+* Launch-Zustand
+* Bonding-Status
+* Market Cap
+* Volumen
+* Chart-Verhalten
+* Pullback-Qualität
+* Base Formation
+* Reclaim-Verhalten
+* Post-spike Survivability
+
+## 5.2 Normalisierte Entitäten
+
+Das System soll auf normalisierten Entitäten aufbauen, nicht auf roh gekoppelten Textschichten.
+
+Empfohlene Kernentitäten:
+
+* SourceObservation
+* DiscoveryEvidence
+* CandidateToken
+* UniverseBuildResult
+* DataQualityV1
+* CQDSnapshotV1
+* ConstructedSignalSetV1
+* ScoreCardV1
+
+---
+
+# 6. Gemeinsamer Candidate Contract
+
+Jeder Kandidat sollte mindestens diese Felder tragen:
+
+```json
+{
+  "token_name": "string",
+  "ticker": "string",
+  "contract_address": "string",
+  "venue": "pump.fun | bags.fm | bagsapp | other",
+  "launch_age": "string_or_duration",
+  "market_cap": "number_or_unknown",
+  "volume": "number_or_unknown",
+  "bonding_state": "pre_bonding | very_early_bonding | bonding | bonded | unknown",
+  "x_identity": "string_or_null",
+  "website": "string_or_null",
+  "creator_identity": "string_or_null",
+  "meta_cluster": "string_or_null",
+  "attention_type": "enum_or_unknown",
+  "wallet_quality_state": "clean | mixed | toxic | unknown",
+  "structure_state": "early | base_forming | reclaimed | vertical_only | broken | unknown",
+  "verdict": "KEEP | WATCH | NOT_CHECKED | DISCARD"
+}
+```
+
+Pflichtprinzipien:
+
+* CA darf nie implizit sein.
+* Venue darf nie implizit sein.
+* Age darf nie implizit sein.
+* Unbekanntes darf nie halluziniert werden.
+
+---
+
+# 7. Meta Fetch Engine — detaillierte Spezifikation
+
+## 7.1 Zweck
+
+Meta Fetch erstellt einen hochselektiven, evidenzbasierten Report für pump.fun und Bags, der nicht alles beschreibt, sondern die wenigen Namen isoliert, die strategisch relevant sind.
+
+## 7.2 Kernphasen
+
+### Phase 0 — Meta Map
+
+Ziel:
+
+* aktives Kurzfrist-Regime bestimmen
+* dominante Meme-Archetypen identifizieren
+* visuelle und semantische Formate kartieren
+* Subkulturen von pump.fun und Bags gegeneinander lesen
+
+Ausgabe:
+
+* dominante Cluster
+* beschleunigende Subcluster
+* gesättigte / tote Cluster
+* unterexploitete Cluster
+* Regime-Typ: speed flips / structured runners / cult formation
+
+### Phase 1 — Discovery
+
+Ziel:
+
+* Kandidaten aus pump.fun / Bags / X / Onchain finden
+
+Erfasste Felder:
+
+* Token-Identität
+* Launch-Quelle
+* Zeit seit Launch
+* Mcap / Volumen
+* Narrative / Meme-Kategorie
+* X-/Web-/Creator-Signale
+* Community Engagement
+* Chart-Status
+* Discovery-stage vs too-extended
+
+### Phase 2 — Fast Rejection
+
+Direkt verwerfen, wenn:
+
+* low effort naming
+* Clone ohne Traktion
+* incoherent meme logic
+* vertical-only chart
+* suspicious concentration
+* bundler dominance
+* insider capture
+* instant distribution
+* fake engagement
+* fehlende CA-Propagation
+* keine Community Language Formation
+* narrative exhausted
+* structurally dead
+
+### Phase 3 — Deep Validation
+
+Bewertungsdimensionen:
+
+1. Meta Fit
+2. Memetic Quality
+3. Attention Quality
+4. Wallet / Flow Quality
+5. Market Structure
+6. Expansion Probability
+
+### Phase 4 — Scoring
+
+0–5 Scores für:
+
+* Meta Fit
+* Memetic Strength
+* Attention Velocity
+* Attention Quality
+* Wallet Integrity
+* Holder Distribution
+* Structure Quality
+* Expansion Probability
+* Timing Advantage
+* Survival Odds
+
+Dann:
+
+* Composite Score
+* Risk Grade
+* Conviction Level
+* Verdict
+
+## 7.3 Harte Regeln
+
+* Reject Rate standardmäßig > 85%
+* Serious Candidates bevorzugt 3–5
+* Maximum Ranked Candidates = 10
+* Kein KEEP bei unbekannter Wallet Integrity
+* Kein KEEP bei unbekannter Structure Quality
+* Fehlende Evidenz senkt Conviction
+
+## 7.4 Funktionale Zusatzrolle
+
+Meta Fetch ist **strategischer Funnel-Controller**.
+
+Das bedeutet:
+
+* Watchlist-Zulassung wird hier entschieden.
+* Invalid-Pattern-Library wird hier gepflegt.
+* Nur Meta Fetch darf den initialen Kandidatenraum strategisch validieren.
+
+---
+
+# 8. Low Cap Hunter — detaillierte Spezifikation
+
+## 8.1 Zweck
+
+Low Cap Hunter dient der selektiven Identifikation extrem früher, handelbarer Kandidaten mit kurzfristiger Asymmetrie.
+
+## 8.2 Aktivierungsmodell
+
+```json
+{
+  "default_state": "sleeping",
+  "requires_user_enable": true,
+  "self_activation_allowed": false
+}
+```
+
+## 8.3 Zielprofil eines Quick-Flip-Kandidaten
+
+Ein Kandidat ist nur dann low-cap-huntable, wenn er:
+
+* extrem früh ist
+* um ~10k Base Mcap liegt
+* pre-bonding oder very early bonding ist
+* ausreichend Liquidity Path zeigt
+* validiertes Wallet-Verhalten hat
+* keine toxische Bundler-/Insider-Struktur aufweist
+* glaubwürdige, schnelle Attention- oder CA-Propagation zeigt
+* zeitliche Asymmetrie für ~2x–10x besitzt
+
+## 8.4 Optimierungsziel
+
+Low Cap Hunter optimiert **nicht** auf maximale Rohgeschwindigkeit.
+
+Prioritäten:
+
+1. kapitalerhaltendes Compounding
+2. ausreichend frühe Erkennung
+3. Geschwindigkeit
+
+## 8.5 Hunter-Pipeline
+
+### Phase 0 — Regime Import
+
+Importiert:
+
+* dominante Meta-Cluster
+* ungültige Pattern
+* Kontext über Marktphase
+* Watchlist-/Meta-Priors
+
+### Phase 1 — Early Launch Scan
+
+Sucht:
+
+* frisch gestartete Tokens
+* Zielzone niedriger Mcaps
+* pre-bonding oder very early bonding Setups
+
+### Phase 2 — Toxicity Filter
+
+Verwirft:
+
+* severe bundler dominance
+* insider-heavy flow
+* broken liquidity path
+* unplausible attention
+* obvious trap setups
+
+### Phase 3 — Quick-Flip Validation
+
+Prüft:
+
+* onchain validity
+* attention validity
+* timing asymmetry
+* liquidity path
+* post-launch survivability window
+
+### Phase 4 — Routing
+
+Emit:
+
+* quick_flip_candidates
+* risk flags
+* candidate priority
+* evidence package
+
+## 8.6 Aufmerksamkeitslogik im Hunter
+
+Attention Economy ist hier:
+
+* Frühindikator
+* Ranking-Faktor
+* Validierungsfaktor
+
+Aber niemals allein ausreichend.
+
+Regeln:
+
+* starke Onchain + starke Attention = Top-Kandidat
+* starke Onchain + schwache Attention = early but incomplete
+* starke Attention + schwache/toxische Onchain = reject
+* fehlende soziale Transportfähigkeit = standardmäßig depriorisieren
+
+---
+
+# 9. Shadow Intelligence — detaillierte Spezifikation
+
+## 9.1 Zweck
+
+Shadow Intelligence überwacht Tokens nach Discovery über Zeit und erkennt relevante Zustandswechsel früher als ein punktueller Snapshot.
+
+## 9.2 Kerncharakter
+
+Shadow ist ein **Fusion Watcher**:
+
+* Structure Watcher
+* Flow Watcher
+* Attention Watcher
+
+## 9.3 Primäre Erkennungsziele
+
+* Trend Reversal
+* Base Reclaim
+* Second-Leg Re-Acceleration
+* Breakout from Consolidation
+* Wallet Quality Shift
+* Attention Resurgence
+* Decay before Failure
+
+## 9.4 Shadow-Pipeline
+
+### Phase 0 — Baseline State
+
+Für jedes Watchlist-Token:
+
+* Ausgangszustand festhalten
+* Strukturposture festhalten
+* Aufmerksamkeitsposture festhalten
+* Wallet-/Flow-Posture festhalten
+
+### Phase 1 — Change Detection
+
+Erkennen von Abweichungen in:
+
+* Struktur
+* Wallet Flow
+* Attention
+* Indikatorlage
+
+### Phase 2 — State Classification
+
+Einordnung in:
+
+* reversal
+* breakout
+* continuation
+* re-acceleration
+* decay
+* fake recovery
+
+### Phase 3 — Escalation
+
+Rückgabe an Operator oder deterministischen Downstream-Review.
+
+## 9.5 Verbote
+
+Shadow darf niemals:
+
+* Approval Authority übernehmen
+* Blocking Authority übernehmen
+* Scoring Authority übernehmen
+* Control Authority übernehmen
+* Canonical Decision-History Ownership beanspruchen
+
+---
+
+# 10. Handoff-Governance
+
+## 10.1 Meta Fetch -> Watchlist
+
+Ein Token darf in Watchlist / Ranked Candidates nur übergehen, wenn:
+
+* aktive oder entstehende Meta-Zuordnung plausibel ist
+* Fast Rejection nicht greift
+* ausreichende narrative / attention / wallet / structure Substanz vorhanden ist
+* WATCH oder KEEP plausibel ist
+
+## 10.2 Watchlist -> Low Cap Hunter Relevanz
+
+Nur wenn **alle** Bedingungen erfüllt sind:
+
+* User hat Hunter aktiviert
+* Marktphase unterstützt frühe Quick-Flips
+* Token liegt um ~10k Mcap
+* Token ist pre-bonding oder very early bonding
+* Timing-Asymmetrie positiv
+* Bonding-State-Vorteil vorhanden
+* Liquidity Path ausreichend
+* Toxicity Filter bestanden
+
+## 10.3 Watchlist -> Shadow Intelligence
+
+Standardmäßig monitoren, wenn mindestens eines zutrifft:
+
+* Watchlist Candidate
+* Ranked Candidate
+* Second-Leg-Hypothese
+* Breakout-Hypothese
+* Reversal-Hypothese
+* Hunter-Seed
+* Quick-Flip-Kandidat
+
+## 10.4 Handoff-Prinzip
+
+Meta Fetch steuert den strategischen Funnel.
+Low Cap Hunter öffnet nur den frühesten Entry-Subfunnel.
+Shadow Intelligence betreibt den Post-Discovery-State-Monitor.
+
+---
+
+# 11. Zustands- und Kandidatentaxonomie
+
+## 11.1 Candidate Statuses
+
+* discovery_only
+* watchlist_candidate
+* ranked_candidate
+* quick_flip_candidate
+* second_leg_candidate
+* breakout_candidate
+* invalidated
+
+## 11.2 Attention Types
+
+* liquidity_vacuum_spike
+* single_source_shill_burst
+* proof_of_life_trust_loop
+* meme_native_propagation
+* identity_recruitment
+* creator_community_flywheel
+* screenshot_momentum_loop
+
+## 11.3 Failure Modes
+
+* empty_novelty
+* attention_without_conversion
+* conversion_without_propagation
+* overcompressed_clone
+* price_only_narrative
+* bundler_dominance
+* insider_capture
+* structure_failure
+
+---
+
+# 12. Operating Policies
+
+## 12.1 Meta Fetch Policy
+
+* strategischer Truth-Layer
+* Funnel-Steuerung aktiv
+* hohe Selektivität
+* harte Rejection-Kultur
+* Ungewissheit explizit ausweisen
+
+## 12.2 Low Cap Hunter Policy
+
+* opt-in only
+* compounding-first
+* keine blinde Jagd
+* keine Autorität über Execution
+* keine Selbstaktivierung
+
+## 12.3 Shadow Policy
+
+* non-authoritative sidecar
+* Zustandsdynamik > Einmalsnapshot
+* frühe Repricing-Erkennung
+* keine Control- oder Scoring-Autorität
+
+---
+
+# 13. Erfolgsmessung
+
+## 13.1 Meta Fetch KPIs
+
+* watchlist precision
+* fake-runner reduction
+* regime-call accuracy
+* ranking quality
+
+## 13.2 Low Cap Hunter KPIs
+
+* early-candidate precision
+* entry earliness without toxicity
+* 2x–10x capture rate
+* contribution to capital-preserving compounding
+
+## 13.3 Shadow Intelligence KPIs
+
+* reversal detection lead time
+* breakout detection lead time
+* re-acceleration quality
+* reprioritization quality
+
+## 13.4 System-Level KPIs
+
+* bessere Watchlist-Qualität
+* bessere frühe Entries
+* bessere Re-Entry-/Second-Leg-Erkennung
+* Replaybarkeit
+* Operator-Actionability
+* Unterstützung von Wallet-Liquiditätswachstum
+
+---
+
+# 14. Nicht-Ziele
+
+Das System ist nicht gebaut, um:
+
+* alles zu beschreiben
+* Promoter-Texte zu generieren
+* jede sichtbare Candle zu erklären
+* rein soziale Lautstärke mit Qualität zu verwechseln
+* unvalidierte Wallet-Schlüsse zu ziehen
+* Autorität aus Sidecars oder MCP abzuleiten
+* Hunter-Aktivität ungefragt zu starten
+
+---
+
+# 15. Architektur-Strukturierung — empfohlene Zielgliederung
+
+## 15.1 Top-Level-Domänen
+
+Empfohlene Zielstruktur:
+
+```text
+/workflows
+  /meta-fetch
+  /low-cap-hunter
+  /shadow-intelligence
+
+/contracts
+  /shared
+  /candidates
+  /handoffs
+  /alerts
+  /metrics
+
+/policies
+  /workflow-priority
+  /activation
+  /authority-boundaries
+  /rejection-rules
+  /attention-economy
+
+/runtime
+  /orchestration
+  /journal
+  /replay
+  /state-machine
+
+/adapters
+  /x-timeline
+  /onchain
+  /launch-surfaces
+  /wallet-flow
+  /market-structure
+
+/sidecars
+  /shadow
+  /monitoring
+  /non-authoritative-enrichment
+
+/docs
+  /architecture
+  /workflow-specs
+  /contracts
+  /runbooks
+```
+
+## 15.2 Strukturprinzipien
+
+### Nach Rolle statt nach Prompt sortieren
+
+Nicht nach einzelnen Prompt-Dateien strukturieren, sondern nach:
+
+* Workflow-Rolle
+* Contract-Typ
+* Runtime-Zuständigkeit
+* Policy-Grenze
+
+### Shared Contracts zentralisieren
+
+Alle Felder, Enums, Statusklassen, Alerttypen und Handoff-Strukturen gehören in eigene Contracts.
+
+### Policies explizit auslagern
+
+Insbesondere:
+
+* Aktivierungsregeln
+* Priority Order
+* Rejection Governance
+* Attention-Economy-Regeln
+* Authority Boundaries
+
+### Shadow klar als Sidecar isolieren
+
+Shadow darf technisch und strukturell nicht so abgelegt sein, dass daraus implizit Autorität entsteht.
+
+### Handoffs als First-Class-Artefakte behandeln
+
+Jeder Übergang zwischen Workflows braucht:
+
+* Input Contract
+* Output Contract
+* Admission Criteria
+* Escalation Rules
+* Failure / Reject Semantics
+
+---
+
+# 16. Abschlussanweisung zur Architektur-Strukturierung
+
+## Verbindliche Abschlussanweisung
+
+Die Zielarchitektur ist ab jetzt nicht mehr als lose Sammlung von Prompt-Logiken oder Einzel-Workern zu strukturieren, sondern als **kontraktgetrenntes, workflow-orchestriertes Mehrschichtsystem** mit eindeutiger Rollen- und Autoritätsgrenze.
+
+### Daher gilt verbindlich:
+
+1. **Meta Fetch, Low Cap Hunter und Shadow Intelligence müssen als drei getrennte Workflow-Domänen modelliert werden**, nicht als Varianten desselben Analyseprompts.
+
+2. **Meta Fetch ist als strategischer Truth- und Funnel-Layer zu strukturieren**.
+   Alle Regime-Reads, Invalid-Pattern-Libraries, Watchlist-Admissions und Ranked-Candidate-Entscheidungen werden logisch hier verankert.
+
+3. **Low Cap Hunter ist als opt-in Opportunistic Discovery Domain zu strukturieren**.
+   Aktivierung, Zielfenster, Toxicity Gates, Timing-Asymmetrie und Quick-Flip-Routing sind als eigene Policy- und Contract-Ebene zu kapseln.
+
+4. **Shadow Intelligence ist strikt als non-authoritative post-discovery sidecar domain zu strukturieren**.
+   Monitoring, State Classification, Alerting und Reprioritization werden isoliert von jeder Form deterministischer Autorität gehalten.
+
+5. **Alle Handoffs zwischen den drei Workflows sind als explizite Datenverträge zu modellieren**.
+   Kein informeller Kontexttransfer, keine impliziten Felder, keine verdeckten Entscheidungsannahmen.
+
+6. **Alle Status, Failure Modes, Attention Types, Candidate Classes und Alert Classes sind in shared contracts / enums zu normalisieren**.
+   Keine mehrfach divergierenden Bezeichner über Workflow-Grenzen hinweg.
+
+7. **Policies sind aus der Prompt-Prosa herauszulösen und als eigenständige Architekturebene abzulegen**.
+   Priority Order, Activation Rules, KEEP/WATCH-Governance, Hunter Opt-in, Attention-Validation und Shadow Verbote dürfen nicht nur im Fließtext existieren.
+
+8. **Die Runtime-Orchestrierung muss replaybar und journal-first bleiben**.
+   Jeder Workflow-Output und jeder Handoff muss so modelliert sein, dass späteres Audit, Rebuild und Replay möglich bleibt.
+
+9. **Kein Sidecar, kein MCP, kein Prompt-Worker darf implizit in Richtung Ausführungsautorität driften**.
+   Die einzige bindende Entscheidungsautorität verbleibt im deterministischen Core.
+
+10. **Die weitere Ausarbeitung hat ab hier contract-first zu erfolgen**.
+    Nächste Artefakte sind deshalb nicht neue freie Prompttexte, sondern:
+
+    * shared schema definitions
+    * workflow input/output schemas
+    * handoff schemas
+    * alert schemas
+    * policy schemas
+    * runtime state transition schemas
+
+## Abschlusssatz
+
+Die Architektur ist ab jetzt als **strategisch gefiltertes Discovery-System mit opt-in Early-Hunt-Layer und nicht-autoritativem State-Transition-Monitoring** zu behandeln — nicht als einzelner Meta-Prompt, sondern als klar geschichtetes, vertragsgetriebenes Workflow-System.

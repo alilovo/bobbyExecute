@@ -1,0 +1,1060 @@
+# Forensics Update Map v1 — High-Detailed Spec
+
+## Status
+
+Draft for architecture alignment, implementation planning, and workflow integration.
+
+## Purpose
+
+Dieses Dokument definiert die Zielarchitektur, die Datenverträge, die Pipeline-Phasen, die Handoffs, die Scoring-Logik und die Implementierungsreihenfolge für eine erweiterte **Onchain Forensics Engine**.
+
+Die Forensics Engine soll **kein eigener autoritativer Strategy-Bot** sein, sondern eine **Shared Onchain Forensics Evidence Plane**, die drei Workflows strukturiert versorgt:
+
+1. **Meta Fetch Engine** — strategischer Layer
+2. **Low Cap Hunter** — opportunistischer Layer
+3. **Shadow Intelligence** — Monitoring-Layer
+
+---
+
+# 1. Executive Summary
+
+## 1.1 Core Positioning
+
+Die bestehende Codebasis ist bereits stark in:
+
+* launch detection
+* deployer risk
+* bundler / coordination fingerprints
+* token-extension / authority risk
+* migration tracking
+* outcome labeling
+* post-rug tracing
+
+Sie ist aber noch nicht vollständig als allgemeine Onchain Intelligence Plane verdrahtet.
+
+Die stärkste Zielarchitektur ist deshalb:
+
+* **Meta / X / Narrative Layer**
+* **Onchain Forensics Evidence Plane**
+* **Workflow Orchestration**
+
+  * Meta Fetch Engine
+  * Low Cap Hunter
+  * Shadow Intelligence
+* **Deterministic Core** als einzige autoritative Decision-/Execution-Schicht
+
+## 1.2 Main Upgrade Goal
+
+Die Forensics-Codebasis soll von einer überwiegend launch-/rug-orientierten Analyse in eine **shared, replayable, contract-first evidence plane** überführt werden.
+
+## 1.3 Hard Constraints
+
+* keine LLM-Authority
+* keine MCP-Authority
+* keine Sidecar-Authority
+* kein zweiter Decision-Truth-Pfad
+* fail-closed
+* journal-first
+* replay-capable
+* provenance-required
+* deterministic core remains authority shell
+
+---
+
+# 2. System Boundaries
+
+## 2.1 In Scope
+
+* onchain launch intake
+* deployer provenance
+* bundler / coordination toxicity
+* token structural risk
+* holder / distribution quality
+* LP / liquidity integrity
+* migration behavior
+* post-rug tracing
+* replay evidence packaging
+* workflow handoffs into Meta Fetch, Low Cap Hunter, Shadow Intelligence
+
+## 2.2 Out of Scope
+
+* autonomous execution authority
+* trade authorization
+* deterministic risk override
+* signer control
+* policy authority
+* MCP tool authority
+* broad social scraping platform design
+
+---
+
+# 3. Architectural Role of Onchain Forensics
+
+## 3.1 Role Definition
+
+Onchain Forensics is a:
+
+**shared evidence substrate**
+
+not a:
+
+* standalone alpha brain
+* execution controller
+* replacement for Meta Fetch
+* replacement for Low Cap Hunter
+* replacement for Shadow Intelligence
+
+## 3.2 Consumer Mapping
+
+### Meta Fetch Engine consumes
+
+* deployer identity
+* wallet integrity
+* holder distribution
+* contract risk
+* liquidity integrity
+* venue state
+* attention validation
+* invalid pattern fingerprints
+
+### Low Cap Hunter consumes
+
+* bundler dominance
+* reserve-aware buys
+* funding fanout
+* same-slot bundle
+* wallet toxicity
+* early liquidity path
+* bonding state
+* deployer risk
+* validated attention signal
+
+### Shadow Intelligence consumes
+
+* migration sell behavior
+* coordinated exit onset
+* wash trade onset
+* attention resurgence
+* wallet-quality change
+* second-leg credibility
+* decay-before-failure signals
+
+---
+
+# 4. Current-State Mapping
+
+## 4.1 Existing Intake Surfaces
+
+* PumpFun listener
+* Raydium listener
+* Migration listener
+* Deployer alert fast path
+* queueing layer
+* dashboard / telegram / downstream alerting
+
+## 4.2 Existing Active Core
+
+Currently strong and wired:
+
+* deployer analysis
+* bundler analysis
+* token extension / authority risk
+* migration analysis
+* outcome tracking
+* post-rug tracing
+* retraining path
+
+## 4.3 Existing but Not Fully Wired as First-Class Scores
+
+* holder scoring
+* LP scoring
+* social scoring
+
+## 4.4 Truth Statement
+
+The current codebase is best described as:
+
+**launch forensics + rug fingerprinting + migration / outcome / tracing engine**
+
+not yet as:
+
+**full-spectrum shared onchain intelligence plane**
+
+---
+
+# 5. Target Architecture
+
+## 5.1 Target Positioning
+
+The forensics layer becomes:
+
+**Onchain Forensics Evidence Plane**
+
+feeding:
+
+* Meta Fetch strategic ranking
+* Low Cap Hunter early-entry filtering
+* Shadow Intelligence state monitoring
+
+## 5.2 Target Architecture Diagram
+
+```mermaid
+flowchart TD
+    A[Launch Surfaces\npump.fun / Raydium / Migration] --> B[Launch Intake Normalization]
+    B --> C[Identity & Provenance]
+    B --> D[Launch Toxicity]
+    B --> E[Structural Token Risk]
+    B --> F[Holder & Liquidity State]
+    B --> G[Attention Validation]
+    C --> H[Shared Onchain Forensics Evidence Plane]
+    D --> H
+    E --> H
+    F --> H
+    G --> H
+    H --> I[Meta Fetch Engine]
+    H --> J[Low Cap Hunter]
+    H --> K[Shadow Intelligence]
+    I --> L[Deterministic Core]
+    J --> L
+    K --> L
+    L --> M[Journal / Replay / Runtime Cycle Summary]
+```
+
+## 5.3 Authority Diagram
+
+```mermaid
+flowchart LR
+    A[Meta Fetch] --> D[Deterministic Core]
+    B[Low Cap Hunter] --> D
+    C[Shadow Intelligence] --> D
+    E[Forensics Evidence Plane] --> A
+    E --> B
+    E --> C
+
+    style D stroke-width:4px
+```
+
+Interpretation:
+
+* Forensics feeds the three workflows
+* the three workflows may inform deterministic logic
+* only the deterministic core remains authoritative
+
+---
+
+# 6. Pipeline Spec
+
+## 6.1 Phase 0 — Launch Intake
+
+### Purpose
+
+Normalize raw launch events into a single launch-observation contract.
+
+### Inputs
+
+* pump.fun launch events
+* Raydium launch events
+* migration events
+
+### Outputs
+
+* `LaunchSurfaceObservation`
+* `VenueStateSnapshot`
+
+### Required normalized fields
+
+* token_name
+* ticker
+* contract_address
+* deployer_wallet
+* venue
+* launch_age_seconds
+* market_cap
+* source_timestamp
+* raw_source_refs
+
+---
+
+## 6.2 Phase 1 — Identity & Provenance
+
+### Purpose
+
+Infer deployer identity, funding origin, and early operator graph.
+
+### Outputs
+
+* `DeployerIdentityProfile`
+* `FundingOriginProfile`
+* `OperatorClusterHints`
+
+### Required logic
+
+* deployer launch history
+* repeated symbol / motif reuse
+* exchange touchpoints
+* related wallets
+* prior outcomes
+* suspicious recurrence patterns
+
+---
+
+## 6.3 Phase 2 — Launch Toxicity
+
+### Purpose
+
+Detect early toxicity and coordination signals.
+
+### Outputs
+
+* `LaunchToxicityProfile`
+* `BundlerFingerprintSet`
+* `WalletCoordinationProfile`
+
+### Required detectors
+
+* funding fanout
+* same-slot bundle
+* reserve-aware buys
+* wash trades
+* coordinated exit
+* recovery sweep
+
+### Required verdicts
+
+* clean
+* watch
+* toxic
+* invalid
+
+---
+
+## 6.4 Phase 3 — Structural Token Risk
+
+### Purpose
+
+Assess token-level contract and authority risk.
+
+### Outputs
+
+* `ContractRiskProfile`
+* `AuthorityRiskProfile`
+* `ExtensionRiskProfile`
+
+### Required checks
+
+* mint authority
+* freeze authority
+* token-2022 extensions
+* transfer fee
+* delegate features
+* non-transferable flags
+* repeated copycat risk
+
+---
+
+## 6.5 Phase 4 — Market Structure & Holder State
+
+### Purpose
+
+Assess distribution quality, insider skew, and liquidity integrity.
+
+### Outputs
+
+* `HolderStructureProfile`
+* `LiquidityIntegrityProfile`
+* `DistributionQualityProfile`
+
+### Required checks
+
+#### Holder state
+
+* top 10 concentration
+* top 20 concentration
+* deployer-linked share
+* insider cluster share
+* free float quality
+* whale asymmetry risk
+
+#### Liquidity state
+
+* LP present
+* LP burned
+* LP locked
+* LP unlock time
+* withdrawable LP risk
+* liquidity depth quality
+* liquidity cliff risk
+
+---
+
+## 6.6 Phase 5 — Post-Launch State Change
+
+### Purpose
+
+Detect state changes after discovery.
+
+### Outputs
+
+* `StateTransitionProfile`
+* `MigrationBehaviorProfile`
+* `TrendChangeProfile`
+
+### Required detections
+
+* trend reversal
+* base reclaim
+* second-leg reacceleration
+* breakout from base
+* migration sell emergence
+* wallet-quality shift
+* attention resurgence
+* decay before failure
+
+---
+
+## 6.7 Phase 6 — Outcome / Replay / Learning
+
+### Purpose
+
+Label outcomes, trace funds, package evidence, and feed learning systems.
+
+### Outputs
+
+* `OutcomeLabel`
+* `PostRugTraceProfile`
+* `ReplayEvidencePackage`
+* `BadActorRefreshSignals`
+
+### Required functions
+
+* 1h / 6h / 24h labeling
+* survivor vs rug outcome classification
+* post-rug tracing
+* replay package generation
+* retraining feed preparation
+
+---
+
+# 7. Data Contracts
+
+## 7.1 LaunchSurfaceObservation
+
+```yaml
+LaunchSurfaceObservation:
+  token_name: string
+  ticker: string
+  contract_address: string
+  deployer_wallet: string
+  venue: enum[pump_fun, raydium, migration]
+  launch_age_seconds: integer
+  market_cap: number
+  bonding_state: string
+  source_timestamp: string
+  raw_source_refs: array
+```
+
+## 7.2 DeployerIdentityProfile
+
+```yaml
+DeployerIdentityProfile:
+  deployer_wallet: string
+  deployer_age: integer
+  prior_launch_count: integer
+  known_outcome_distribution: object
+  repeat_symbol_or_motif_hits: array
+  linked_wallet_clusters: array
+  exchange_touchpoints: array
+  risk_level: enum[clean, watch, toxic]
+  evidence_refs: array
+```
+
+## 7.3 LaunchToxicityProfile
+
+```yaml
+LaunchToxicityProfile:
+  bundler_dominance_score: number
+  funding_fanout_score: number
+  same_slot_bundle_score: number
+  reserve_aware_buy_score: number
+  wash_trade_score: number
+  coordinated_exit_risk: number
+  recovery_sweep_risk: number
+  toxicity_verdict: enum[clean, watch, toxic, invalid]
+  evidence_refs: array
+```
+
+## 7.4 ContractRiskProfile
+
+```yaml
+ContractRiskProfile:
+  mint_authority_present: boolean
+  freeze_authority_present: boolean
+  token_2022_extensions: array
+  transfer_fee_flag: boolean
+  delegate_flag: boolean
+  non_transferable_flag: boolean
+  copycat_symbol_risk: number
+  contract_risk_verdict: enum[clean, watch, toxic]
+  evidence_refs: array
+```
+
+## 7.5 HolderStructureProfile
+
+```yaml
+HolderStructureProfile:
+  top_10_concentration: number
+  top_20_concentration: number
+  deployer_linked_share: number
+  insider_cluster_share: number
+  free_float_quality: enum[healthy, fragile, skewed]
+  distribution_verdict: enum[healthy, concentrated, insider_skewed]
+  evidence_refs: array
+```
+
+## 7.6 LiquidityIntegrityProfile
+
+```yaml
+LiquidityIntegrityProfile:
+  lp_present: boolean
+  lp_burned: boolean
+  lp_locked: boolean
+  lp_unlock_time: string
+  withdrawable_lp_risk: boolean
+  liquidity_depth_quality: enum[healthy, thin, fragile]
+  liquidity_cliff_risk: boolean
+  liquidity_verdict: enum[healthy, fragile, trap_risk]
+  evidence_refs: array
+```
+
+## 7.7 AttentionValidationProfile
+
+```yaml
+AttentionValidationProfile:
+  ca_propagation_speed: number
+  account_age_quality: enum[strong, mixed, weak]
+  single_source_shill_risk: number
+  organic_spread_score: number
+  creator_community_flywheel_score: number
+  proof_of_life_score: number
+  attention_verdict: enum[organic, unclear, synthetic]
+  evidence_refs: array
+```
+
+## 7.8 VenueStateSnapshot
+
+```yaml
+VenueStateSnapshot:
+  venue: string
+  bonding_state: enum[
+    pre_bonding,
+    bonding_active,
+    bonding_near_completion,
+    migrated_to_raydium,
+    post_migration_distribution_phase,
+    post_migration_exit_risk_phase
+  ]
+  migration_state: string
+  state_timestamp: string
+  state_confidence: number
+  evidence_refs: array
+```
+
+## 7.9 StateTransitionProfile
+
+```yaml
+StateTransitionProfile:
+  baseline_state: object
+  current_state: object
+  structure_shift: string
+  flow_shift: string
+  attention_shift: string
+  transition_type: enum[
+    reversal,
+    reacceleration,
+    breakout,
+    reclaim,
+    decay,
+    failure_onset
+  ]
+  transition_confidence: number
+  evidence_refs: array
+```
+
+## 7.10 ReplayEvidencePackage
+
+```yaml
+ReplayEvidencePackage:
+  token_identity: object
+  launch_snapshot: object
+  forensic_profiles: object
+  raw_detector_hits: object
+  wallet_graph_notes: array
+  venue_state_timeline: array
+  migration_notes: array
+  outcome_label: string
+  post_rug_trace_summary: object
+  evidence_refs: array
+  payload_hash: string
+```
+
+---
+
+# 8. Shared Normalized Output Layer
+
+Every token-level forensic output should normalize at least these fields:
+
+```yaml
+normalized_forensic_output:
+  token_name: string
+  ticker: string
+  contract_address: string
+  venue: string
+  launch_age: integer
+  market_cap: number
+  bonding_state: string
+  meta_cluster: string
+  attention_type: string
+  wallet_quality_state: string
+  structure_state: string
+  liquidity_state: string
+  deployer_risk_state: string
+  failure_modes: array
+  risk_flags: array
+  verdict: string
+  evidence_refs: array
+```
+
+---
+
+# 9. Workflow Integration Spec
+
+## 9.1 Meta Fetch Engine Integration
+
+### Purpose
+
+Use forensic outputs for deep strategic validation.
+
+### Consumes
+
+* deployer risk
+* wallet integrity
+* holder structure
+* liquidity integrity
+* attention validation
+* venue state
+* failure modes
+
+### Produces
+
+* meta snapshot
+* ranked watchlist
+* invalid-pattern library
+* strategic keep/watch/reject outcomes
+
+### Required handoff fields
+
+* `wallet_integrity`
+* `structure_quality`
+* `holder_distribution`
+* `liquidity_state`
+* `attention_quality`
+* `risk_flags`
+* `watchlist_candidate`
+
+---
+
+## 9.2 Low Cap Hunter Integration
+
+### Purpose
+
+Use forensic outputs as early-entry toxicity and asymmetry filter.
+
+### Consumes
+
+* bundler dominance
+* funding fanout
+* same-slot bundle
+* reserve-aware buys
+* deployer risk
+* liquidity path quality
+* bonding state
+* validated attention signal
+
+### Produces
+
+* quick-flip candidate / reject
+* fast reject reasons
+* early asymmetry quality
+
+### Required handoff fields
+
+* `bundler_dominance_score`
+* `wallet_toxicity_state`
+* `pre_bonding_or_early_bonding_state`
+* `liquidity_path_quality`
+* `validated_attention_signal`
+* `quick_flip_reject_reasons`
+
+---
+
+## 9.3 Shadow Intelligence Integration
+
+### Purpose
+
+Use forensic deltas to detect meaningful post-discovery state transitions.
+
+### Consumes
+
+* migration behavior
+* coordinated exit onset
+* wash trade onset
+* wallet-quality changes
+* attention resurgence
+* second-leg credibility
+* decay-before-failure
+
+### Produces
+
+* state-change alerts
+* reprioritization signals
+* monitor / escalate / deprioritize outputs
+
+### Required handoff fields
+
+* `trend_reversal_signal`
+* `second_leg_reacceleration_signal`
+* `breakout_or_reclaim_signal`
+* `wallet_quality_shift`
+* `attention_resurgence_signal`
+* `decay_before_failure_signal`
+
+---
+
+# 10. Scoring and Verdict Logic
+
+## 10.1 Forensic Dimension Set
+
+* deployer_risk
+* bundler_toxicity
+* contract_risk
+* holder_distribution
+* liquidity_integrity
+* attention_quality
+* state_change_quality
+
+## 10.2 Hard Reject Conditions
+
+A token should hard reject if any of the following cross configured fail thresholds:
+
+* extreme bundler dominance
+* same-slot bundle at hard-fail level
+* unsafe freeze/mint authority combination
+* withdrawable LP risk without mitigation
+* severe deployer-linked holder concentration
+* confirmed recovery sweep after known failure outcome
+
+## 10.3 Soft Watch Conditions
+
+A token can remain watch-only if:
+
+* attention is unclear but structure is strong
+* concentration is elevated but no exit behavior exists
+* migration behavior is uncertain but not toxic
+* state change exists with subcritical confidence
+
+## 10.4 Decision Posture
+
+Forensics does **not** authorize execution. It emits:
+
+* clean
+* watch
+* toxic
+* invalid
+* post_rug
+* monitor_for_reversal
+
+---
+
+# 11. Evidence, Replay, and Provenance
+
+## 11.1 Required Principles
+
+* journal-first
+* provenance-required
+* replay-capable
+* contract-first
+
+## 11.2 Every high-signal forensic judgment must preserve
+
+* raw detector hits
+* evidence refs
+* payload hash
+* timestamped state
+* venue state
+* wallet graph notes if available
+
+## 11.3 Replay package required for
+
+* rugs
+* high-confidence toxicity verdicts
+* bad-actor recurrence updates
+* Shadow transition escalations
+
+---
+
+# 12. Missing Modules to Add
+
+## 12.1 Priority P1 — activate now
+
+### Holder Concentration Analyzer
+
+Purpose:
+
+* populate real holder/distribution outputs
+
+### LP / Liquidity Integrity Analyzer
+
+Purpose:
+
+* populate real LP and liquidity-state outputs
+
+### Social / Attention Validator
+
+Purpose:
+
+* convert “social” from placeholder to validated intelligence dimension
+
+---
+
+## 12.2 Priority P2 — add next
+
+### Venue State Machine Normalizer
+
+Purpose:
+
+* unify pump.fun / Raydium / migration lifecycle into one state contract
+
+### Wallet Identity Graph Layer
+
+Purpose:
+
+* unify deployer / funder / bundler / recovery / exchange graph
+
+### Replay Evidence Packager
+
+Purpose:
+
+* standardize replay packages for operators and learning loops
+
+---
+
+## 12.3 Priority P3 — later refinement
+
+* clone / motif recurrence detector
+* operator network memory
+* advanced attention resurgence modeling
+* refined post-rug recurrence linking
+
+---
+
+# 13. Implementation Plan
+
+## Phase 1
+
+### Wire missing active analyzers
+
+Deliverables:
+
+* holder concentration analyzer
+* liquidity integrity analyzer
+* social attention validator
+
+Definition of done:
+
+* outputs are actually produced in pipeline results
+* DB / dashboard / alert schemas reflect real values
+* fail-closed behavior exists for missing critical forensic inputs
+
+## Phase 2
+
+### Normalize outputs into shared forensic contract
+
+Deliverables:
+
+* wallet_quality_state
+* structure_state
+* liquidity_state
+* bonding_state
+* attention_type
+* failure_modes
+* risk_flags
+* replay package contract
+
+Definition of done:
+
+* all active analyzers emit unified shapes
+* workflow consumers no longer depend on analyzer-specific raw shapes
+
+## Phase 3
+
+### Route evidence into workflows
+
+Deliverables:
+
+* Meta Fetch deep-validation inputs wired
+* Low Cap Hunter toxicity/entry filter wired
+* Shadow Intelligence monitoring baseline wired
+
+Definition of done:
+
+* workflow outputs explicitly reference forensic inputs
+* handoff payloads are stable and replayable
+
+## Phase 4
+
+### Add venue state machine and wallet identity graph
+
+Definition of done:
+
+* venue lifecycle states queryable
+* operator graph queryable
+* deployer/funder/bundler/recovery relationships unified
+
+## Phase 5
+
+### Complete replay / learning loop
+
+Definition of done:
+
+* replay evidence package exists for flagged tokens
+* outcome feedback refreshes bad-actor memory
+* retraining consumes normalized evidence
+
+---
+
+# 14. Success Metrics
+
+## Meta Fetch metrics
+
+* watchlist precision
+* fake-runner reduction
+* regime-call accuracy
+* ranked candidate quality
+
+## Low Cap Hunter metrics
+
+* early candidate precision
+* entry earliness
+* 2x–10x capture rate
+* toxicity false-positive rate
+
+## Shadow Intelligence metrics
+
+* reversal detection lead time
+* breakout detection lead time
+* false reacceleration rate
+* reprioritization quality
+
+## Forensics-plane metrics
+
+* bundler detection precision
+* deployer bad-actor recall
+* post-rug trace completion rate
+* holder/lp/attention coverage rate
+* replay package completeness
+
+## System-level metrics
+
+* wallet liquidity growth support
+* cross-workflow signal consistency
+* operator actionability
+* replayability
+
+---
+
+# 15. Acceptance Criteria
+
+## Minimum viable update
+
+* holder, LP, and attention analyzers are truly active
+* unified forensic contract exists
+* Meta Fetch consumes forensic deep validation
+* Low Cap Hunter consumes forensic early-toxicity and bonding-state evidence
+* Shadow Intelligence consumes forensic state-transition evidence
+* replay package exists for flagged tokens
+
+## Must not break
+
+* deterministic core authority boundary
+* journal-first posture
+* fail-closed behavior
+* canonical decision truth location
+
+## Explicit non-goals
+
+* turning forensics into an execution authority
+* granting MCP or sidecars any trade authority
+* replacing deterministic core with forensic heuristics
+
+---
+
+# 16. Architecture Flow Summary
+
+## High-Level Logic Flow
+
+```mermaid
+flowchart TD
+    A[Launch Intake] --> B[Identity & Provenance]
+    A --> C[Launch Toxicity]
+    A --> D[Structural Token Risk]
+    A --> E[Holder & Liquidity State]
+    A --> F[Attention Validation]
+    B --> G[Shared Forensics Contract]
+    C --> G
+    D --> G
+    E --> G
+    F --> G
+    G --> H[Meta Fetch Engine]
+    G --> I[Low Cap Hunter]
+    G --> J[Shadow Intelligence]
+    H --> K[Strategic Watchlist]
+    I --> L[Early Quick-Flip Funnel]
+    J --> M[State-Change Monitoring]
+    K --> N[Deterministic Core]
+    L --> N
+    M --> N
+    N --> O[Journal / Replay / Decision History]
+```
+
+## Behavioral Summary
+
+* **Meta Fetch** decides what matters strategically
+* **Low Cap Hunter** decides what is early and exploitable
+* **Shadow Intelligence** detects when tracked tokens materially change state
+* **Forensics** feeds all three, but authorizes none of them
+* **Deterministic Core** remains the only authority shell
+
+---
+
+# 17. Closing Instruction
+
+## Required closing instruction for implementation use
+
+Any implementation based on this spec must follow this order:
+
+1. **Do not redesign authority boundaries**
+2. **Wire the missing analyzers first**
+3. **Normalize outputs into one shared forensic contract**
+4. **Route those outputs explicitly into Meta Fetch, Low Cap Hunter, and Shadow Intelligence**
+5. **Package replay evidence for flagged tokens**
+6. **Keep all outputs non-authoritative outside the deterministic core**
+7. **Reject any implementation that widens MCP or sidecar authority**
+8. **Reject any implementation that creates a second decision-truth path**
+9. **Prefer fail-closed behavior when forensic inputs are missing, invalid, or contradictory**
+10. **Treat this document as an architecture-and-logic-flow contract, not as optional guidance**
+
+## Final rule
+
+If there is a conflict between convenience and architecture truth:
+
+**architecture truth wins**.

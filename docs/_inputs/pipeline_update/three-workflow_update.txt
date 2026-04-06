@@ -1,0 +1,268 @@
+{
+  "spec_version": "0.2.0",
+  "spec_name": "three_workflow_orchestration_resolved",
+  "inherits_from": "three_workflow_orchestration_spec@0.1.0",
+  "resolution_status": "resolved_from_user_answers",
+  "system_posture": {
+    "design_statement": "Meta Fetch = strategic truth layer, Low Cap Hunter = opportunistic opt-in layer, Shadow Intelligence = post-discovery monitoring layer",
+    "workflow_priority_order": [
+      "meta_fetch_engine",
+      "shadow_intelligence",
+      "low_cap_hunter"
+    ],
+    "system_goal": "understand first, monitor second, monetize third",
+    "system_success_definition": "replayable alpha machine with separated roles and deterministic authority boundaries"
+  },
+  "authority_and_activation": {
+    "deterministic_core_authority_only": true,
+    "meta_fetch_engine_authority_class": "non_authoritative_strategic_truth_layer",
+    "low_cap_hunter_authority_class": "non_authoritative_opportunistic_opt_in_layer",
+    "shadow_intelligence_authority_class": "non_authoritative_post_discovery_monitoring_layer",
+    "low_cap_hunter_default_state": "sleeping",
+    "low_cap_hunter_activation_policy": {
+      "requires_user_enable": true,
+      "self_activation_allowed": false
+    }
+  },
+  "resolved_workflow_intent": {
+    "meta_fetch_engine": {
+      "primary_intent": "produce regime-aware meta truth, invalid-pattern library, and watchlist priors",
+      "operating_mode": "strategic_context_and_funnel_control",
+      "must_control_funnel_admission": true
+    },
+    "low_cap_hunter": {
+      "primary_intent": "find very-early tradable launched tokens with asymmetric quick-flip potential",
+      "operating_mode": "opt-in opportunistic discovery",
+      "optimization_priority": [
+        "capital_preserving_compounding",
+        "sufficient_earliness",
+        "speed"
+      ]
+    },
+    "shadow_intelligence": {
+      "primary_intent": "monitor watchlist and discovered candidates for state transitions over time",
+      "operating_mode": "fusion_watcher",
+      "state_change_engine": true
+    }
+  },
+  "handoff_governance": {
+    "meta_fetch_controls_funnel": true,
+    "handoff_policy": {
+      "meta_fetch_to_watchlist": {
+        "admission_requirements": [
+          "assignable_to_active_or_emerging_meta_cluster",
+          "not_in_fast_rejection_bucket",
+          "sufficient_substance_for_watch_or_keep",
+          "present_in_meta_context_package_as_watchlist_candidate_or_ranked_candidate"
+        ],
+        "resulting_statuses": [
+          "watchlist_candidate",
+          "ranked_candidate"
+        ]
+      },
+      "watchlist_to_low_cap_hunter": {
+        "requires_all": [
+          "low_cap_hunter_enabled_by_user",
+          "market_phase_supports_early_quick_flips",
+          "token_in_target_zone_around_10k_mcap",
+          "token_is_pre_bonding_or_very_early_bonding",
+          "timing_asymmetry_is_positive",
+          "bonding_state_advantage_present",
+          "liquidity_path_is_sufficient",
+          "toxicity_filter_passed"
+        ],
+        "resulting_statuses": [
+          "low_cap_hunt_relevant",
+          "quick_flip_candidate"
+        ]
+      },
+      "watchlist_to_shadow_intelligence": {
+        "default_monitoring_enabled": true,
+        "admission_requirements_any_of": [
+          "token_is_watchlist_candidate",
+          "token_is_ranked_candidate",
+          "token_has_second_leg_hypothesis",
+          "token_has_breakout_hypothesis",
+          "token_has_reversal_hypothesis",
+          "token_arrives_from_low_cap_hunter_as_quick_flip_candidate",
+          "token_arrives_from_low_cap_hunter_as_post_discovery_monitoring_seed"
+        ]
+      }
+    }
+  },
+  "candidate_taxonomy_resolved": {
+    "meta_candidate_definition": {
+      "description": "interesting and worth observing",
+      "requires_all": [
+        "fits_active_cultural_or_narrative_regime",
+        "shows_organic_or_plausible_propagation",
+        "is_semantically_transportable",
+        "does_not_fail_obvious_failure_modes"
+      ],
+      "failure_modes_to_exclude": [
+        "empty_novelty",
+        "price_only_narrative",
+        "bundler_dominance",
+        "structure_failure"
+      ]
+    },
+    "low_cap_huntable_definition": {
+      "description": "early, tradable, asymmetric, and non-toxic",
+      "requires_all": [
+        "extremely_early_phase",
+        "around_10k_base_mcap",
+        "pre_bonding_or_very_early_bonding",
+        "sufficient_liquidity_path",
+        "validated_wallet_behavior",
+        "no_toxic_bundler_or_insider_structure",
+        "fast_and_credible_ca_or_attention_propagation",
+        "clear_time_asymmetry_for_2x_to_10x"
+      ]
+    }
+  },
+  "low_cap_hunter_policy": {
+    "objective_mode": "compounding_first",
+    "selection_bias": "selective_early_compounding",
+    "anti_goal": "maximal_earliness_at_any_cost",
+    "ranking_logic": {
+      "preferred_outcome": "fewer_cleaner_entries",
+      "deprioritize": [
+        "toxic_false_alarm_volume",
+        "hyper_aggressive_earliness_without_flow_quality",
+        "late_entries_disguised_as_early"
+      ]
+    },
+    "quick_flip_candidate_classes": [
+      "priority_quick_flip_candidate",
+      "early_but_incomplete",
+      "invalid_due_to_toxicity",
+      "too_late",
+      "sleeping_no_scan"
+    ]
+  },
+  "attention_economy_policy": {
+    "meta_fetch_role": "core_analysis_dimension",
+    "low_cap_hunter_role": [
+      "early_indicator",
+      "ranking_factor",
+      "validation_factor"
+    ],
+    "attention_alone_is_sufficient": false,
+    "resolution_rules": [
+      {
+        "if": "onchain_strong_and_attention_strong",
+        "then": "best_quick_flip_candidate"
+      },
+      {
+        "if": "onchain_strong_and_attention_weak",
+        "then": "early_but_incomplete"
+      },
+      {
+        "if": "attention_strong_and_onchain_weak_or_toxic",
+        "then": "reject"
+      },
+      {
+        "if": "no_social_transportability",
+        "then": "deprioritize_by_default"
+      }
+    ],
+    "default_interpretation": "attention_is_important_but_subordinate_to_onchain_validity"
+  },
+  "shadow_intelligence_policy": {
+    "primary_mode": "fusion_watcher",
+    "sub_modes": [
+      "structure_watcher",
+      "flow_watcher",
+      "attention_watcher"
+    ],
+    "core_detection_targets": [
+      "trend_reversal_from_weakness_to_strength",
+      "base_reclaim",
+      "second_leg_reacceleration",
+      "breakout_from_consolidation",
+      "wallet_quality_shift",
+      "attention_resurgence",
+      "decay_before_failure"
+    ],
+    "shadow_unique_value": "detect state transitions that a single snapshot cannot capture"
+  },
+  "metric_policy": {
+    "meta_fetch_success": [
+      "watchlist_precision",
+      "fake_runner_reduction",
+      "regime_call_accuracy",
+      "ranking_quality"
+    ],
+    "low_cap_hunter_success": [
+      "early_candidate_precision",
+      "entry_earliness_without_toxicity",
+      "2x_to_10x_capture_rate",
+      "capital_preserving_compounding_support"
+    ],
+    "shadow_intelligence_success": [
+      "reversal_detection_lead_time",
+      "breakout_detection_lead_time",
+      "reacceleration_quality",
+      "watchlist_reprioritization_quality"
+    ],
+    "system_level_success": [
+      "better_watchlist_quality",
+      "better_early_entries",
+      "better_reentry_and_second_leg_detection",
+      "replayability",
+      "operator_actionability",
+      "wallet_liquidity_growth_support"
+    ]
+  },
+  "resolved_seven_questions": [
+    {
+      "question_id": 1,
+      "topic": "workflow_priority",
+      "resolved_value": [
+        "meta_fetch_engine",
+        "shadow_intelligence",
+        "low_cap_hunter"
+      ]
+    },
+    {
+      "question_id": 2,
+      "topic": "handoff_logic",
+      "resolved_value": "meta_fetch_controls_funnel_and_admission"
+    },
+    {
+      "question_id": 3,
+      "topic": "meta_candidate_vs_trade_candidate",
+      "resolved_value": "meta_relevant_means_interesting_and_observable; low_cap_huntable_means_early_tradable_asymmetric_non_toxic"
+    },
+    {
+      "question_id": 4,
+      "topic": "hunter_optimization_target",
+      "resolved_value": "compounding_first_then_earliness_then_speed"
+    },
+    {
+      "question_id": 5,
+      "topic": "role_of_attention_economy",
+      "resolved_value": "important_validator_and_ranker_but_never_sufficient_alone"
+    },
+    {
+      "question_id": 6,
+      "topic": "shadow_intelligence_scope",
+      "resolved_value": "fusion_watcher_for_state_changes"
+    },
+    {
+      "question_id": 7,
+      "topic": "success_definition",
+      "resolved_value": "three workflows form a replayable alpha machine with separated roles"
+    }
+  },
+  "implementation_notes": {
+    "recommended_next_artifacts": [
+      "json_schema_for_all_three_workflows",
+      "handoff_contract_schema",
+      "candidate_status_enum_schema",
+      "alert_event_schema_for_shadow_intelligence",
+      "policy_guardrails_for_low_cap_hunter_activation"
+    ],
+    "compatibility_note": "this overlay is intended to patch unresolved parameters in spec v0.1 without changing deterministic authority boundaries"
+  }
+}

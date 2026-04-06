@@ -1,0 +1,683 @@
+spec_version: "1.0.0"
+spec_name: "forensics_update_map_v1"
+spec_kind: "machine_readable_architecture_and_pipeline_spec"
+generated_from:
+  - "Forensics-main.zip codebase analysis"
+  - "workflow-update.txt"
+  - "three_workflow_orchestration_spec"
+owner_intent:
+  primary_goal: "upgrade onchain forensics into a shared evidence plane for Meta Fetch, Low Cap Hunter, and Shadow Intelligence"
+  non_goals:
+    - "no authority transfer away from deterministic core"
+    - "no MCP authority"
+    - "no sidecar authority"
+    - "no speculative live execution logic"
+  design_bias:
+    - "contract_first"
+    - "fail_closed"
+    - "journal_first"
+    - "replay_capable"
+    - "provenance_required"
+
+system_context:
+  parent_system: "meta_fetch_stack"
+  workflow_order:
+    - "meta_fetch_engine"
+    - "low_cap_hunter"
+    - "shadow_intelligence"
+  authority_constraints:
+    deterministic_core_authority_only: true
+    llm_authority_allowed: false
+    mcp_authoritative: false
+    sidecar_authoritative: false
+    canonical_decision_truth: "runtime_cycle_summary_decision_envelope"
+
+forensics_current_state:
+  summary: "launch-forensics and rug-fingerprint engine with partial scoring structure and strong post-launch tracing, but not yet a complete shared onchain intelligence plane"
+  active_intake_surfaces:
+    listeners:
+      - "pump_fun_listener"
+      - "raydium_listener"
+      - "migration_listener"
+    support_surfaces:
+      - "deployer_alert_network"
+      - "analysis_queue"
+      - "telegram_alerts"
+      - "dashboard"
+      - "sniper_bridge"
+      - "mcap_milestone_tracker"
+  active_core_pipeline:
+    source_file: "src/pipeline.py"
+    active_phases:
+      - "deployer_analysis"
+      - "bundler_analysis"
+      - "token_extension_risk"
+      - "optional_ml_overlay"
+      - "persist_alert_dashboard_dispatch"
+    partially_modeled_but_not_fully_wired:
+      - "holder_scoring"
+      - "lp_scoring"
+      - "social_scoring"
+  strongest_existing_forensics:
+    source_file: "src/analyzers/bundler_orchestrator.py"
+    detectors:
+      - "funding_fanout"
+      - "same_slot_bundle"
+      - "reserve_aware_buys"
+      - "wash_trades"
+      - "coordinated_exit"
+      - "recovery_sweep"
+  downstream_intelligence:
+    - "migration_analyzer"
+    - "outcome_tracker"
+    - "post_rug_tracker"
+    - "auto_retrainer"
+  current_truth_statement:
+    description: "the codebase is stronger than a basic rug scanner, but weaker than a full-spectrum onchain intelligence engine"
+    accurate_positioning: "3 active core risk dimensions plus bundler suite plus outcome/post-rug subsystems"
+
+forensics_role_in_target_architecture:
+  role_name: "shared_onchain_forensics_evidence_plane"
+  role_type: "shared_evidence_substrate"
+  consumed_by:
+    - "meta_fetch_engine"
+    - "low_cap_hunter"
+    - "shadow_intelligence"
+  not_a_separate_primary_workflow: true
+  rationale:
+    - "meta fetch needs wallet/structure/liquidity/venue evidence"
+    - "low cap hunter needs early toxicity and bonding-state evidence"
+    - "shadow intelligence needs state-change and decay/reacceleration evidence"
+
+architectural_mapping:
+  already_included_pipeline:
+    - phase_id: "intake.launch_surface"
+      description: "pump.fun, raydium, migration intake and normalization"
+    - phase_id: "alert.deployer_fast_path"
+      description: "fast deployer alert network and queueing"
+    - phase_id: "forensics.core"
+      description: "deployer risk, bundler fingerprints, token extension risk"
+    - phase_id: "ops.persistence_dispatch"
+      description: "persist, alert, dashboard, telegram, downstream actions"
+    - phase_id: "monitor.migration"
+      description: "migration behavior and sell detection"
+    - phase_id: "label.outcome"
+      description: "rug/survivor labeling"
+    - phase_id: "trace.post_rug"
+      description: "fund tracing after failure"
+    - phase_id: "learn.retraining"
+      description: "model retraining from stored outcomes"
+
+  target_pipeline:
+    - phase_id: "phase_0_launch_intake"
+      purpose: "normalize venue, age, state, source, and initial launch facts"
+      inputs:
+        - "pump_fun_launch_events"
+        - "raydium_launch_events"
+        - "migration_events"
+      outputs:
+        - "LaunchSurfaceObservation"
+        - "VenueStateSnapshot"
+    - phase_id: "phase_1_identity_and_provenance"
+      purpose: "establish deployer identity, funder origin, and related operator graph"
+      outputs:
+        - "DeployerIdentityProfile"
+        - "FundingOriginProfile"
+        - "OperatorClusterHints"
+    - phase_id: "phase_2_launch_toxicity"
+      purpose: "detect bundler, coordination, sybil, wash, and exit-risk fingerprints"
+      outputs:
+        - "LaunchToxicityProfile"
+        - "BundlerFingerprintSet"
+        - "WalletCoordinationProfile"
+    - phase_id: "phase_3_structural_token_risk"
+      purpose: "assess mint/freeze/extensions and contract-level risk semantics"
+      outputs:
+        - "ContractRiskProfile"
+        - "AuthorityRiskProfile"
+        - "ExtensionRiskProfile"
+    - phase_id: "phase_4_market_structure_and_holder_state"
+      purpose: "measure concentration, insider share, LP integrity, and float quality"
+      outputs:
+        - "HolderStructureProfile"
+        - "LiquidityIntegrityProfile"
+        - "DistributionQualityProfile"
+    - phase_id: "phase_5_post_launch_state_change"
+      purpose: "monitor reacceleration, breakdown, migration posture, flow shifts, and state transitions"
+      outputs:
+        - "StateTransitionProfile"
+        - "MigrationBehaviorProfile"
+        - "TrendChangeProfile"
+    - phase_id: "phase_6_outcome_replay_learning"
+      purpose: "label outcomes, trace funds, package replay evidence, and refresh bad-actor memory"
+      outputs:
+        - "OutcomeLabel"
+        - "PostRugTraceProfile"
+        - "ReplayEvidencePackage"
+        - "BadActorRefreshSignals"
+
+data_contracts:
+  normalized_entities:
+    shared_with_parent_stack:
+      - "SourceObservation"
+      - "DiscoveryEvidence"
+      - "CandidateToken"
+      - "UniverseBuildResult"
+      - "DataQualityV1"
+      - "CQDSnapshotV1"
+      - "ConstructedSignalSetV1"
+      - "ScoreCardV1"
+  new_forensics_entities:
+    - name: "LaunchSurfaceObservation"
+      required_fields:
+        - "token_name"
+        - "ticker"
+        - "contract_address"
+        - "venue"
+        - "launch_age_seconds"
+        - "market_cap"
+        - "bonding_state"
+        - "source_timestamp"
+        - "raw_source_refs"
+    - name: "DeployerIdentityProfile"
+      required_fields:
+        - "deployer_wallet"
+        - "deployer_age"
+        - "prior_launch_count"
+        - "known_outcome_distribution"
+        - "repeat_symbol_or_motif_hits"
+        - "linked_wallet_clusters"
+        - "exchange_touchpoints"
+        - "risk_level"
+        - "evidence_refs"
+    - name: "LaunchToxicityProfile"
+      required_fields:
+        - "bundler_dominance_score"
+        - "funding_fanout_score"
+        - "same_slot_bundle_score"
+        - "reserve_aware_buy_score"
+        - "wash_trade_score"
+        - "coordinated_exit_risk"
+        - "recovery_sweep_risk"
+        - "toxicity_verdict"
+        - "evidence_refs"
+    - name: "ContractRiskProfile"
+      required_fields:
+        - "mint_authority_present"
+        - "freeze_authority_present"
+        - "token_2022_extensions"
+        - "transfer_fee_flag"
+        - "delegate_flag"
+        - "non_transferable_flag"
+        - "copycat_symbol_risk"
+        - "contract_risk_verdict"
+        - "evidence_refs"
+    - name: "HolderStructureProfile"
+      required_fields:
+        - "top_10_concentration"
+        - "top_20_concentration"
+        - "deployer_linked_share"
+        - "insider_cluster_share"
+        - "free_float_quality"
+        - "distribution_verdict"
+        - "evidence_refs"
+    - name: "LiquidityIntegrityProfile"
+      required_fields:
+        - "lp_present"
+        - "lp_burned"
+        - "lp_locked"
+        - "lp_unlock_time"
+        - "withdrawable_lp_risk"
+        - "liquidity_depth_quality"
+        - "liquidity_cliff_risk"
+        - "liquidity_verdict"
+        - "evidence_refs"
+    - name: "AttentionValidationProfile"
+      required_fields:
+        - "ca_propagation_speed"
+        - "account_age_quality"
+        - "single_source_shill_risk"
+        - "organic_spread_score"
+        - "creator_community_flywheel_score"
+        - "proof_of_life_score"
+        - "attention_verdict"
+        - "evidence_refs"
+    - name: "VenueStateSnapshot"
+      required_fields:
+        - "venue"
+        - "bonding_state"
+        - "migration_state"
+        - "state_timestamp"
+        - "state_confidence"
+        - "evidence_refs"
+    - name: "StateTransitionProfile"
+      required_fields:
+        - "baseline_state"
+        - "current_state"
+        - "structure_shift"
+        - "flow_shift"
+        - "attention_shift"
+        - "transition_type"
+        - "transition_confidence"
+        - "evidence_refs"
+    - name: "ReplayEvidencePackage"
+      required_fields:
+        - "token_identity"
+        - "launch_snapshot"
+        - "forensic_profiles"
+        - "raw_detector_hits"
+        - "wallet_graph_notes"
+        - "venue_state_timeline"
+        - "migration_notes"
+        - "outcome_label"
+        - "post_rug_trace_summary"
+        - "evidence_refs"
+        - "payload_hash"
+
+common_output_fields:
+  required:
+    - "token_name"
+    - "ticker"
+    - "contract_address"
+    - "venue"
+    - "launch_age"
+    - "market_cap"
+    - "bonding_state"
+    - "meta_cluster"
+    - "attention_type"
+    - "wallet_quality_state"
+    - "structure_state"
+    - "liquidity_state"
+    - "deployer_risk_state"
+    - "verdict"
+    - "evidence_refs"
+  optional:
+    - "creator_identity"
+    - "website"
+    - "x_identity"
+    - "migration_state"
+    - "post_rug_state"
+
+state_machines:
+  bonding_state_machine:
+    values:
+      - "pre_bonding"
+      - "bonding_active"
+      - "bonding_near_completion"
+      - "migrated_to_raydium"
+      - "post_migration_distribution_phase"
+      - "post_migration_exit_risk_phase"
+    transitions:
+      - from: "pre_bonding"
+        to: "bonding_active"
+      - from: "bonding_active"
+        to: "bonding_near_completion"
+      - from: "bonding_near_completion"
+        to: "migrated_to_raydium"
+      - from: "migrated_to_raydium"
+        to: "post_migration_distribution_phase"
+      - from: "post_migration_distribution_phase"
+        to: "post_migration_exit_risk_phase"
+
+  forensic_verdict_state_machine:
+    values:
+      - "clean"
+      - "watch"
+      - "toxic"
+      - "invalid"
+      - "post_rug"
+      - "monitor_for_reversal"
+    transition_drivers:
+      - "bundler_score_delta"
+      - "holder_quality_shift"
+      - "liquidity_integrity_change"
+      - "migration_sell_behavior"
+      - "attention_resurgence"
+      - "decay_before_failure"
+
+detector_modules:
+  already_present:
+    deployer_risk:
+      modules:
+        - "src/deployer_network.py"
+      output_family:
+        - "DeployerIdentityProfile"
+    bundler_suite:
+      orchestrator: "src/analyzers/bundler_orchestrator.py"
+      component_modules:
+        - "src/analyzers/funding_fanout.py"
+        - "src/analyzers/same_slot_bundle.py"
+        - "src/analyzers/reserve_buys.py"
+        - "src/analyzers/wash_trades.py"
+        - "src/analyzers/coordinated_exit.py"
+        - "src/analyzers/recovery_sweep.py"
+      output_family:
+        - "LaunchToxicityProfile"
+    contract_risk:
+      modules:
+        - "token extension / authority logic inside active pipeline"
+      output_family:
+        - "ContractRiskProfile"
+    migration_and_outcomes:
+      modules:
+        - "src/scanners/migration.py"
+        - "src/analyzers/outcome_tracker.py"
+        - "src/analyzers/post_rug_tracker.py"
+      output_family:
+        - "MigrationBehaviorProfile"
+        - "OutcomeLabel"
+        - "PostRugTraceProfile"
+
+  to_add:
+    holder_concentration_analyzer:
+      priority: "P1"
+      purpose: "activate full holder/distribution scoring"
+      required_outputs:
+        - "top_10_concentration"
+        - "top_20_concentration"
+        - "deployer_linked_share"
+        - "insider_cluster_share"
+        - "free_float_quality"
+        - "distribution_verdict"
+      consumers:
+        - "meta_fetch_engine"
+        - "low_cap_hunter"
+        - "shadow_intelligence"
+    lp_liquidity_integrity_analyzer:
+      priority: "P1"
+      purpose: "activate LP burn/lock/unlock/liquidity-cliff logic"
+      required_outputs:
+        - "lp_burned"
+        - "lp_locked"
+        - "lp_unlock_time"
+        - "withdrawable_lp_risk"
+        - "liquidity_depth_quality"
+        - "liquidity_cliff_risk"
+      consumers:
+        - "meta_fetch_engine"
+        - "low_cap_hunter"
+        - "shadow_intelligence"
+    social_attention_validator:
+      priority: "P1"
+      purpose: "add validated attention/social transportability layer"
+      required_outputs:
+        - "ca_propagation_speed"
+        - "organic_spread_score"
+        - "single_source_shill_risk"
+        - "proof_of_life_score"
+        - "attention_verdict"
+      consumers:
+        - "meta_fetch_engine"
+        - "low_cap_hunter"
+        - "shadow_intelligence"
+    venue_state_machine_normalizer:
+      priority: "P2"
+      purpose: "unify pump.fun/raydium/migration state into explicit lifecycle states"
+      consumers:
+        - "all_workflows"
+    wallet_identity_graph_layer:
+      priority: "P2"
+      purpose: "unify deployer/funder/bundler/recovery/cex identity graph"
+      consumers:
+        - "all_workflows"
+    replay_evidence_packager:
+      priority: "P2"
+      purpose: "create replay-ready forensic evidence contract"
+      consumers:
+        - "deterministic_core_replay"
+        - "operator_review"
+        - "ml_retraining"
+
+workflow_handoffs:
+  to_meta_fetch_engine:
+    purpose: "deep validation and regime-aware ranking"
+    required_inputs:
+      - "DeployerIdentityProfile"
+      - "LaunchToxicityProfile"
+      - "ContractRiskProfile"
+      - "HolderStructureProfile"
+      - "LiquidityIntegrityProfile"
+      - "AttentionValidationProfile"
+      - "VenueStateSnapshot"
+    emitted_fields:
+      - "wallet_integrity"
+      - "structure_quality"
+      - "holder_distribution"
+      - "liquidity_state"
+      - "attention_quality"
+      - "invalid_pattern_library"
+      - "risk_flags"
+      - "watchlist_candidates"
+
+  to_low_cap_hunter:
+    purpose: "early asymmetric quick-flip filtering"
+    required_inputs:
+      - "LaunchToxicityProfile"
+      - "DeployerIdentityProfile"
+      - "VenueStateSnapshot"
+      - "LiquidityIntegrityProfile"
+      - "AttentionValidationProfile"
+    emitted_fields:
+      - "bundler_dominance_score"
+      - "wallet_toxicity_state"
+      - "pre_bonding_or_early_bonding_state"
+      - "liquidity_path_quality"
+      - "quick_flip_reject_reasons"
+      - "validated_attention_signal"
+
+  to_shadow_intelligence:
+    purpose: "state-change monitoring after discovery"
+    required_inputs:
+      - "StateTransitionProfile"
+      - "MigrationBehaviorProfile"
+      - "HolderStructureProfile"
+      - "AttentionValidationProfile"
+      - "LaunchToxicityProfile"
+    emitted_fields:
+      - "trend_reversal_signal"
+      - "second_leg_reacceleration_signal"
+      - "breakout_or_reclaim_signal"
+      - "wallet_quality_shift"
+      - "attention_resurgence_signal"
+      - "decay_before_failure_signal"
+
+scoring_and_decision_logic:
+  scoring_model:
+    principle: "modular forensic evidence scoring feeding higher-level workflow scoring"
+    forensic_dimensions:
+      - id: "deployer_risk"
+        state_outputs:
+          - "clean"
+          - "watch"
+          - "toxic"
+      - id: "bundler_toxicity"
+        state_outputs:
+          - "clean"
+          - "watch"
+          - "toxic"
+      - id: "contract_risk"
+        state_outputs:
+          - "clean"
+          - "watch"
+          - "toxic"
+      - id: "holder_distribution"
+        state_outputs:
+          - "healthy"
+          - "concentrated"
+          - "insider_skewed"
+      - id: "liquidity_integrity"
+        state_outputs:
+          - "healthy"
+          - "fragile"
+          - "trap_risk"
+      - id: "attention_quality"
+        state_outputs:
+          - "organic"
+          - "unclear"
+          - "synthetic"
+      - id: "state_change_quality"
+        state_outputs:
+          - "improving"
+          - "stable"
+          - "decaying"
+    hard_reject_conditions:
+      - "bundler_dominance_score >= configured_hard_fail_threshold"
+      - "same_slot_bundle_score >= configured_hard_fail_threshold"
+      - "freeze_authority_present and unsafe_extension_combo"
+      - "withdrawable_lp_risk == true and no mitigating evidence"
+      - "deployer_linked_share >= configured_hard_fail_threshold"
+      - "recovery_sweep_risk == true and token already labeled_fail"
+    soft_watch_conditions:
+      - "unclear attention but strong structure"
+      - "moderate concentration without active exit behavior"
+      - "migration behavior uncertain"
+      - "state shift detected but confidence subcritical"
+
+evidence_and_replay:
+  evidence_policy:
+    journal_first: true
+    provenance_required: true
+    replay_capable: true
+    contract_first: true
+  evidence_refs_required: true
+  raw_detector_hit_retention: true
+  payload_hash_required: true
+  replay_package_required_for:
+    - "rug_labeling"
+    - "high_confidence_toxicity_verdict"
+    - "bad_actor_recurrence_update"
+    - "shadow_transition_escalation"
+  operator_review_bundle:
+    required_sections:
+      - "launch_snapshot"
+      - "wallet_graph_summary"
+      - "detector_hits"
+      - "holder_and_lp_state"
+      - "attention_validation"
+      - "migration_notes"
+      - "outcome_or_transition_summary"
+
+success_metrics:
+  meta_fetch_engine:
+    - "watchlist_precision"
+    - "fake_runner_reduction"
+    - "regime_call_accuracy"
+    - "ranked_candidate_quality"
+  low_cap_hunter:
+    - "early_candidate_precision"
+    - "entry_earliness"
+    - "2x_to_10x_capture_rate"
+    - "toxicity_false_positive_rate"
+  shadow_intelligence:
+    - "reversal_detection_lead_time"
+    - "breakout_detection_lead_time"
+    - "false_reacceleration_rate"
+    - "reprioritization_quality"
+  forensics_plane:
+    - "bundler_detection_precision"
+    - "deployer_bad_actor_recall"
+    - "post_rug_trace_completion_rate"
+    - "holder_lp_attention_coverage_rate"
+    - "replay_package_completeness"
+  system_level:
+    - "wallet_liquidity_growth_support"
+    - "cross_workflow_signal_consistency"
+    - "operator_actionability"
+    - "replayability"
+
+implementation_plan:
+  phase_plan:
+    - phase_id: "update_phase_1"
+      title: "wire missing active analyzers"
+      priority: "highest"
+      tasks:
+        - "activate holder concentration analyzer in main pipeline"
+        - "activate LP/liquidity integrity analyzer in main pipeline"
+        - "activate social/attention validator in main pipeline"
+      done_definition:
+        - "holder, lp, and attention outputs are actually populated in pipeline results"
+        - "dashboard/telegram/db schemas consume real values"
+        - "fail-closed behavior defined for missing critical forensic inputs"
+    - phase_id: "update_phase_2"
+      title: "normalize outputs into shared forensic contract"
+      priority: "high"
+      tasks:
+        - "define wallet_quality_state"
+        - "define structure_state"
+        - "define liquidity_state"
+        - "define bonding_state"
+        - "define attention_type"
+        - "define failure_modes"
+        - "define risk_flags"
+        - "define replay evidence package"
+      done_definition:
+        - "all active analyzers emit unified contract"
+        - "workflow handoffs consume unified contract"
+    - phase_id: "update_phase_3"
+      title: "route evidence into workflows"
+      priority: "high"
+      tasks:
+        - "wire meta fetch deep validation to forensic contract"
+        - "wire low cap hunter toxicity/entry filter to forensic contract"
+        - "wire shadow intelligence monitoring baseline to forensic contract"
+      done_definition:
+        - "workflow outputs explicitly reference forensic evidence inputs"
+        - "handoff payloads stable and replayable"
+    - phase_id: "update_phase_4"
+      title: "add venue state machine and wallet identity graph"
+      priority: "medium"
+      tasks:
+        - "normalize venue lifecycle states"
+        - "build wallet operator graph layer"
+        - "link deployer/funder/bundler/recovery identities"
+      done_definition:
+        - "venue and operator graph are queryable shared evidence surfaces"
+    - phase_id: "update_phase_5"
+      title: "complete replay and learning loop"
+      priority: "medium"
+      tasks:
+        - "package replay evidence"
+        - "refresh bad actor network from outcome labels"
+        - "feed ML retraining from normalized evidence"
+      done_definition:
+        - "full forensic replay package exists for high-signal tokens"
+
+prioritization:
+  p1_now:
+    - "holder_concentration_analyzer"
+    - "lp_liquidity_integrity_analyzer"
+    - "social_attention_validator"
+  p2_next:
+    - "venue_state_machine_normalizer"
+    - "wallet_identity_graph_layer"
+    - "replay_evidence_packager"
+  p3_later:
+    - "advanced clone/motif detection"
+    - "operator cluster recurrence memory"
+    - "attention resurgence modeling refinement"
+
+acceptance_criteria:
+  minimum_viable_update:
+    - "pipeline populates holder/liquidity/attention outputs with real values"
+    - "unified forensic contract exists"
+    - "meta fetch consumes forensic deep-validation outputs"
+    - "low cap hunter consumes forensic toxicity and bonding-state outputs"
+    - "shadow intelligence consumes forensic state-transition outputs"
+    - "replay package exists for flagged tokens"
+  must_not_break:
+    - "deterministic core authority boundary"
+    - "journal-first posture"
+    - "fail-closed safety behavior"
+    - "canonical decision truth location"
+  explicit_non_goals:
+    - "turning forensics into an authoritative execution engine"
+    - "granting MCP or sidecars decision authority"
+    - "replacing deterministic core with heuristic outputs"
+
+final_recommendation:
+  concise_form:
+    - "treat onchain forensics as a shared evidence plane, not as a separate strategy bot"
+    - "wire the missing active analyzers first"
+    - "normalize all outputs into one shared forensic contract"
+    - "route that contract explicitly into Meta Fetch, Low Cap Hunter, and Shadow Intelligence"
+    - "keep authority in the deterministic core"
