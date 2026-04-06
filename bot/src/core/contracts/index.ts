@@ -6,6 +6,8 @@ export * from "./decisionresult.js";
 export * from "./intent.js";
 export * from "./journal.js";
 export * from "./casebook.js";
+export * from "./derived-views.js";
+export * from "./priors.js";
 export * from "./market.js";
 export * from "./pattern.js";
 export * from "./trade.js";
