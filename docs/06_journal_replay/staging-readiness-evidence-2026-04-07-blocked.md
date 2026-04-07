@@ -47,6 +47,18 @@ After committing and pushing the minimal proxy/live-overlay wiring fix to `main`
 - The bot process `uptimeMs` increased across the post-push probes instead of resetting, which is consistent with the same pre-change instance still serving traffic rather than a fresh cutover.
 - The dashboard control routes continued to return `500` after the push, with no visible sign of a new runtime revision or config uptake in the response surface.
 
+## Current Live Probe
+
+- Probe timestamp: `2026-04-07T08:26:30Z`
+- The bot health response still reported `status:"DEGRADED"`, `runtime.mode:"dry"`, `rolloutPosture:"paper_only"`, `readiness.liveAllowed:false`, `executionToggles.liveTestMode:false`, and `executionToggles.tradingEnabled:false`.
+- The bot health payload still reported `lastAppliedVersionId:"a8c31f62-d895-4e13-a945-2b2c5587d193"` and `appliedVersionId:"a8c31f62-d895-4e13-a945-2b2c5587d193"`, with `appliedAt:"Mon Mar 30 2026 07:32:00 GMT+0000 (Coordinated Universal Time)"`.
+- The bot `uptimeMs` was `9392552`, which remains consistent with the same long-lived instance still serving the staging health endpoint.
+- No authenticated Render control-plane session was available in this workspace, so verification was limited to live service responses.
+- Follow-up route reprobe timestamp: `2026-04-07T08:28:17Z`
+- `GET /api/control/status` still returned HTTP `500 Internal Server Error` from `https://bobbyexecute-dashboard-staging.onrender.com/api/control/status`.
+- `GET /api/control/release-gate` still returned HTTP `500 Internal Server Error` from `https://bobbyexecute-dashboard-staging.onrender.com/api/control/release-gate`.
+- The bot health probe repeated at the same time still returned HTTP `200 OK` with the same dry/paper-only posture and the same applied version id.
+
 ## Verified Interpretation
 
 - The staging bot health surface is reachable and currently reports dry-mode, paper-only posture.
