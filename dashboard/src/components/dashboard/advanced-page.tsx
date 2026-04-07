@@ -4,15 +4,16 @@ import { useAdapters } from '@/hooks/use-adapters';
 import { useDecisionAdvisory } from '@/hooks/use-decision-advisory';
 import { useDecisions } from '@/hooks/use-decisions';
 import { useMetrics } from '@/hooks/use-metrics';
-import { AdapterHealthTable } from './adapter-health-table';
-import { DecisionTimeline } from './decision-timeline';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/shared/empty-state';
 import { LoadingCard } from '@/components/shared/loading-card';
 import { ErrorCard } from '@/components/shared/error-card';
+import { AdapterStatusBadge, DecisionActionBadge } from '@/components/shared/status-badge';
 import { kpiProvenanceLabel } from '@/lib/kpi-provenance';
-import { BarChart3, Gauge, Layers3, RefreshCw, Cpu } from 'lucide-react';
+import { formatTimestamp, relativeTime } from '@/lib/utils';
+import { Gauge, Layers3, RefreshCw, Cpu, ScrollText, Plug } from 'lucide-react';
 
 const DEFERRED_GROUPS = [
   'casebook',
@@ -27,7 +28,7 @@ const DEFERRED_GROUPS = [
 
 export function AdvancedPage() {
   const { data: metrics, isLoading: metricsLoading, error: metricsError, refetch: refetchMetrics } = useMetrics();
-  const { isLoading: adaptersLoading, error: adaptersError, refetch: refetchAdapters } = useAdapters();
+  const { data: adapters, isLoading: adaptersLoading, error: adaptersError, refetch: refetchAdapters } = useAdapters();
   const { data: decisions, isLoading: decisionsLoading } = useDecisions(5);
 
   const latestDecisionId = decisions?.decisions?.[0]?.id;
@@ -57,6 +58,8 @@ export function AdvancedPage() {
   const latencyKeys = metrics?.p95LatencyMs ? Object.keys(metrics.p95LatencyMs) : [];
   const advisory = decisionAdvisory.data;
   const auditCount = advisory?.audits.length ?? 0;
+  const adapterRows = adapters?.adapters ?? [];
+  const legacyProjectionRows = (decisions?.decisions ?? []).filter((decision) => decision.provenanceKind === 'legacy_projection');
 
   return (
     <div className="space-y-6">
@@ -145,13 +148,47 @@ export function AdvancedPage() {
       </div>
 
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-text-primary">Adapter Inspector</h3>
-            <BarChart3 className="h-4 w-4 text-text-muted" />
-          </div>
-          <AdapterHealthTable />
-        </div>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Adapter Inspector</CardTitle>
+                <p className="text-xs text-text-muted pt-1">Secondary operational detail only.</p>
+              </div>
+              <Plug className="h-4 w-4 text-text-muted" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {adapterRows.length === 0 ? (
+              <EmptyState message="No adapters configured" />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border-subtle text-xs text-text-muted">
+                      <th className="pb-2 text-left font-medium">Adapter</th>
+                      <th className="pb-2 text-left font-medium">Status</th>
+                      <th className="pb-2 text-right font-medium">Latency</th>
+                      <th className="pb-2 text-right font-medium hidden sm:table-cell">Last OK</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adapterRows.map((adapter) => (
+                      <tr key={adapter.id} className="border-b border-border-subtle/50 last:border-0 hover:bg-bg-surface-hover transition-colors">
+                        <td className="py-2.5 font-medium text-text-primary">{adapter.id}</td>
+                        <td className="py-2.5">
+                          <AdapterStatusBadge status={adapter.status} />
+                        </td>
+                        <td className="py-2.5 text-right tabular-nums text-text-secondary">{adapter.latencyMs > 0 ? `${adapter.latencyMs}ms` : '--'}</td>
+                        <td className="py-2.5 text-right text-text-muted hidden sm:table-cell">{relativeTime(adapter.lastSuccessAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -173,7 +210,68 @@ export function AdvancedPage() {
         </Card>
       </div>
 
-      <DecisionTimeline />
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Legacy Projection Feed</CardTitle>
+              <p className="text-xs text-text-muted pt-1">Action-log projections only. This is disclosed secondary data.</p>
+            </div>
+            <ScrollText className="h-4 w-4 text-text-muted" />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {legacyProjectionRows.length === 0 ? (
+            <EmptyState message="No legacy projections yet" />
+          ) : (
+            <div className="space-y-0 max-h-[380px] overflow-y-auto pr-1">
+              {legacyProjectionRows.map((decision) => (
+                <div
+                  key={decision.id}
+                  className="flex items-start gap-3 border-b border-border-subtle/50 py-3 last:border-0 animate-fade-in"
+                >
+                  <div className="shrink-0 mt-0.5">
+                    <div
+                      className={`h-2 w-2 rounded-full ${
+                        decision.action === 'allow'
+                          ? 'bg-accent-success'
+                          : decision.action === 'block'
+                            ? 'bg-accent-danger'
+                            : 'bg-accent-warning'
+                      }`}
+                    />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <DecisionActionBadge action={decision.action} />
+                      <span className="text-sm font-medium text-text-primary">{decision.token}</span>
+                      <span className="text-xs text-text-muted tabular-nums">{decision.confidence.toFixed(2)}</span>
+                      <Badge variant="default" className="text-[9px] px-1.5 py-0">
+                        {kpiProvenanceLabel(decision.provenanceKind)}
+                      </Badge>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {decision.reasons.slice(0, 2).map((reason, index) => (
+                        <Badge key={index} variant="default" className="text-[10px]">
+                          {reason}
+                        </Badge>
+                      ))}
+                      {decision.reasons.length > 2 && (
+                        <Badge variant="default" className="text-[10px]">
+                          +{decision.reasons.length - 2}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <span className="text-xs text-text-muted shrink-0 tabular-nums">{formatTimestamp(decision.timestamp)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
       <p className="text-xs text-text-muted">
         Legacy projections are intentionally separated from the canonical journal route.
       </p>

@@ -87,6 +87,8 @@ describe('AdvancedPage', () => {
     expect(html).toContain('Deferred Groups');
     expect(html).toContain('LEGACY-1');
     expect(html).not.toContain('CANON-1');
+    expect(html).not.toContain('Adapter Health');
+    expect(html).not.toContain('Decision Surface');
     expect(html).toContain('gpt-5.4');
   });
 });
