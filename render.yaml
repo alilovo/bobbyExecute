@@ -21,27 +21,43 @@ environments:
           - key: RUNTIME_CONFIG_ENV
             value: staging
           - key: LIVE_TRADING
-            value: "false"
-          - key: DRY_RUN
             value: "true"
+          - key: DRY_RUN
+            value: "false"
           - key: TRADING_ENABLED
-            value: "false"
+            value: "true"
           - key: LIVE_TEST_MODE
-            value: "false"
+            value: "true"
           - key: RUNTIME_POLICY_AUTHORITY
             value: ts-env
           - key: SIGNER_MODE
-            value: disabled
+            value: remote
           - key: REVIEW_POLICY_MODE
             value: required
           - key: RPC_MODE
-            value: stub
+            value: real
+          - key: ROLLOUT_POSTURE
+            value: micro_live
           - key: MAX_SLIPPAGE_PERCENT
             value: "5"
           - key: CIRCUIT_BREAKER_FAILURE_THRESHOLD
             value: "5"
           - key: CIRCUIT_BREAKER_RECOVERY_MS
             value: "60000"
+          - key: WALLET_ADDRESS
+            sync: false
+          - key: SIGNER_URL
+            sync: false
+          - key: SIGNER_AUTH_TOKEN
+            sync: false
+          - key: CONTROL_TOKEN
+            sync: false
+          - key: OPERATOR_READ_TOKEN
+            sync: false
+          - key: MORALIS_API_KEY
+            sync: false
+          - key: JUPITER_API_KEY
+            sync: false
           - key: DASHBOARD_ORIGIN
             fromService:
               type: web
@@ -69,7 +85,35 @@ environments:
             value: production
           - key: RUNTIME_CONFIG_ENV
             value: staging
+          - key: LIVE_TRADING
+            value: "true"
+          - key: DRY_RUN
+            value: "false"
+          - key: TRADING_ENABLED
+            value: "true"
+          - key: LIVE_TEST_MODE
+            value: "true"
+          - key: RUNTIME_POLICY_AUTHORITY
+            value: ts-env
+          - key: SIGNER_MODE
+            value: remote
+          - key: RPC_MODE
+            value: real
+          - key: ROLLOUT_POSTURE
+            value: micro_live
+          - key: WALLET_ADDRESS
+            sync: false
           - key: CONTROL_TOKEN
+            sync: false
+          - key: OPERATOR_READ_TOKEN
+            sync: false
+          - key: SIGNER_URL
+            sync: false
+          - key: SIGNER_AUTH_TOKEN
+            sync: false
+          - key: MORALIS_API_KEY
+            sync: false
+          - key: JUPITER_API_KEY
             sync: false
           - key: CONTROL_RESTARTS_ENABLED
             value: "true"
@@ -118,29 +162,45 @@ environments:
           - key: RUNTIME_CONFIG_ENV
             value: staging
           - key: LIVE_TRADING
-            value: "false"
-          - key: DRY_RUN
             value: "true"
+          - key: DRY_RUN
+            value: "false"
           - key: TRADING_ENABLED
-            value: "false"
+            value: "true"
           - key: LIVE_TEST_MODE
-            value: "false"
+            value: "true"
           - key: RUNTIME_POLICY_AUTHORITY
             value: ts-env
           - key: SIGNER_MODE
-            value: disabled
+            value: remote
           - key: REVIEW_POLICY_MODE
             value: required
           - key: RPC_MODE
-            value: stub
+            value: real
+          - key: ROLLOUT_POSTURE
+            value: micro_live
           - key: MAX_SLIPPAGE_PERCENT
             value: "5"
           - key: CIRCUIT_BREAKER_FAILURE_THRESHOLD
             value: "5"
           - key: CIRCUIT_BREAKER_RECOVERY_MS
             value: "60000"
+          - key: WALLET_ADDRESS
+            sync: false
           - key: MORALIS_BASE_URL
             value: https://solana-gateway.moralis.io
+          - key: SIGNER_URL
+            sync: false
+          - key: SIGNER_AUTH_TOKEN
+            sync: false
+          - key: CONTROL_TOKEN
+            sync: false
+          - key: OPERATOR_READ_TOKEN
+            sync: false
+          - key: MORALIS_API_KEY
+            sync: false
+          - key: JUPITER_API_KEY
+            sync: false
           - key: JOURNAL_PATH
             value: /var/data/journal.jsonl
           - key: WORKER_HEARTBEAT_INTERVAL_MS
@@ -180,6 +240,8 @@ environments:
           - key: DASHBOARD_OPERATOR_DIRECTORY_JSON
             sync: false
           - key: CONTROL_TOKEN
+            sync: false
+          - key: OPERATOR_READ_TOKEN
             sync: false
           - key: CONTROL_SERVICE_HOSTNAME
             fromService:

@@ -35,6 +35,24 @@ export function resolveControlServiceToken(env: NodeJS.ProcessEnv = process.env)
   return token;
 }
 
+function isReadOnlyRequest(method: string | undefined): boolean {
+  return method == null || method === "GET" || method === "HEAD";
+}
+
+export function resolveControlServiceRequestToken(
+  env: NodeJS.ProcessEnv = process.env,
+  method: string | undefined = undefined
+): string {
+  if (isReadOnlyRequest(method)) {
+    const operatorReadToken = trimOrUndefined(env.OPERATOR_READ_TOKEN);
+    if (operatorReadToken) {
+      return operatorReadToken;
+    }
+  }
+
+  return resolveControlServiceToken(env);
+}
+
 export function buildControlServiceUrl(path: string, env: NodeJS.ProcessEnv = process.env): URL {
   const baseUrl = resolveControlServiceBaseUrl(env);
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -44,10 +62,11 @@ export function buildControlServiceUrl(path: string, env: NodeJS.ProcessEnv = pr
 export function buildControlRequestHeaders(
   initHeaders: HeadersInit | undefined,
   env: NodeJS.ProcessEnv = process.env,
-  operatorHeaders: HeadersInit | undefined = undefined
+  operatorHeaders: HeadersInit | undefined = undefined,
+  method: string | undefined = undefined
 ): Headers {
   const headers = new Headers(initHeaders);
-  headers.set("authorization", `Bearer ${resolveControlServiceToken(env)}`);
+  headers.set("authorization", `Bearer ${resolveControlServiceRequestToken(env, method)}`);
   if (!headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
@@ -72,7 +91,7 @@ export async function forwardControlRequest(
   operatorHeaders: HeadersInit | undefined = undefined
 ): Promise<Response> {
   const url = buildControlServiceUrl(path, env);
-  const headers = buildControlRequestHeaders(init.headers, env, operatorHeaders);
+  const headers = buildControlRequestHeaders(init.headers, env, operatorHeaders, init.method);
   return fetch(url, {
     ...init,
     headers,
