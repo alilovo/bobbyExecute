@@ -2,7 +2,7 @@
  * Wave 8: Live-test config, daily loss tracker.
  */
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertLiveTestPrerequisites, getLiveTestConfig } from "../../src/config/safety.js";
@@ -15,6 +15,7 @@ import {
   resetDailyLossState,
 } from "../../src/governance/daily-loss-tracker.js";
 import { runLiveTestPreflight } from "../../src/scripts/live-test-preflight.js";
+import type { LiveTestPreflightReport } from "../../src/scripts/live-test-preflight.js";
 import { FakeClock } from "../../src/core/clock.js";
 import { Engine } from "../../src/core/engine.js";
 import type { MarketSnapshot } from "../../src/core/contracts/market.js";
@@ -49,6 +50,20 @@ describe("Live test config (Wave 8)", () => {
     writeFileSync(join(dir, "journal.daily-loss.json"), JSON.stringify({ dateKey: "", tradesCount: 0, lossUsd: 0 }), "utf8");
     writeFileSync(join(dir, "journal.idempotency.json"), JSON.stringify([]), "utf8");
     return journalPath;
+  }
+
+  function readPreflightEvidence(journalPath: string): {
+    capturedAt: string;
+    status: "ready" | "blocked";
+    report: LiveTestPreflightReport;
+  } {
+    const evidencePath = journalPath.replace(/\.jsonl$/i, "") + ".live-preflight.json";
+    expect(existsSync(evidencePath)).toBe(true);
+    return JSON.parse(readFileSync(evidencePath, "utf8")) as {
+      capturedAt: string;
+      status: "ready" | "blocked";
+      report: LiveTestPreflightReport;
+    };
   }
 
   beforeEach(() => {
@@ -117,11 +132,12 @@ describe("Live test config (Wave 8)", () => {
     );
   });
 
-  it("runLiveTestPreflight returns a live-test report in valid live mode", () => {
+  it("runLiveTestPreflight returns a live-test report in valid live mode and persists ready evidence", () => {
     process.env.LIVE_TRADING = "true";
     process.env.RPC_MODE = "real";
     process.env.TRADING_ENABLED = "true";
     process.env.LIVE_TEST_MODE = "true";
+    process.env.ROLLOUT_POSTURE = "micro_live";
     process.env.LIVE_TEST_MAX_CAPITAL_USD = "80";
     process.env.LIVE_TEST_MAX_TRADES_PER_DAY = "2";
     process.env.LIVE_TEST_MAX_DAILY_LOSS_USD = "25";
@@ -136,23 +152,62 @@ describe("Live test config (Wave 8)", () => {
     process.env.JOURNAL_PATH = createValidWorkerStateFixture();
 
     const report = runLiveTestPreflight();
+    const evidence = readPreflightEvidence(process.env.JOURNAL_PATH as string);
 
     expect(report).toMatchObject({
       executionMode: "live",
       rpcMode: "real",
       liveTestEnabled: true,
+      preflightGate: "micro_live",
       maxCapitalUsd: 80,
       maxTradesPerDay: 2,
       maxDailyLossUsd: 25,
       workerSafeBoot: true,
     });
+    expect(evidence).toMatchObject({
+      status: "ready",
+      report: {
+        evidencePath: process.env.JOURNAL_PATH?.replace(/\.jsonl$/i, "") + ".live-preflight.json",
+        preflightGate: "micro_live",
+        blockers: [],
+      },
+    });
   });
 
-  it("runLiveTestPreflight fails closed when worker boot-critical state is missing", () => {
+  it("runLiveTestPreflight fails closed when a live-critical env input is missing and persists blocked evidence", () => {
     process.env.LIVE_TRADING = "true";
     process.env.RPC_MODE = "real";
     process.env.TRADING_ENABLED = "true";
     process.env.LIVE_TEST_MODE = "true";
+    process.env.ROLLOUT_POSTURE = "micro_live";
+    process.env.WALLET_ADDRESS = "11111111111111111111111111111111";
+    process.env.OPERATOR_READ_TOKEN = "phase10-live-operator-token";
+    process.env.MORALIS_API_KEY = "phase10-moralis-api-key";
+    process.env.JUPITER_API_KEY = "phase10-jupiter-api-key";
+    process.env.SIGNER_MODE = "remote";
+    process.env.SIGNER_URL = "https://signer.example.com/sign";
+    process.env.SIGNER_AUTH_TOKEN = "phase10-signer-auth-token";
+
+    const dir = mkdtempSync(join(tmpdir(), "bobbyexecute-live-preflight-missing-"));
+    workerStateDirs.push(dir);
+    const journalPath = join(dir, "journal.jsonl");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(journalPath, "{\"event\":\"startup\"}\n", "utf8");
+    process.env.JOURNAL_PATH = journalPath;
+
+    expect(() => runLiveTestPreflight()).toThrow(/CONTROL_TOKEN/);
+    const evidence = readPreflightEvidence(journalPath);
+    expect(evidence.status).toBe("blocked");
+    expect(evidence.report.blockers.join(" ")).toContain("CONTROL_TOKEN");
+    expect(evidence.report.preflightGate).toBe("blocked");
+  });
+
+  it("runLiveTestPreflight fails closed when worker boot-critical state is missing and persists blocked evidence", () => {
+    process.env.LIVE_TRADING = "true";
+    process.env.RPC_MODE = "real";
+    process.env.TRADING_ENABLED = "true";
+    process.env.LIVE_TEST_MODE = "true";
+    process.env.ROLLOUT_POSTURE = "micro_live";
     process.env.WALLET_ADDRESS = "11111111111111111111111111111111";
     process.env.CONTROL_TOKEN = "phase10-live-control-token";
     process.env.OPERATOR_READ_TOKEN = "phase10-live-operator-token";
@@ -169,7 +224,10 @@ describe("Live test config (Wave 8)", () => {
     writeFileSync(journalPath, "{\"event\":\"startup\"}\n", "utf8");
     process.env.JOURNAL_PATH = journalPath;
 
-    expect(() => runLiveTestPreflight()).toThrow(/valid worker boot state/);
+    expect(() => runLiveTestPreflight()).toThrow(/Worker boot-critical state is invalid/);
+    const evidence = readPreflightEvidence(journalPath);
+    expect(evidence.status).toBe("blocked");
+    expect(evidence.report.blockers.join(" ")).toContain("Worker boot-critical state is invalid");
   });
 });
 
