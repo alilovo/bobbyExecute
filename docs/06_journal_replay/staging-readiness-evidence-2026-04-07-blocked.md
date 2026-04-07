@@ -41,6 +41,12 @@ After committing and pushing the minimal proxy/live-overlay wiring fix to `main`
 | GET /api/control/status | `https://bobbyexecute-dashboard-staging.onrender.com/api/control/status` | yes | blocked | HTTP `500 Internal Server Error`. Probe timestamp: `2026-04-07T06:47:17Z`. | The dashboard control proxy still failed fast, so the control surface was not yet proving upstream readiness. |
 | GET /api/control/release-gate | `https://bobbyexecute-dashboard-staging.onrender.com/api/control/release-gate` | yes | blocked | HTTP `500 Internal Server Error`. Probe timestamp: `2026-04-07T06:47:17Z`. | Same fast proxy failure class as `/api/control/status`. |
 
+## Cutover Diagnosis
+
+- The bot health response still showed the pre-change runtime truth after the push: `appliedExecutionMode:"dry"`, `rolloutPosture:"paper_only"`, `executionToggles.liveTestMode:false`, and `executionToggles.tradingEnabled:false`.
+- The bot process `uptimeMs` increased across the post-push probes instead of resetting, which is consistent with the same pre-change instance still serving traffic rather than a fresh cutover.
+- The dashboard control routes continued to return `500` after the push, with no visible sign of a new runtime revision or config uptake in the response surface.
+
 ## Verified Interpretation
 
 - The staging bot health surface is reachable and currently reports dry-mode, paper-only posture.
