@@ -6,12 +6,14 @@ const mocks = vi.hoisted(() => ({
   useDecisionAdvisory: vi.fn(),
   useDecisions: vi.fn(),
   useMetrics: vi.fn(),
+  getDecisionProvenanceAccess: vi.fn(),
 }));
 
 vi.mock('@/hooks/use-adapters', () => ({ useAdapters: mocks.useAdapters }));
 vi.mock('@/hooks/use-decision-advisory', () => ({ useDecisionAdvisory: mocks.useDecisionAdvisory }));
 vi.mock('@/hooks/use-decisions', () => ({ useDecisions: mocks.useDecisions }));
 vi.mock('@/hooks/use-metrics', () => ({ useMetrics: mocks.useMetrics }));
+vi.mock('@/lib/decision-provenance', () => ({ getDecisionProvenanceAccess: mocks.getDecisionProvenanceAccess }));
 
 import { AdvancedPage } from './advanced-page';
 
@@ -58,6 +60,42 @@ describe('AdvancedPage', () => {
         },
       ],
     }));
+    mocks.getDecisionProvenanceAccess.mockReturnValue({
+      canonicalRows: [
+        {
+          id: 'canon-1',
+          timestamp: '2026-04-07T09:00:00.000Z',
+          action: 'allow',
+          token: 'CANON-1',
+          confidence: 0.9,
+          reasons: ['canonical'],
+          provenanceKind: 'canonical',
+          source: 'runtime_cycle_summary',
+        },
+      ],
+      legacyProjectionRows: [
+        {
+          id: 'legacy-1',
+          timestamp: '2026-04-07T08:59:00.000Z',
+          action: 'block',
+          token: 'LEGACY-1',
+          confidence: 0.2,
+          reasons: ['projection'],
+          provenanceKind: 'legacy_projection',
+          source: 'action_log_projection',
+        },
+      ],
+      firstCanonicalRow: {
+        id: 'canon-1',
+        timestamp: '2026-04-07T09:00:00.000Z',
+        action: 'allow',
+        token: 'CANON-1',
+        confidence: 0.9,
+        reasons: ['canonical'],
+        provenanceKind: 'canonical',
+        source: 'runtime_cycle_summary',
+      },
+    });
     mocks.useDecisionAdvisory.mockReturnValue(queryResult({
       traceId: 'canon-1',
       enabled: true,
@@ -81,6 +119,10 @@ describe('AdvancedPage', () => {
 
     const html = renderToStaticMarkup(<AdvancedPage />);
 
+    expect(mocks.getDecisionProvenanceAccess).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ id: 'legacy-1', provenanceKind: 'legacy_projection' }),
+      expect.objectContaining({ id: 'canon-1', provenanceKind: 'canonical' }),
+    ]));
     expect(mocks.useDecisionAdvisory).toHaveBeenCalledWith('canon-1');
     expect(html).toContain('Adapter Inspector');
     expect(html).toContain('AI Sources');

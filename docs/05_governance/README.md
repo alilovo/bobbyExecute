@@ -66,6 +66,10 @@ Enforce one deterministic authority plane and explicit non-authoritative boundar
 - Not an approval mechanism for live production trading.
 - Not permission to broaden MCP scope in the current slice.
 
+## Planning Artifacts
+
+- [control-matrix.md](./control-matrix.md) - Tag-8 planning/governance control artifact; derived from the Decision Lock, not a new SSOT.
+
 ## Dependencies
 
 - `C:/workspace/main_projects/dotBot/bobbyExecute/governance/SoT.md`

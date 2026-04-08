@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorCard } from '@/components/shared/error-card';
 import { LoadingCard } from '@/components/shared/loading-card';
 import { DecisionActionBadge } from '@/components/shared/status-badge';
-import { getCanonicalDecisionRows } from '@/lib/decision-provenance';
+import { getDecisionProvenanceAccess } from '@/lib/decision-provenance';
 import { formatTimestamp } from '@/lib/utils';
 import { kpiProvenanceLabel } from '@/lib/kpi-provenance';
 import type { DecisionAction } from '@/types/api';
@@ -21,7 +21,8 @@ export function CanonicalDecisionHistory() {
   const { data, isLoading, error, refetch } = useDecisions(50);
   const [actionFilter, setActionFilter] = useState<DecisionAction | 'all'>('all');
 
-  const canonicalDecisions = useMemo(() => getCanonicalDecisionRows(data?.decisions), [data]);
+  const decisionAccess = useMemo(() => getDecisionProvenanceAccess(data?.decisions), [data?.decisions]);
+  const canonicalDecisions = decisionAccess.canonicalRows;
 
   const visibleDecisions = useMemo(
     () =>

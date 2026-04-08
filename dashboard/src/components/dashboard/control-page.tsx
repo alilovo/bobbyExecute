@@ -69,6 +69,10 @@ function promotionVariant(status?: LivePromotionRecord['workflowStatus']): 'defa
   }
 }
 
+function safeLabel(value: unknown): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value : '—';
+}
+
 export function ControlPage() {
   const [operatorUsername, setOperatorUsername] = useState('');
   const [operatorPassword, setOperatorPassword] = useState('');
@@ -451,7 +455,7 @@ export function ControlPage() {
               </Badge>
               <span className="text-xs text-text-muted">Mode: {runtimeConfig?.appliedMode ?? '—'}</span>
               <span className="text-xs text-text-muted">After restart: {restart?.pendingVersionId ?? runtimeConfig?.requestedVersionId ?? '—'}</span>
-              <span className="text-xs text-text-muted">Live control: {liveControl?.mode ?? '—'}</span>
+              <span className="text-xs text-text-muted">Live control: {safeLabel(liveControl?.mode)}</span>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded border border-border-subtle bg-bg-surface-hover/50 p-3">

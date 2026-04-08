@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getDecisionProvenanceAccess,
   getCanonicalDecisionRows,
   getFirstCanonicalDecision,
   getLegacyProjectionDecisionRows,
@@ -61,5 +62,15 @@ describe('decision provenance selectors', () => {
 
     expect(firstCanonical?.id).toBe('canon-1');
     expect(firstCanonical?.provenanceKind).toBe('canonical');
+  });
+
+  it('returns partitioned provenance access without exposing mixed rows', () => {
+    const access = getDecisionProvenanceAccess(decisionRows);
+
+    expect(access.canonicalRows).toHaveLength(1);
+    expect(access.canonicalRows[0]?.id).toBe('canon-1');
+    expect(access.legacyProjectionRows).toHaveLength(2);
+    expect(access.legacyProjectionRows.map((decision) => decision.id)).toEqual(['legacy-1', 'legacy-2']);
+    expect(access.firstCanonicalRow?.id).toBe('canon-1');
   });
 });

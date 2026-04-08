@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   useHealth: vi.fn(),
   useSummary: vi.fn(),
   useMetrics: vi.fn(),
+  getDecisionProvenanceAccess: vi.fn(),
 }));
 
 vi.mock('@/hooks/use-control', () => ({
@@ -20,6 +21,7 @@ vi.mock('@/hooks/use-decisions', () => ({ useDecisions: mocks.useDecisions }));
 vi.mock('@/hooks/use-health', () => ({ useHealth: mocks.useHealth }));
 vi.mock('@/hooks/use-summary', () => ({ useSummary: mocks.useSummary }));
 vi.mock('@/hooks/use-metrics', () => ({ useMetrics: mocks.useMetrics }));
+vi.mock('@/lib/decision-provenance', () => ({ getDecisionProvenanceAccess: mocks.getDecisionProvenanceAccess }));
 
 import { OverviewPage } from './overview-page';
 
@@ -105,6 +107,42 @@ describe('OverviewPage', () => {
       surfaceKind: 'derived',
       p95LatencyMs: { adapter: 120, quote: 80 },
     }));
+    mocks.getDecisionProvenanceAccess.mockReturnValue({
+      canonicalRows: [
+        {
+          id: 'canonical-1',
+          timestamp: '2026-04-07T10:00:00.000Z',
+          action: 'allow',
+          token: 'CANON-1',
+          confidence: 0.91,
+          reasons: ['Canonical reason'],
+          provenanceKind: 'canonical',
+          source: 'runtime_cycle_summary',
+        },
+      ],
+      legacyProjectionRows: [
+        {
+          id: 'legacy-1',
+          timestamp: '2026-04-07T09:59:00.000Z',
+          action: 'block',
+          token: 'LEGACY-1',
+          confidence: 0.2,
+          reasons: ['Legacy reason'],
+          provenanceKind: 'legacy_projection',
+          source: 'action_log_projection',
+        },
+      ],
+      firstCanonicalRow: {
+        id: 'canonical-1',
+        timestamp: '2026-04-07T10:00:00.000Z',
+        action: 'allow',
+        token: 'CANON-1',
+        confidence: 0.91,
+        reasons: ['Canonical reason'],
+        provenanceKind: 'canonical',
+        source: 'runtime_cycle_summary',
+      },
+    });
 
     const html = renderToStaticMarkup(<OverviewPage />);
 
@@ -123,6 +161,10 @@ describe('OverviewPage', () => {
     expect(incidentSummary).toBeGreaterThan(lastCanonicalDecision);
     expect(tradeHistory).toBeGreaterThan(incidentSummary);
     expect(readinessSnapshot).toBeGreaterThan(tradeHistory);
+    expect(mocks.getDecisionProvenanceAccess).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ id: 'legacy-1', provenanceKind: 'legacy_projection' }),
+      expect.objectContaining({ id: 'canonical-1', provenanceKind: 'canonical' }),
+    ]));
     expect(html).toContain('CANON-1');
     expect(html).not.toContain('LEGACY-1');
   });

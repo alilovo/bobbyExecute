@@ -11,10 +11,14 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ErrorCard } from '@/components/shared/error-card';
 import { LoadingCard } from '@/components/shared/loading-card';
-import { getFirstCanonicalDecision } from '@/lib/decision-provenance';
+import { getDecisionProvenanceAccess } from '@/lib/decision-provenance';
 import { kpiProvenanceLabel } from '@/lib/kpi-provenance';
 import { relativeTime } from '@/lib/utils';
 import { AlertTriangle, Clock, ShieldAlert, ScrollText } from 'lucide-react';
+
+function safeLabel(value: unknown): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value : 'unknown';
+}
 
 export function OverviewPage() {
   const { data: controlStatus, isLoading: controlLoading, error: controlError, refetch: refetchControl } = useControlStatus();
@@ -22,7 +26,8 @@ export function OverviewPage() {
   const { data: restartAlerts, isLoading: incidentsLoading, error: incidentsError, refetch: refetchIncidents } = useRestartAlerts();
   const { data: decisions, isLoading: decisionsLoading, error: decisionsError, refetch: refetchDecisions } = useDecisions(10);
 
-  const latestCanonical = getFirstCanonicalDecision(decisions?.decisions);
+  const decisionAccess = getDecisionProvenanceAccess(decisions?.decisions);
+  const latestCanonical = decisionAccess.firstCanonicalRow;
 
   if (controlLoading || gateLoading || incidentsLoading || decisionsLoading) {
     return (
@@ -169,7 +174,7 @@ export function OverviewPage() {
       <ActivitySection />
 
       <div className="rounded border border-border-subtle bg-bg-surface-hover/30 p-3 text-xs text-text-muted">
-        {controlStatus?.restart?.required ? 'Restart required' : 'Restart not required'} · {controlStatus?.liveControl?.mode ?? 'unknown'} mode · Surface labels remain explicit and non-authoritative.
+        {controlStatus?.restart?.required ? 'Restart required' : 'Restart not required'} · {safeLabel(controlStatus?.liveControl?.mode)} mode · Surface labels remain explicit and non-authoritative.
       </div>
     </div>
   );

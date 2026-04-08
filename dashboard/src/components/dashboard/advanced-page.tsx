@@ -11,7 +11,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { LoadingCard } from '@/components/shared/loading-card';
 import { ErrorCard } from '@/components/shared/error-card';
 import { AdapterStatusBadge, DecisionActionBadge } from '@/components/shared/status-badge';
-import { getFirstCanonicalDecision, getLegacyProjectionDecisionRows } from '@/lib/decision-provenance';
+import { getDecisionProvenanceAccess } from '@/lib/decision-provenance';
 import { kpiProvenanceLabel } from '@/lib/kpi-provenance';
 import { formatTimestamp, relativeTime } from '@/lib/utils';
 import { Gauge, Layers3, RefreshCw, Cpu, ScrollText, Plug } from 'lucide-react';
@@ -32,8 +32,8 @@ export function AdvancedPage() {
   const { data: adapters, isLoading: adaptersLoading, error: adaptersError, refetch: refetchAdapters } = useAdapters();
   const { data: decisions, isLoading: decisionsLoading } = useDecisions(5);
 
-  const decisionRows = decisions?.decisions ?? [];
-  const latestDecisionId = getFirstCanonicalDecision(decisionRows)?.id;
+  const decisionAccess = getDecisionProvenanceAccess(decisions?.decisions);
+  const latestDecisionId = decisionAccess.firstCanonicalRow?.id;
   const decisionAdvisory = useDecisionAdvisory(latestDecisionId);
 
   if (metricsLoading || adaptersLoading || decisionsLoading || decisionAdvisory.isLoading) {
@@ -61,7 +61,7 @@ export function AdvancedPage() {
   const advisory = decisionAdvisory.data;
   const auditCount = advisory?.audits.length ?? 0;
   const adapterRows = adapters?.adapters ?? [];
-  const legacyProjectionRows = getLegacyProjectionDecisionRows(decisionRows);
+  const legacyProjectionRows = decisionAccess.legacyProjectionRows;
 
   return (
     <div className="space-y-6">
