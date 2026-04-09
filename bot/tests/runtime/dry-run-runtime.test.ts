@@ -76,7 +76,7 @@ describe("DryRunRuntime (phase-2)", () => {
 
   afterEach(async () => {
     await new Promise((resolve) => setTimeout(resolve, 25));
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 25 });
   });
 
   it("fails closed when kill switch is active", async () => {

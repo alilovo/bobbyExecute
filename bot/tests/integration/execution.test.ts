@@ -32,6 +32,8 @@ const liveIntent: TradeIntent = {
   executionMode: "live",
 };
 
+const REAL_RPC_URL = "https://api.mainnet-beta.solana.com";
+
 function makeFreshQuote(overrides: Record<string, unknown> = {}) {
   return {
     quoteId: "q-live",
@@ -79,10 +81,17 @@ function makeSigner() {
   };
 }
 
+function enableLiveTestEnv(): void {
+  process.env.LIVE_TRADING = "true";
+  process.env.RPC_MODE = "real";
+  process.env.RPC_URL = REAL_RPC_URL;
+}
+
 describe("Execution integration (Wave 5 live route)", () => {
   afterEach(() => {
     delete process.env.LIVE_TRADING;
     delete process.env.RPC_MODE;
+    delete process.env.RPC_URL;
     delete process.env.LIVE_VERIFY_MAX_ATTEMPTS;
     delete process.env.LIVE_VERIFY_TIMEOUT_MS;
     delete process.env.LIVE_VERIFY_RETRY_MS;
@@ -109,8 +118,7 @@ describe("Execution integration (Wave 5 live route)", () => {
   });
 
   it("live fails closed on partial dependency bundle", async () => {
-    process.env.LIVE_TRADING = "true";
-    process.env.RPC_MODE = "real";
+    enableLiveTestEnv();
     armMicroLive("test");
 
     const handler = await createExecutionHandler({
@@ -126,8 +134,7 @@ describe("Execution integration (Wave 5 live route)", () => {
   });
 
   it("live fails closed when quote fetch fails", async () => {
-    process.env.LIVE_TRADING = "true";
-    process.env.RPC_MODE = "real";
+    enableLiveTestEnv();
     armMicroLive("test");
 
     const handler = await createExecutionHandler({
@@ -152,8 +159,7 @@ describe("Execution integration (Wave 5 live route)", () => {
   });
 
   it("live fails closed on stale quote", async () => {
-    process.env.LIVE_TRADING = "true";
-    process.env.RPC_MODE = "real";
+    enableLiveTestEnv();
     process.env.LIVE_QUOTE_MAX_AGE_MS = "1000";
     armMicroLive("test");
 
@@ -179,8 +185,7 @@ describe("Execution integration (Wave 5 live route)", () => {
   });
 
   it("live fails closed on invalid quote payload", async () => {
-    process.env.LIVE_TRADING = "true";
-    process.env.RPC_MODE = "real";
+    enableLiveTestEnv();
     armMicroLive("test");
 
     const handler = await createExecutionHandler({
@@ -202,8 +207,7 @@ describe("Execution integration (Wave 5 live route)", () => {
   });
 
   it("live fails closed on invalid swap payload", async () => {
-    process.env.LIVE_TRADING = "true";
-    process.env.RPC_MODE = "real";
+    enableLiveTestEnv();
     armMicroLive("test");
 
     const handler = await createExecutionHandler({
@@ -226,8 +230,7 @@ describe("Execution integration (Wave 5 live route)", () => {
   });
 
   it("live fails closed when signing is unavailable at runtime", async () => {
-    process.env.LIVE_TRADING = "true";
-    process.env.RPC_MODE = "real";
+    enableLiveTestEnv();
     armMicroLive("test");
 
     const handler = await createExecutionHandler({
@@ -255,8 +258,7 @@ describe("Execution integration (Wave 5 live route)", () => {
   });
 
   it("live fails closed when the remote signer wallet address does not match", async () => {
-    process.env.LIVE_TRADING = "true";
-    process.env.RPC_MODE = "real";
+    enableLiveTestEnv();
     armMicroLive("test");
 
     const handler = await createExecutionHandler({
@@ -294,8 +296,7 @@ describe("Execution integration (Wave 5 live route)", () => {
   });
 
   it("live fails closed on ambiguous send result", async () => {
-    process.env.LIVE_TRADING = "true";
-    process.env.RPC_MODE = "real";
+    enableLiveTestEnv();
     armMicroLive("test");
 
     const handler = await createExecutionHandler({
@@ -318,8 +319,7 @@ describe("Execution integration (Wave 5 live route)", () => {
   });
 
   it("live fails closed on verification timeout", async () => {
-    process.env.LIVE_TRADING = "true";
-    process.env.RPC_MODE = "real";
+    enableLiveTestEnv();
     process.env.LIVE_VERIFY_MAX_ATTEMPTS = "1";
     process.env.LIVE_VERIFY_TIMEOUT_MS = "10";
     process.env.LIVE_VERIFY_RETRY_MS = "0";
@@ -345,8 +345,7 @@ describe("Execution integration (Wave 5 live route)", () => {
   });
 
   it("live succeeds only when quote -> build -> sign/send -> verify all succeed", async () => {
-    process.env.LIVE_TRADING = "true";
-    process.env.RPC_MODE = "real";
+    enableLiveTestEnv();
     armMicroLive("test");
 
     const handler = await createExecutionHandler({
@@ -377,8 +376,7 @@ describe("Execution integration (Wave 5 live route)", () => {
   });
 
   it("live attempts always include mandatory artifacts", async () => {
-    process.env.LIVE_TRADING = "true";
-    process.env.RPC_MODE = "real";
+    enableLiveTestEnv();
     armMicroLive("test");
 
     const handler = await createExecutionHandler({
@@ -412,8 +410,7 @@ describe("Execution integration (Wave 5 live route)", () => {
   });
 
   it("live remains fail-closed while disarmed", async () => {
-    process.env.LIVE_TRADING = "true";
-    process.env.RPC_MODE = "real";
+    enableLiveTestEnv();
     disarmMicroLive("test");
 
     const handler = await createExecutionHandler({
