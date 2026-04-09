@@ -66,6 +66,21 @@ describe("AdvisoryLLMService (PR-D1)", () => {
     expect(audit.error).toBe("ADVISORY_NO_PROVIDER_KEY");
   });
 
+  it("qwen provider without API key: null advisory, fail-safe audit", async () => {
+    process.env.ADVISORY_LLM_ENABLED = "true";
+    process.env.ADVISORY_LLM_PROVIDER = "qwen";
+    process.env.QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+    delete process.env.QWEN_API_KEY;
+    const { AdvisoryLLMService, readAdvisoryLLMConfigFromEnv } = await import(
+      "../../src/advisory-llm/service.js"
+    );
+    const svc = new AdvisoryLLMService(readAdvisoryLLMConfigFromEnv());
+    const { advisory, audit } = await svc.explain(pack);
+    expect(advisory).toBeNull();
+    expect(audit.provider).toBe("qwen");
+    expect(audit.error).toBe("ADVISORY_NO_PROVIDER_KEY");
+  });
+
   it("schema: invalid JSON discarded", () => {
     expect(parseAdvisoryLLMResponse({ summary: "", reasoning: "ok", confidence: 0.5, provider: "p", model: "m" })).toBeNull();
     expect(

@@ -10,11 +10,12 @@ import type {
   DecisionEnvelopeV3,
 } from "./types.js";
 import { OpenAIAdvisoryProvider } from "./providers/openai.js";
+import { QwenAdvisoryProvider } from "./providers/qwen.js";
 import { XaiAdvisoryProvider } from "./providers/xai.js";
 
 export interface AdvisoryLLMServiceConfig {
   enabled: boolean;
-  provider: "openai" | "xai";
+  provider: "openai" | "xai" | "qwen";
   timeoutMs: number;
   maxTokens: number;
   openaiApiKey?: string;
@@ -23,12 +24,27 @@ export interface AdvisoryLLMServiceConfig {
   xaiApiKey?: string;
   xaiBaseUrl?: string;
   xaiModel?: string;
+  qwenApiKey?: string;
+  qwenBaseUrl?: string;
+  qwenModel?: string;
+}
+
+function normalizeOptionalText(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function parseAdvisoryProvider(raw: string | undefined): "openai" | "xai" | "qwen" {
+  const normalized = (raw ?? "openai").trim().toLowerCase();
+  if (normalized === "openai" || normalized === "xai" || normalized === "qwen") {
+    return normalized;
+  }
+  throw new Error("ADVISORY_LLM_PROVIDER must be one of: openai, xai, qwen.");
 }
 
 export function readAdvisoryLLMConfigFromEnv(env: NodeJS.ProcessEnv = process.env): AdvisoryLLMServiceConfig {
   const enabled = env.ADVISORY_LLM_ENABLED === "true";
-  const providerRaw = (env.ADVISORY_LLM_PROVIDER ?? "openai").toLowerCase();
-  const provider: "openai" | "xai" = providerRaw === "xai" ? "xai" : "openai";
+  const provider = parseAdvisoryProvider(env.ADVISORY_LLM_PROVIDER);
   const timeoutMs = Math.min(30_000, Math.max(100, parseInt(env.ADVISORY_LLM_TIMEOUT_MS ?? "1200", 10) || 1200));
   const maxTokens = Math.min(4096, Math.max(64, parseInt(env.ADVISORY_LLM_MAX_TOKENS ?? "512", 10) || 512));
   return {
@@ -36,12 +52,15 @@ export function readAdvisoryLLMConfigFromEnv(env: NodeJS.ProcessEnv = process.en
     provider,
     timeoutMs,
     maxTokens,
-    openaiApiKey: env.OPENAI_API_KEY,
-    openaiBaseUrl: env.OPENAI_BASE_URL,
-    openaiModel: env.OPENAI_MODEL ?? "gpt-4o-mini",
-    xaiApiKey: env.XAI_API_KEY,
-    xaiBaseUrl: env.XAI_API_BASE_URL,
-    xaiModel: env.XAI_MODEL_PRIMARY ?? "grok-beta",
+    openaiApiKey: normalizeOptionalText(env.OPENAI_API_KEY),
+    openaiBaseUrl: normalizeOptionalText(env.OPENAI_BASE_URL),
+    openaiModel: normalizeOptionalText(env.OPENAI_MODEL) ?? "gpt-4o-mini",
+    xaiApiKey: normalizeOptionalText(env.XAI_API_KEY),
+    xaiBaseUrl: normalizeOptionalText(env.XAI_API_BASE_URL),
+    xaiModel: normalizeOptionalText(env.XAI_MODEL_PRIMARY) ?? "grok-beta",
+    qwenApiKey: normalizeOptionalText(env.QWEN_API_KEY),
+    qwenBaseUrl: normalizeOptionalText(env.QWEN_BASE_URL),
+    qwenModel: normalizeOptionalText(env.QWEN_MODEL) ?? "qwen3.6-plus",
   };
 }
 
@@ -74,25 +93,52 @@ function cacheKeyForPack(pack: AdvisoryEvidencePack): string {
   return createHash("sha256").update(JSON.stringify(pack.decision)).digest("hex");
 }
 
-function buildProvider(config: AdvisoryLLMServiceConfig, which: "openai" | "xai"): AdvisoryLLMProvider | null {
+function buildProvider(
+  config: AdvisoryLLMServiceConfig,
+  which: "openai" | "xai" | "qwen"
+): { provider: AdvisoryLLMProvider; model: string } | { error: string; model: string } {
   if (which === "openai") {
     const key = config.openaiApiKey?.trim();
-    if (!key) return null;
-    return new OpenAIAdvisoryProvider({
-      apiKey: key,
-      baseUrl: config.openaiBaseUrl,
+    if (!key) return { error: "ADVISORY_NO_PROVIDER_KEY", model: "(no_api_key)" };
+    return {
+      provider: new OpenAIAdvisoryProvider({
+        apiKey: key,
+        baseUrl: config.openaiBaseUrl,
+        model: config.openaiModel ?? "gpt-4o-mini",
+        maxTokens: config.maxTokens,
+      }),
       model: config.openaiModel ?? "gpt-4o-mini",
-      maxTokens: config.maxTokens,
-    });
+    };
   }
-  const key = config.xaiApiKey?.trim();
-  if (!key) return null;
-  return new XaiAdvisoryProvider({
-    apiKey: key,
-    baseUrl: config.xaiBaseUrl,
-    model: config.xaiModel ?? "grok-beta",
-    maxTokens: config.maxTokens,
-  });
+  if (which === "xai") {
+    const key = config.xaiApiKey?.trim();
+    if (!key) return { error: "ADVISORY_NO_PROVIDER_KEY", model: "(no_api_key)" };
+    return {
+      provider: new XaiAdvisoryProvider({
+        apiKey: key,
+        baseUrl: config.xaiBaseUrl,
+        model: config.xaiModel ?? "grok-beta",
+        maxTokens: config.maxTokens,
+      }),
+      model: config.xaiModel ?? "grok-beta",
+    };
+  }
+  if (which !== "qwen") {
+    return { error: "ADVISORY_UNSUPPORTED_PROVIDER", model: "(unsupported_provider)" };
+  }
+  const key = config.qwenApiKey?.trim();
+  if (!key) return { error: "ADVISORY_NO_PROVIDER_KEY", model: "(no_api_key)" };
+  const baseUrl = config.qwenBaseUrl?.trim();
+  if (!baseUrl) return { error: "ADVISORY_NO_PROVIDER_BASE_URL", model: "(no_base_url)" };
+  return {
+    provider: new QwenAdvisoryProvider({
+      apiKey: key,
+      baseUrl,
+      model: config.qwenModel ?? "qwen3.6-plus",
+      maxTokens: config.maxTokens,
+    }),
+    model: config.qwenModel ?? "qwen3.6-plus",
+  };
 }
 
 export class AdvisoryLLMService {
@@ -126,24 +172,24 @@ export class AdvisoryLLMService {
       };
     }
 
-    const providerImpl = buildProvider(this.config, this.config.provider);
-    if (!providerImpl) {
+    const providerOutcome = buildProvider(this.config, this.config.provider);
+    if ("error" in providerOutcome) {
       return {
         advisory: null,
         audit: {
           traceId,
           provider: this.config.provider,
-          model: "(no_api_key)",
+          model: providerOutcome.model,
           latencyMs: 0,
           success: false,
           cacheKey,
-          error: "ADVISORY_NO_PROVIDER_KEY",
+          error: providerOutcome.error,
         },
       };
     }
 
     const started = Date.now();
-    const outcome = await raceWithTimeout(() => providerImpl.generate(pack), this.config.timeoutMs);
+    const outcome = await raceWithTimeout(() => providerOutcome.provider.generate(pack), this.config.timeoutMs);
     const latencyMs = Date.now() - started;
 
     if (!outcome.ok) {
@@ -151,8 +197,8 @@ export class AdvisoryLLMService {
         advisory: null,
         audit: {
           traceId,
-          provider: providerImpl.id,
-          model: this.config.provider === "openai" ? this.config.openaiModel ?? "" : this.config.xaiModel ?? "",
+          provider: providerOutcome.provider.id,
+          model: providerOutcome.model,
           latencyMs,
           success: false,
           cacheKey,
@@ -182,21 +228,21 @@ export class AdvisoryLLMService {
     secondary: AdvisoryLLMResponse | null;
     audits: AdvisoryCallAuditLog[];
   }> {
-    const other: "openai" | "xai" = this.config.provider === "openai" ? "xai" : "openai";
+    const other: "openai" | "xai" | "qwen" = this.config.provider === "openai" ? "xai" : "openai";
     const a = await this.explain(pack);
     const audits = [a.audit];
     const second = buildProvider(this.config, other);
-    if (!this.config.enabled || !second) {
+    if (!this.config.enabled || "error" in second) {
       return { primary: a.advisory, secondary: null, audits };
     }
     const started = Date.now();
-    const outcome = await raceWithTimeout(() => second.generate(pack), this.config.timeoutMs);
+    const outcome = await raceWithTimeout(() => second.provider.generate(pack), this.config.timeoutMs);
     const latencyMs = Date.now() - started;
     if (!outcome.ok) {
       audits.push({
         traceId: pack.decision.traceId,
-        provider: second.id,
-        model: "(compare)",
+        provider: second.provider.id,
+        model: second.model,
         latencyMs,
         success: false,
         cacheKey: cacheKeyForPack(pack),

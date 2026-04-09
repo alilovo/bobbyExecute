@@ -29,6 +29,14 @@ describe("Config validation (P1)", () => {
     process.env.JUPITER_API_KEY = "phase10-jupiter-api-key";
   }
 
+  function setAdvisoryQwenPrereqs(): void {
+    process.env.ADVISORY_LLM_ENABLED = "true";
+    process.env.ADVISORY_LLM_PROVIDER = "qwen";
+    process.env.QWEN_API_KEY = "phase10-qwen-api-key";
+    process.env.QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+    process.env.QWEN_MODEL = "qwen3.6-plus";
+  }
+
   beforeEach(() => {
     resetConfigCache();
     process.env = { ...orig };
@@ -177,6 +185,44 @@ describe("Config validation (P1)", () => {
     const config = loadConfig(process.env as Record<string, string | undefined>);
     expect(config.executionMode).toBe("paper");
     expect(config.rpcMode).toBe("real");
+  });
+
+  it("loadConfig rejects qwen advisory config without QWEN_API_KEY", () => {
+    setAdvisoryQwenPrereqs();
+    delete process.env.QWEN_API_KEY;
+
+    expect(() => loadConfig(process.env as Record<string, string | undefined>)).toThrow(
+      /QWEN_API_KEY when ADVISORY_LLM_PROVIDER=qwen/
+    );
+  });
+
+  it("loadConfig rejects qwen advisory config without QWEN_BASE_URL", () => {
+    setAdvisoryQwenPrereqs();
+    delete process.env.QWEN_BASE_URL;
+
+    expect(() => loadConfig(process.env as Record<string, string | undefined>)).toThrow(
+      /QWEN_BASE_URL when ADVISORY_LLM_PROVIDER=qwen/
+    );
+  });
+
+  it("loadConfig accepts qwen advisory config and preserves provider selection", () => {
+    setAdvisoryQwenPrereqs();
+
+    const config = loadConfig(process.env as Record<string, string | undefined>);
+    expect(config.advisoryLLMEnabled).toBe(true);
+    expect(config.advisoryLLMProvider).toBe("qwen");
+    expect(config.qwenApiKey).toBe("phase10-qwen-api-key");
+    expect(config.qwenBaseUrl).toBe("https://dashscope.aliyuncs.com/compatible-mode/v1");
+    expect(config.qwenModel).toBe("qwen3.6-plus");
+  });
+
+  it("loadConfig rejects unsupported advisory provider selection", () => {
+    process.env.ADVISORY_LLM_ENABLED = "true";
+    process.env.ADVISORY_LLM_PROVIDER = "bogus";
+
+    expect(() => loadConfig(process.env as Record<string, string | undefined>)).toThrow(
+      /ADVISORY_LLM_PROVIDER|openai.*xai.*qwen|Invalid enum value/
+    );
   });
 
   it("default config has executionMode dry and rpcMode stub", () => {

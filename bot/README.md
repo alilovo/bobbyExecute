@@ -88,6 +88,14 @@ Private control mutation surfaces:
 - If control tokens are missing, protected routes fail closed.
 - If schema readiness is missing or mismatched, services fail closed.
 
+## Advisory LLM Config
+
+- Enable the advisory route with `ADVISORY_LLM_ENABLED=true`.
+- Select the provider with `ADVISORY_LLM_PROVIDER=openai|xai|qwen`.
+- `qwen` uses the OpenAI-compatible client path and requires `QWEN_API_KEY` plus `QWEN_BASE_URL`.
+- `QWEN_MODEL` defaults to `qwen3.6-plus` if omitted.
+- `OPENAI_*` and `XAI_*` settings remain server-side only and are read only by the advisory route helper.
+
 ## Runbook References
 
 - `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/staging-live-preflight-runbook.md`

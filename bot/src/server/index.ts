@@ -17,6 +17,7 @@ import type { RuntimeVisibilityRepository } from "../persistence/runtime-visibil
 import type { WorkerRestartService } from "../control/worker-restart-service.js";
 import type { WorkerRestartAlertRepository } from "../persistence/worker-restart-alert-repository.js";
 import type { ControlGovernanceRepositoryWithAudits } from "../control/control-governance.js";
+import type { AdvisoryLLMServiceConfig } from "../advisory-llm/service.js";
 import { createControlGovernanceRepository } from "../persistence/control-governance-repository.js";
 
 export interface ServerConfig {
@@ -40,6 +41,7 @@ export interface ServerConfig {
   controlAuthToken?: string;
   operatorReadToken?: string;
   databaseUrl?: string;
+  advisoryLLMConfig?: AdvisoryLLMServiceConfig;
 }
 
 const DEFAULT_PORT = 3333;
@@ -131,6 +133,7 @@ async function createVisibilityServer(
       getRuntimeSnapshot: config.getRuntimeSnapshot,
       runtimeVisibilityRepository: config.runtimeVisibilityRepository,
       runtimeEnvironment: config.runtimeEnvironment,
+      advisoryLLMConfig: config.advisoryLLMConfig,
     })
   );
   if (options.includeControlRoutes) {

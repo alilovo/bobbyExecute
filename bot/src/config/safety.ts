@@ -134,6 +134,34 @@ export function assertRuntimePolicyAuthority(config: Config): void {
   );
 }
 
+export function assertAdvisoryLLMPrerequisites(config: Config): void {
+  if (!config.advisoryLLMEnabled) {
+    return;
+  }
+
+  if (config.advisoryLLMProvider === "openai") {
+    if (!config.openaiApiKey?.trim()) {
+      throw new Error("ADVISORY_LLM_ENABLED=true requires OPENAI_API_KEY when ADVISORY_LLM_PROVIDER=openai.");
+    }
+    return;
+  }
+
+  if (config.advisoryLLMProvider === "xai") {
+    if (!config.xaiApiKey?.trim()) {
+      throw new Error("ADVISORY_LLM_ENABLED=true requires XAI_API_KEY when ADVISORY_LLM_PROVIDER=xai.");
+    }
+    return;
+  }
+
+  if (!config.qwenApiKey?.trim()) {
+    throw new Error("ADVISORY_LLM_ENABLED=true requires QWEN_API_KEY when ADVISORY_LLM_PROVIDER=qwen.");
+  }
+
+  if (!config.qwenBaseUrl?.trim()) {
+    throw new Error("ADVISORY_LLM_ENABLED=true requires QWEN_BASE_URL when ADVISORY_LLM_PROVIDER=qwen.");
+  }
+}
+
 export function parseRolloutPostureConfig(env: NodeJS.ProcessEnv = process.env): RolloutPosture | undefined {
   const raw = env.ROLLOUT_POSTURE?.trim();
   if (!raw) {

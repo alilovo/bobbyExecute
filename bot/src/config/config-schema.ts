@@ -84,6 +84,21 @@ export const ConfigSchema = z
     moralisApiKey: z.string().optional(),
     jupiterApiKey: z.string().optional(),
 
+    // Advisory LLM
+    advisoryLLMEnabled: z.boolean().default(false),
+    advisoryLLMProvider: z.enum(["openai", "xai", "qwen"]).default("openai"),
+    advisoryLLMTimeoutMs: z.coerce.number().int().min(100).default(1200),
+    advisoryLLMMaxTokens: z.coerce.number().int().min(64).default(512),
+    openaiApiKey: z.string().optional(),
+    openaiBaseUrl: z.string().url().optional().default("https://api.openai.com/v1"),
+    openaiModel: z.string().min(1).optional().default("gpt-4o-mini"),
+    xaiApiKey: z.string().optional(),
+    xaiBaseUrl: z.string().url().optional().default("https://api.x.ai/v1"),
+    xaiModel: z.string().min(1).optional().default("grok-beta"),
+    qwenApiKey: z.string().optional(),
+    qwenBaseUrl: z.string().url().optional(),
+    qwenModel: z.string().min(1).optional().default("qwen3.6-plus"),
+
     // Wallet
     walletAddress: z.string().min(32).optional(),
     controlToken: z.string().min(12).optional(),
@@ -233,6 +248,11 @@ function normalizeMoralisBaseUrl(raw: string | undefined): string | undefined {
   return trimmed;
 }
 
+function normalizeOptionalText(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 /**
  * Parse config from env. Throws on validation failure (fail-closed).
  * Invalid combo (LIVE_TRADING=true with RPC_MODE=stub) is rejected by refine.
@@ -255,6 +275,19 @@ export function parseConfig(env: Record<string, string | undefined>): Config {
     moralisBaseUrl: normalizeMoralisBaseUrl(env.MORALIS_BASE_URL),
     moralisApiKey: env.MORALIS_API_KEY,
     jupiterApiKey: env.JUPITER_API_KEY,
+    advisoryLLMEnabled: parseBoolEnv(env.ADVISORY_LLM_ENABLED, false),
+    advisoryLLMProvider: normalizeOptionalText(env.ADVISORY_LLM_PROVIDER)?.toLowerCase(),
+    advisoryLLMTimeoutMs: env.ADVISORY_LLM_TIMEOUT_MS,
+    advisoryLLMMaxTokens: env.ADVISORY_LLM_MAX_TOKENS,
+    openaiApiKey: normalizeOptionalText(env.OPENAI_API_KEY),
+    openaiBaseUrl: normalizeOptionalText(env.OPENAI_BASE_URL),
+    openaiModel: normalizeOptionalText(env.OPENAI_MODEL),
+    xaiApiKey: normalizeOptionalText(env.XAI_API_KEY),
+    xaiBaseUrl: normalizeOptionalText(env.XAI_API_BASE_URL),
+    xaiModel: normalizeOptionalText(env.XAI_MODEL_PRIMARY),
+    qwenApiKey: normalizeOptionalText(env.QWEN_API_KEY),
+    qwenBaseUrl: normalizeOptionalText(env.QWEN_BASE_URL),
+    qwenModel: normalizeOptionalText(env.QWEN_MODEL),
     walletAddress: env.WALLET_ADDRESS,
     signerMode: env.SIGNER_MODE,
     signerUrl: env.SIGNER_URL,

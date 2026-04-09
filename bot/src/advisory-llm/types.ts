@@ -23,7 +23,7 @@ export interface AdvisoryLLMResponse {
 }
 
 export interface AdvisoryLLMProvider {
-  readonly id: "openai" | "xai";
+  readonly id: "openai" | "xai" | "qwen";
   generate(pack: AdvisoryEvidencePack): Promise<AdvisoryLLMResponse>;
 }
 

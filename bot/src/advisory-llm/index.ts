@@ -15,6 +15,7 @@ export { AdvisoryLLMResponseSchema, parseAdvisoryLLMResponse } from "./schema.js
 export { buildAdvisoryPrompt } from "./prompt-builder.js";
 export { OpenAIAdvisoryProvider } from "./providers/openai.js";
 export { XaiAdvisoryProvider } from "./providers/xai.js";
+export { QwenAdvisoryProvider } from "./providers/qwen.js";
 export {
   AdvisoryLLMService,
   createAdvisoryLLMService,
