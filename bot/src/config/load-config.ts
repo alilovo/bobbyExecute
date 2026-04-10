@@ -5,6 +5,7 @@
  */
 import { parseConfig, type Config } from "./config-schema.js";
 import {
+  assertAdvisoryLLMPrerequisites,
   assertLiveTestPrerequisites,
   assertLiveTradingPrerequisites,
   assertValidRolloutPostureConfig,
@@ -23,6 +24,7 @@ export function loadConfig(env?: Record<string, string | undefined>): Config {
   const source = (env ?? process.env) as Record<string, string | undefined>;
   cachedConfig = parseConfig(source);
   assertRuntimePolicyAuthority(cachedConfig);
+  assertAdvisoryLLMPrerequisites(cachedConfig);
   assertValidRolloutPostureConfig(source);
   assertLiveTradingPrerequisites(cachedConfig);
   assertLiveTestPrerequisites(cachedConfig);

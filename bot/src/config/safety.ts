@@ -27,8 +27,8 @@ export function isLiveTradingEnabled(): boolean {
 }
 
 /**
- * M4 Policy: LIVE_TRADING=true requires RPC_MODE=real.
- * Throws if live trading enabled but RPC is stub.
+ * M4 Policy: LIVE_TRADING=true requires RPC_MODE=real and an explicit RPC_URL.
+ * Throws if live trading enabled but RPC is stub or RPC_URL is missing.
  */
 export function assertLiveTradingRequiresRealRpc(): void {
   if (!isLiveTradingEnabled()) return;
@@ -59,6 +59,10 @@ function readLiveTestIntegerEnv(
 export function assertLiveTradingPrerequisites(config: Config): void {
   if (config.executionMode !== "live") {
     return;
+  }
+
+  if (config.dryRun) {
+    throw new Error("LIVE_TRADING=true cannot be combined with DRY_RUN=true.");
   }
 
   assertLiveTradingRequiresRealRpc();
@@ -128,6 +132,34 @@ export function assertRuntimePolicyAuthority(config: Config): void {
   throw new Error(
     "Runtime policy authority mismatch: YAML cannot be authoritative at runtime. Use TS/env only."
   );
+}
+
+export function assertAdvisoryLLMPrerequisites(config: Config): void {
+  if (!config.advisoryLLMEnabled) {
+    return;
+  }
+
+  if (config.advisoryLLMProvider === "openai") {
+    if (!config.openaiApiKey?.trim()) {
+      throw new Error("ADVISORY_LLM_ENABLED=true requires OPENAI_API_KEY when ADVISORY_LLM_PROVIDER=openai.");
+    }
+    return;
+  }
+
+  if (config.advisoryLLMProvider === "xai") {
+    if (!config.xaiApiKey?.trim()) {
+      throw new Error("ADVISORY_LLM_ENABLED=true requires XAI_API_KEY when ADVISORY_LLM_PROVIDER=xai.");
+    }
+    return;
+  }
+
+  if (!config.qwenApiKey?.trim()) {
+    throw new Error("ADVISORY_LLM_ENABLED=true requires QWEN_API_KEY when ADVISORY_LLM_PROVIDER=qwen.");
+  }
+
+  if (!config.qwenBaseUrl?.trim()) {
+    throw new Error("ADVISORY_LLM_ENABLED=true requires QWEN_BASE_URL when ADVISORY_LLM_PROVIDER=qwen.");
+  }
 }
 
 export function parseRolloutPostureConfig(env: NodeJS.ProcessEnv = process.env): RolloutPosture | undefined {

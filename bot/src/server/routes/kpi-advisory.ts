@@ -7,15 +7,17 @@ import type { RuntimeSnapshot } from "../../runtime/dry-run-runtime.js";
 import { loadVisibleRuntimeState } from "../runtime-visibility.js";
 import type { RuntimeVisibilityRepository } from "../../persistence/runtime-visibility-repository.js";
 import type { KpiDecisionAdvisoryResponse } from "../contracts/kpi.js";
+import type { AdvisoryLLMServiceConfig } from "../../advisory-llm/service.js";
 
 export interface AdvisoryKpiRouteDeps {
   getRuntimeSnapshot?: () => RuntimeSnapshot;
   runtimeVisibilityRepository?: RuntimeVisibilityRepository;
   runtimeEnvironment?: string;
+  advisoryLLMConfig?: AdvisoryLLMServiceConfig;
 }
 
 export function advisoryKpiRoutes(deps: AdvisoryKpiRouteDeps): FastifyPluginAsync {
-  const { getRuntimeSnapshot, runtimeVisibilityRepository, runtimeEnvironment } = deps;
+  const { getRuntimeSnapshot, runtimeVisibilityRepository, runtimeEnvironment, advisoryLLMConfig } = deps;
 
   return async (fastify) => {
     fastify.get<{
@@ -49,7 +51,9 @@ export function advisoryKpiRoutes(deps: AdvisoryKpiRouteDeps): FastifyPluginAsyn
       }
 
       const advisoryMod = await import("../../advisory-llm/service.js");
-      const service = advisoryMod.createAdvisoryLLMService();
+      const service = advisoryMod.createAdvisoryLLMService(
+        advisoryLLMConfig ?? advisoryMod.readAdvisoryLLMConfigFromEnv()
+      );
       const pack = { decision: env };
 
       if (!service.isEnabled()) {

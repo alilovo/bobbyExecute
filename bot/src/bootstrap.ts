@@ -41,6 +41,21 @@ export async function bootstrap(options?: {
     dashboardOrigin: config.dashboardOrigin,
     runtimeVisibilityRepository,
     runtimeEnvironment,
+    advisoryLLMConfig: {
+      enabled: config.advisoryLLMEnabled,
+      provider: config.advisoryLLMProvider,
+      timeoutMs: config.advisoryLLMTimeoutMs,
+      maxTokens: config.advisoryLLMMaxTokens,
+      openaiApiKey: config.openaiApiKey,
+      openaiBaseUrl: config.openaiBaseUrl,
+      openaiModel: config.openaiModel,
+      xaiApiKey: config.xaiApiKey,
+      xaiBaseUrl: config.xaiBaseUrl,
+      xaiModel: config.xaiModel,
+      qwenApiKey: config.qwenApiKey,
+      qwenBaseUrl: config.qwenBaseUrl,
+      qwenModel: config.qwenModel,
+    },
   });
 
   return { server, runtimeVisibilityRepository };

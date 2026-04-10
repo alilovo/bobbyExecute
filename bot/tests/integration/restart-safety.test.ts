@@ -22,13 +22,17 @@ function liveEnv(): Record<string, string | undefined> {
   return {
     NODE_ENV: "test",
     LIVE_TRADING: "true",
+    DRY_RUN: "false",
     RPC_MODE: "real",
     TRADING_ENABLED: "true",
     LIVE_TEST_MODE: "true",
+    DISCOVERY_PROVIDER: "dexscreener",
+    MARKET_DATA_PROVIDER: "dexpaprika",
+    STREAMING_PROVIDER: "dexpaprika",
+    MORALIS_ENABLED: "false",
     WALLET_ADDRESS: "11111111111111111111111111111111",
     CONTROL_TOKEN: "phase10-live-control-token",
     OPERATOR_READ_TOKEN: "phase10-live-operator-token",
-    MORALIS_API_KEY: "phase10-moralis-api-key",
     JUPITER_API_KEY: "phase10-jupiter-api-key",
     SIGNER_MODE: "remote",
     SIGNER_URL: "https://signer.example.com/sign",
@@ -152,7 +156,7 @@ describe("restart safety", () => {
         wallet: {
           traceId: "restart-trace",
           timestamp: new Date().toISOString(),
-          source: "moralis",
+          source: "rpc",
           walletAddress: "11111111111111111111111111111111",
           balances: [
             {
@@ -203,7 +207,7 @@ describe("restart safety", () => {
         wallet: {
           traceId: "restart-trace-2",
           timestamp: new Date().toISOString(),
-          source: "moralis",
+          source: "rpc",
           walletAddress: "11111111111111111111111111111111",
           balances: [
             {

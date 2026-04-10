@@ -86,6 +86,7 @@ BobbyExecute is a governance-first Solana trading system with one deterministic 
 - `C:/workspace/main_projects/dotBot/bobbyExecute/docs/02_pipeline/README.md`
 - `C:/workspace/main_projects/dotBot/bobbyExecute/docs/05_governance/README.md`
 - `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/README.md`
+- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/signing-architecture.md`
 - `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/journal-memory-casebook-architecture.md`
 
 ## Verification Commands
@@ -99,6 +100,9 @@ npm test
 npm run premerge
 npm run build
 ```
+
+Local papertrade onboarding index lives in [`docs/local-run.md`](C:/workspace/main_projects/dotBot/bobbyExecute/docs/local-run.md); OS-specific instructions are linked from there.
+Live-limited onboarding index starts in [`docs/06_journal_replay/staging-live-preflight-runbook.md`](C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/staging-live-preflight-runbook.md); OS-specific instructions are linked from there.
 
 ## Status Reminder
 
