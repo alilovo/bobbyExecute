@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { Pool, type PoolClient } from "pg";
+import type { Pool, PoolClient } from "pg";
+import { createPostgresPool } from "./postgres-pool.js";
 import { assertSchemaReady } from "./schema-migrations.js";
 
 export type WorkerRestartMethod = "deploy_hook";
@@ -276,5 +277,5 @@ export async function createWorkerRestartRepository(databaseUrl?: string): Promi
     return new InMemoryWorkerRestartRepository();
   }
 
-  return new PostgresWorkerRestartRepository(new Pool({ connectionString: databaseUrl }));
+  return new PostgresWorkerRestartRepository(createPostgresPool(databaseUrl));
 }

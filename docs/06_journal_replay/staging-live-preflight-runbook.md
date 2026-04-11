@@ -1,13 +1,14 @@
-# Staging Live-Preflight Runbook Index
+# Live Trade Onboarding Index
 
-Scope: canonical entry point for live-limited onboarding.
-This file is the shared concepts and gating map only. Shell-specific commands live in the OS docs.
+Start here only after papertrade works.
+
+This is the live-limited, real-capital path. It still uses caps and a hard preflight gate, so it is not unconstrained production trading.
 
 ## Canonical Map
 
 | Path | Role |
 |---|---|
-| `docs/06_journal_replay/staging-live-preflight-runbook.md` | Live-limited onboarding index |
+| `docs/06_journal_replay/staging-live-preflight-runbook.md` | Live trade onboarding index |
 | `docs/06_journal_replay/staging-live-preflight-runbook-macos.md` | macOS live-limited commands |
 | `docs/06_journal_replay/staging-live-preflight-runbook-windows.md` | Windows live-limited commands |
 | `docs/local-run.md` | Papertrade onboarding index |
@@ -23,12 +24,14 @@ This file is the shared concepts and gating map only. Shell-specific commands li
 - `bot/src/runtime/live-control.ts` models the live-test round state machine that runtime start uses after preflight.
 - `bot/src/recovery/worker-state-manifest.ts` derives worker-local artifact paths from `JOURNAL_PATH`.
 - The checked-in env examples and `render.yaml` default the provider stack to `DISCOVERY_PROVIDER=dexscreener`, `MARKET_DATA_PROVIDER=dexpaprika`, `STREAMING_PROVIDER=dexpaprika`, and `MORALIS_ENABLED=false`; staging overrides still must supply the live-mode secrets and mounted state.
+- The operator decision surface is documented in `operator-release-gate-and-incident-runbook.md`, including `GET /control/release-gate`, `GET /control/status`, and `GET /health`.
 
 Important truth boundary:
 
 - `LIVE_TRADING=true` resolves execution mode to `live`.
 - `DRY_RUN` is not the live safety gate once `LIVE_TRADING=true` is set.
-- This runbook proves staging readiness for the live-test guardrails, not live production authorization.
+- If `DATABASE_URL` or `REDIS_URL` is blank, the runtime falls back to local in-memory/file state. That is useful for smoke tests, but it is not a truthful multi-process live run.
+- `live:preflight` proves staging readiness for the live-test guardrails, not live production authorization.
 
 ## Local Auth Tokens And LLM Config
 
@@ -43,6 +46,8 @@ Local live-limited onboarding reuses the same token and LLM conventions as paper
 - If you intentionally switch the advisory provider to `qwen`, use `QWEN_API_KEY`, `QWEN_BASE_URL`, and `QWEN_MODEL=qwen/qwen3.6-plus:free`.
 
 ## Shared Requirements
+
+For live-limited mode, the bot env must include:
 
 - `LIVE_TRADING=true`
 - `TRADING_ENABLED=true`

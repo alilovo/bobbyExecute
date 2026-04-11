@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Pool, type PoolClient } from "pg";
+import type { Pool, PoolClient } from "pg";
 import type {
   ControlAuditEvent,
   ControlGovernanceRepository,
@@ -9,6 +9,7 @@ import type {
   ControlRecoveryRehearsalEvidenceRecord,
   ControlLivePromotionRecord,
 } from "../control/control-governance.js";
+import { createPostgresPool } from "./postgres-pool.js";
 import { assertSchemaReady } from "./schema-migrations.js";
 
 interface MemoryGovernanceState {
@@ -518,5 +519,5 @@ export async function createControlGovernanceRepository(databaseUrl?: string): P
     return new InMemoryControlGovernanceRepository();
   }
 
-  return new PostgresControlGovernanceRepository(new Pool({ connectionString: databaseUrl }));
+  return new PostgresControlGovernanceRepository(createPostgresPool(databaseUrl));
 }

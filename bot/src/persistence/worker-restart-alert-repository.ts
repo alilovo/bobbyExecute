@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { Pool, type PoolClient } from "pg";
+import type { Pool, PoolClient } from "pg";
 import type { WorkerRestartRecordStatus } from "./worker-restart-repository.js";
+import { createPostgresPool } from "./postgres-pool.js";
 import { assertSchemaReady } from "./schema-migrations.js";
 
 export type WorkerRestartAlertSeverity = "info" | "warning" | "critical";
@@ -1733,5 +1734,5 @@ export async function createWorkerRestartAlertRepository(
     return new InMemoryWorkerRestartAlertRepository();
   }
 
-  return new PostgresWorkerRestartAlertRepository(new Pool({ connectionString: databaseUrl }));
+  return new PostgresWorkerRestartAlertRepository(createPostgresPool(databaseUrl));
 }

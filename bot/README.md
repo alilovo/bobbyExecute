@@ -79,6 +79,9 @@ Private control mutation surfaces:
 - Advisory LLM routes are optional and non-authoritative.
 - Missing control tokens cause protected routes to fail closed.
 - Schema mismatches and missing readiness state also fail closed.
+- The Postgres surfaces are shared operational state, not canonical runtime truth.
+- `DATABASE_URL` may point at Supabase PostgreSQL; the repo normalizes Supabase hosts to `sslmode=require`.
+- `REDIS_URL` remains separately required for the runtime-config store; blank values fall back to local memory/file stores and are not truthful multi-process runtime.
 
 ## Runbook Pointers
 
