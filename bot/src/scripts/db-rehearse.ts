@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { Pool } from "pg";
 import { PostgresControlGovernanceRepository } from "../persistence/control-governance-repository.js";
+import { createPostgresPool } from "../persistence/postgres-pool.js";
 import {
   runDisposableDatabaseRehearsal,
   type DisposableDatabaseRehearsalResult,
@@ -113,8 +113,8 @@ async function main(): Promise<number> {
     return 4;
   }
 
-  const sourcePool = new Pool({ connectionString: sourceDatabaseUrl });
-  const targetPool = new Pool({ connectionString: targetDatabaseUrl });
+  const sourcePool = createPostgresPool(sourceDatabaseUrl);
+  const targetPool = createPostgresPool(targetDatabaseUrl);
   const evidenceRepository = new PostgresControlGovernanceRepository(sourcePool);
 
   try {

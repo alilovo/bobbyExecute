@@ -32,6 +32,13 @@ Truthful multi-process papertrade requires shared runtime truth:
 - `DATABASE_URL`
 - `REDIS_URL`
 
+For Supabase-backed local/runtime use:
+
+- `DATABASE_URL` points at the Supabase PostgreSQL connection string.
+- The repo automatically applies `sslmode=require` for Supabase hosts.
+- `REDIS_URL` remains separately required for the runtime-config store.
+- If either value is blank, the bot falls back to isolated local stores.
+
 If both are blank, the bot processes fall back to isolated local stores. That is only a boot smoke test, not truthful multi-process papertrade.
 
 ## Papertrade Values

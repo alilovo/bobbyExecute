@@ -1,5 +1,5 @@
-import { Pool } from "pg";
 import { formatSchemaStatus, inspectSchemaStatus } from "../persistence/schema-migrations.js";
+import { createPostgresPool } from "../persistence/postgres-pool.js";
 import { closePool, parseCliArgs, readCliString } from "./cli.js";
 
 async function main(): Promise<number> {
@@ -12,7 +12,7 @@ async function main(): Promise<number> {
     return 4;
   }
 
-  const pool = new Pool({ connectionString: databaseUrl });
+  const pool = createPostgresPool(databaseUrl);
   try {
     const status = await inspectSchemaStatus(pool, migrationsDir ? { migrationsDir } : {});
     const payload = JSON.stringify(status, null, 2);

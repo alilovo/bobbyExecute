@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { Pool, type PoolClient } from "pg";
+import type { Pool, PoolClient } from "pg";
 import type {
   RuntimeBehaviorConfig,
   RuntimeOverlay,
   RuntimeConfigDocument,
 } from "../config/runtime-config-schema.js";
 import { runtimeConfigDocumentHash } from "../config/runtime-config-schema.js";
+import { createPostgresPool } from "./postgres-pool.js";
 import { assertSchemaReady } from "./schema-migrations.js";
 
 export interface RuntimeConfigVersionRecord {
@@ -885,5 +886,5 @@ export async function createRuntimeConfigRepository(databaseUrl?: string): Promi
     return new InMemoryRuntimeConfigRepository();
   }
 
-  return new PostgresRuntimeConfigRepository(new Pool({ connectionString: databaseUrl }));
+  return new PostgresRuntimeConfigRepository(createPostgresPool(databaseUrl));
 }

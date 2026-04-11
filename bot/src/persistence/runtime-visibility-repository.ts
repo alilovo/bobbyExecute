@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { Pool, type PoolClient } from "pg";
+import type { Pool, PoolClient } from "pg";
 import type { RuntimeSnapshot } from "../runtime/dry-run-runtime.js";
 import { readJsonFile, writeJsonFile } from "./json-file.js";
+import { createPostgresPool } from "./postgres-pool.js";
 import { assertSchemaReady } from "./schema-migrations.js";
 
 export interface RuntimeWorkerVisibility {
@@ -237,5 +238,5 @@ export async function createRuntimeVisibilityRepository(
     return new FileSystemRuntimeVisibilityRepository(resolvedFilePath);
   }
 
-  return new PostgresRuntimeVisibilityRepository(new Pool({ connectionString: databaseUrl }));
+  return new PostgresRuntimeVisibilityRepository(createPostgresPool(databaseUrl));
 }

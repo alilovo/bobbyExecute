@@ -1,12 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { Pool } from "pg";
 import {
   validateControlPlaneBackupRoundTrip,
   type ControlPlaneBackupRoundTripValidationResult,
   type ControlPlaneBackupSnapshot,
 } from "../recovery/control-plane-backup.js";
 import { inspectWorkerDiskRecovery, type WorkerDiskRecoveryReport } from "../recovery/worker-state-manifest.js";
+import { createPostgresPool } from "../persistence/postgres-pool.js";
 import { closePool, parseCliArgs, readCliString } from "./cli.js";
 
 export interface RestoreValidationReadinessReport {
@@ -103,7 +103,7 @@ async function main(): Promise<number> {
     return 4;
   }
 
-  const pool = new Pool({ connectionString: databaseUrl });
+  const pool = createPostgresPool(databaseUrl);
   try {
     const snapshot = JSON.parse(await readFile(inputPath, "utf8")) as ControlPlaneBackupSnapshot;
     const dbValidation = await validateControlPlaneBackupRoundTrip(pool, snapshot);

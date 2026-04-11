@@ -1,10 +1,11 @@
-import { Pool } from "pg";
+import type { Pool } from "pg";
 import { pathToFileURL } from "node:url";
 import type { ControlGovernanceRepositoryWithAudits, ControlRecoveryRehearsalExecutionContext } from "../control/control-governance.js";
 import type { ControlRecoveryRehearsalExecutionSource, ControlRecoveryRehearsalContext } from "../control/control-governance.js";
 import type { DisposableDatabaseRehearsalActor, DisposableDatabaseRehearsalConfig, DisposableDatabaseRehearsalResult } from "../recovery/disposable-db-rehearsal.js";
 import { runDisposableDatabaseRehearsal } from "../recovery/disposable-db-rehearsal.js";
 import { PostgresControlGovernanceRepository } from "../persistence/control-governance-repository.js";
+import { createPostgresPool } from "../persistence/postgres-pool.js";
 import type { SchemaMigrationConnection } from "../persistence/schema-migrations.js";
 import { syncDatabaseRehearsalFreshnessState } from "../control/control-governance.js";
 import { DatabaseRehearsalFreshnessNotificationService } from "../control/database-rehearsal-notification-service.js";
@@ -189,7 +190,7 @@ export async function runRenderDatabaseRehearsalRefresh(
   const openConnection =
     deps.openConnection ??
     ((databaseUrl: string) =>
-      new Pool({ connectionString: databaseUrl }) as unknown as RenderRehearsalConnection);
+      createPostgresPool(databaseUrl) as unknown as RenderRehearsalConnection);
   const closeConnection = deps.closeConnection ?? closePool;
   const buildEvidenceRepository =
     deps.buildEvidenceRepository ??

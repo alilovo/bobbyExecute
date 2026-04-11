@@ -1,10 +1,10 @@
 import { readFile } from "node:fs/promises";
-import { Pool } from "pg";
 import {
   restoreControlPlaneBackup,
   type ControlPlaneBackupSnapshot,
   summarizeControlPlaneBackup,
 } from "../recovery/control-plane-backup.js";
+import { createPostgresPool } from "../persistence/postgres-pool.js";
 import { closePool, parseCliArgs, readCliString } from "./cli.js";
 
 async function main(): Promise<number> {
@@ -21,7 +21,7 @@ async function main(): Promise<number> {
     return 4;
   }
 
-  const pool = new Pool({ connectionString: databaseUrl });
+  const pool = createPostgresPool(databaseUrl);
   try {
     const snapshot = JSON.parse(await readFile(inputPath, "utf8")) as ControlPlaneBackupSnapshot;
     await restoreControlPlaneBackup(pool, snapshot);

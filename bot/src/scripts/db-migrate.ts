@@ -1,18 +1,21 @@
-import { Pool } from "pg";
 import { formatSchemaStatus, migrateSchema } from "../persistence/schema-migrations.js";
+import { createPostgresPool } from "../persistence/postgres-pool.js";
 import { closePool, parseCliArgs, readCliString } from "./cli.js";
 
 async function main(): Promise<number> {
   const args = parseCliArgs(process.argv.slice(2));
-  const databaseUrl = readCliString(args, "database-url", process.env.DATABASE_URL);
+  const directUrl =
+    readCliString(args, "direct-url", process.env.DIRECT_URL) ??
+    readCliString(args, "database-url", process.env.DATABASE_URL);
+  const databaseUrl = directUrl;
   const migrationsDir = readCliString(args, "migrations-dir");
 
   if (!databaseUrl) {
-    console.error("DATABASE_URL is required.");
+    console.error("DIRECT_URL or DATABASE_URL is required.");
     return 4;
   }
 
-  const pool = new Pool({ connectionString: databaseUrl });
+  const pool = createPostgresPool(databaseUrl);
   try {
     const status = await migrateSchema(pool, migrationsDir ? { migrationsDir } : {});
     console.log(formatSchemaStatus(status));

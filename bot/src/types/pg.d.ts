@@ -10,6 +10,12 @@ declare module "pg" {
 
   export interface PoolConfig {
     connectionString?: string;
+    host?: string;
+    port?: number;
+    user?: string;
+    password?: string;
+    database?: string;
+    ssl?: boolean | { rejectUnauthorized?: boolean };
   }
 
   export class Pool {
