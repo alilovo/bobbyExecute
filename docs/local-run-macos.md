@@ -115,14 +115,14 @@ If you open a new terminal, the loaded env values such as tokens, URLs, and mode
 ```bash
 curl -fsS http://127.0.0.1:3333/health
 curl -fsS -H "Authorization: Bearer $OPERATOR_READ_TOKEN" http://127.0.0.1:3334/control/status
-curl -fsS -H "Authorization: Bearer $OPERATOR_READ_TOKEN" http://127.0.0.1:3334/control/runtime-status
+curl -fsS -H "Authorization: Bearer $OPERATOR_READ_TOKEN" http://127.0.0.1:3334/control/status
 curl -fsS -H "Authorization: Bearer $OPERATOR_READ_TOKEN" http://127.0.0.1:3334/control/release-gate
 curl -fsS http://127.0.0.1:3000/api/auth/session
 ```
 
 Success looks like:
 
-- `runtime-status` reports paper mode, not live
+- `status` reports paper mode, not live
 - `release-gate` does not allow live execution
 - no signer process is running
 - the logs describe paper or simulated behavior only

@@ -97,7 +97,7 @@ What the first DB errors mean:
 - `npm run db:migrate` creates or updates schema state when `db:status` says migration is needed.
 - `GET /health` should return `200`.
 - `GET /control/status` should report the intended runtime mode.
-- `GET /control/runtime-status` should match the intended mode and posture.
+- `GET /control/status` should match the intended mode and posture.
 - `GET /control/release-gate` should show paper-safe for papertrade and live-eligible only for live-limited after preflight.
 - `GET /health` for the control service should respond on `127.0.0.1:3334` when the control shell is started with `PORT=3334`.
 - Dashboard should respond on `127.0.0.1:3000` with `NEXT_PUBLIC_USE_MOCK=false` for real local wiring.
@@ -106,7 +106,7 @@ What the first DB errors mean:
 
 Papertrade:
 
-- `runtime-status` shows paper mode, not live
+- `status` shows paper mode, not live
 - `release-gate` does not allow live execution
 - no signer process is running
 - logs describe paper or simulated behavior only
@@ -114,7 +114,7 @@ Papertrade:
 Live trade:
 
 - `live:preflight` passes
-- `control/status` and `control/runtime-status` report live mode
+- `control/status` reports live mode
 - `release-gate` is satisfied for the live posture
 - the signer is remote and healthy
 - runtime is armed only when you intentionally arm it

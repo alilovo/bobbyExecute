@@ -130,14 +130,14 @@ If you open a new window, the loaded env values such as tokens, URLs, and mode f
 ```powershell
 Invoke-RestMethod http://127.0.0.1:3333/health
 Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:OPERATOR_READ_TOKEN" } http://127.0.0.1:3334/control/status
-Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:OPERATOR_READ_TOKEN" } http://127.0.0.1:3334/control/runtime-status
+Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:OPERATOR_READ_TOKEN" } http://127.0.0.1:3334/control/status
 Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:OPERATOR_READ_TOKEN" } http://127.0.0.1:3334/control/release-gate
 Invoke-RestMethod http://127.0.0.1:3000/api/auth/session
 ```
 
 Success looks like:
 
-- `runtime-status` reports paper mode, not live
+- `status` reports paper mode, not live
 - `release-gate` does not allow live execution
 - no signer process is running
 - the logs describe paper or simulated behavior only
