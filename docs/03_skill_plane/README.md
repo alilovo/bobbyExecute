@@ -46,9 +46,9 @@ MCP exposes read views only. Canonical decision truth remains runtime cycle-summ
 
 ## Dependencies
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/05_governance/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/forensics-evidence-plane.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/03_skill_plane/mcp-posture-and-exposure-catalog.md`
+- `docs/05_governance/README.md`
+- `docs/architecture/forensics-evidence-plane.md`
+- `docs/03_skill_plane/mcp-posture-and-exposure-catalog.md`
 
 ## Deferred Scope
 

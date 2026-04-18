@@ -1,7 +1,7 @@
 # BobbyExecute
 
 Scope: repository architecture and operating-truth summary.
-Authority: canonical summary. Detailed boundaries live in `C:/workspace/main_projects/dotBot/bobbyExecute/docs/01_architecture/README.md` and governance docs.
+Authority: canonical summary. Detailed boundaries live in `docs/01_architecture/README.md` and governance docs.
 
 ## Purpose
 
@@ -81,14 +81,14 @@ BobbyExecute is a governance-first Solana trading system with one deterministic 
 
 ## Canonical Documentation Entry Points
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/repo-specific-canonical-sources.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/01_architecture/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/02_pipeline/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/05_governance/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/signing-architecture.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/journal-memory-casebook-architecture.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/bot/README.md` for the local boot-only, papertrade, and live-limited startup split
+- `docs/repo-specific-canonical-sources.md`
+- `docs/01_architecture/README.md`
+- `docs/02_pipeline/README.md`
+- `docs/05_governance/README.md`
+- `docs/06_journal_replay/README.md`
+- `docs/architecture/signing-architecture.md`
+- `docs/architecture/journal-memory-casebook-architecture.md`
+- `bot/README.md` for the local boot-only, papertrade, and live-limited startup split
 
 ## Verification Commands
 
@@ -102,8 +102,8 @@ npm run premerge
 npm run build
 ```
 
-Local papertrade onboarding index lives in [`docs/local-run.md`](C:/workspace/main_projects/dotBot/bobbyExecute/docs/local-run.md); OS-specific instructions are linked from there.
-Live-limited onboarding index starts in [`docs/06_journal_replay/staging-live-preflight-runbook.md`](C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/staging-live-preflight-runbook.md); OS-specific instructions are linked from there.
+Local papertrade onboarding index lives in [`docs/local-run.md`](docs/local-run.md); OS-specific instructions are linked from there.
+Live-limited onboarding index starts in [`docs/06_journal_replay/staging-live-preflight-runbook.md`](docs/06_journal_replay/staging-live-preflight-runbook.md); OS-specific instructions are linked from there.
 
 ## Status Reminder
 

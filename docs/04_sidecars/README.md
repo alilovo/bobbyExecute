@@ -56,9 +56,9 @@ Sidecar outputs are evidence/context only. Canonical decision-history truth rema
 
 ## Dependencies
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/forensics-evidence-plane.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/workflow-consumers.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/README.md`
+- `docs/architecture/forensics-evidence-plane.md`
+- `docs/architecture/workflow-consumers.md`
+- `docs/06_journal_replay/README.md`
 
 ## Deferred Scope
 

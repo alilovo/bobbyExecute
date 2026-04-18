@@ -3,9 +3,7 @@
 Scope: shared-core consumer linkage for this repository.  
 Authority: authoritative for shared-core linkage only, not for runtime architecture.
 
-This repository consumes the standalone shared-core package at:
-
-`C:/workspace/main_projects/codex-workflow-core/`
+This repository consumes the standalone shared-core package through the consumer manifest.
 
 ## Linked Version
 
@@ -36,10 +34,10 @@ Consumer-local overlays remain:
 
 Architecture truth tiering is owned by:
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/repo-specific-canonical-sources.md`
+- `docs/repo-specific-canonical-sources.md`
 
 ## Operator Rule
 
 - read `.codex/shared-core-consumer.json` before using shared-core assets
-- do not edit `C:/workspace/main_projects/codex-workflow-core/` from this repository
+- do not edit the standalone shared-core repository from this repository
 - keep the local overlay inputs aligned whenever canonical docs move

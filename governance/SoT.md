@@ -9,13 +9,13 @@ Prevent dual truth and keep one deterministic authority path with explicit non-a
 
 ## Canonical Governance Documents
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/05_governance/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/01_architecture/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/02_pipeline/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/repo-specific-canonical-sources.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/journal-memory-casebook-architecture.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/journal-memory-validation-gates.md`
+- `docs/05_governance/README.md`
+- `docs/01_architecture/README.md`
+- `docs/02_pipeline/README.md`
+- `docs/06_journal_replay/README.md`
+- `docs/repo-specific-canonical-sources.md`
+- `docs/architecture/journal-memory-casebook-architecture.md`
+- `docs/architecture/journal-memory-validation-gates.md`
 
 ## Four-Plane Governance Lock
 

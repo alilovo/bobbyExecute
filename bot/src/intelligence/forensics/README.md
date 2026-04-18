@@ -45,5 +45,5 @@ Forensics outputs must preserve evidence references, timestamps, and source cove
 
 ## Dependencies
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/forensics-evidence-plane.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/workflow-consumers.md`
+- `docs/architecture/forensics-evidence-plane.md`
+- `docs/architecture/workflow-consumers.md`

@@ -1,8 +1,8 @@
 # BobbyExecute Bot Runtime
 
 Scope: operational reference for `bot/` only.
-For papertrade onboarding, use [`docs/local-run.md`](C:/workspace/main_projects/dotBot/bobbyExecute/docs/local-run.md).
-For live-limited onboarding, use [`docs/06_journal_replay/staging-live-preflight-runbook.md`](C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/staging-live-preflight-runbook.md).
+For papertrade onboarding, use [`docs/local-run.md`](docs/local-run.md).
+For live-limited onboarding, use [`docs/06_journal_replay/staging-live-preflight-runbook.md`](docs/06_journal_replay/staging-live-preflight-runbook.md).
 
 ## Purpose
 
@@ -111,6 +111,6 @@ Private control mutation surfaces:
 
 ## Runbook Pointers
 
-- [`docs/06_journal_replay/staging-live-preflight-runbook.md`](C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/staging-live-preflight-runbook.md)
-- [`docs/06_journal_replay/staging-live-preflight-evidence-template.md`](C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/staging-live-preflight-evidence-template.md)
-- [`docs/06_journal_replay/boot-critical-artifact-preparation.md`](C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/boot-critical-artifact-preparation.md) is a pointer only; the boot-critical file list now lives in the live preflight runbook.
+- [`docs/06_journal_replay/staging-live-preflight-runbook.md`](docs/06_journal_replay/staging-live-preflight-runbook.md)
+- [`docs/06_journal_replay/staging-live-preflight-evidence-template.md`](docs/06_journal_replay/staging-live-preflight-evidence-template.md)
+- [`docs/06_journal_replay/boot-critical-artifact-preparation.md`](docs/06_journal_replay/boot-critical-artifact-preparation.md) is a pointer only; the boot-critical file list now lives in the live preflight runbook.

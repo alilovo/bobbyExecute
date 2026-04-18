@@ -28,4 +28,4 @@ Governance-first Solana trading bot. Primary codebase is TypeScript in `bot/`. S
 - If `.codex/repo-intake-inputs.json` exists, keep it aligned with the repo-intake skill before mapping the repo.
 - If `.codex/runtime-policy-inputs.json` exists, keep it aligned with `runtime-policy-auditor` before auditing runtime policy.
 - Use the standalone shared-core source only through the consumer manifest.
-- Do not edit C:/workspace/main_projects/codex-workflow-core/ from this repository.
+- Do not edit the standalone shared-core repository from this repository.

@@ -62,11 +62,11 @@ All outputs are observational and non-authoritative.
 
 ## Dependencies
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/01_architecture/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/02_pipeline/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/bot/src/intelligence/forensics/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/journal-memory-casebook-architecture.md`
+- `docs/01_architecture/README.md`
+- `docs/02_pipeline/README.md`
+- `docs/06_journal_replay/README.md`
+- `bot/src/intelligence/forensics/README.md`
+- `docs/architecture/journal-memory-casebook-architecture.md`
 
 ## Deferred Scope
 

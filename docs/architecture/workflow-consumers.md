@@ -71,9 +71,9 @@ None of these consumers own decision authority or decision-history truth.
 
 ## Dependencies
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/forensics-evidence-plane.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/04_sidecars/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/05_governance/README.md`
+- `docs/architecture/forensics-evidence-plane.md`
+- `docs/04_sidecars/README.md`
+- `docs/05_governance/README.md`
 
 ## Deferred Scope
 

@@ -81,10 +81,10 @@ Enforce one deterministic authority plane and explicit non-authoritative boundar
 
 ## Dependencies
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/governance/SoT.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/repo-specific-canonical-sources.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/glossary/architecture-terms.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/journal-memory-validation-gates.md`
+- `governance/SoT.md`
+- `docs/repo-specific-canonical-sources.md`
+- `docs/glossary/architecture-terms.md`
+- `docs/architecture/journal-memory-validation-gates.md`
 
 ## Deferred Scope
 

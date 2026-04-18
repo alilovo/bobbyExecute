@@ -33,6 +33,6 @@ Canonical decision truth remains runtime cycle-summary `decisionEnvelope`.
 
 ## Dependencies
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/02_pipeline/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/forensics-evidence-plane.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/05_governance/README.md`
+- `docs/02_pipeline/README.md`
+- `docs/architecture/forensics-evidence-plane.md`
+- `docs/05_governance/README.md`

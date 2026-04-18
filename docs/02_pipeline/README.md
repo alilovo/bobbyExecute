@@ -70,11 +70,11 @@ All consumer outputs remain non-authoritative.
 
 ## Dependencies
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/01_architecture/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/forensics-evidence-plane.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/workflow-consumers.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/journal-memory-casebook-architecture.md`
+- `docs/01_architecture/README.md`
+- `docs/06_journal_replay/README.md`
+- `docs/architecture/forensics-evidence-plane.md`
+- `docs/architecture/workflow-consumers.md`
+- `docs/architecture/journal-memory-casebook-architecture.md`
 
 ## Deferred Scope
 

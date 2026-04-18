@@ -8,7 +8,8 @@ const manifestPath = path.join(root, '.codex', 'shared-core-consumer.json');
 
 function run() {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  const output = execFileSync('node', [path.join(manifest.sharedCoreSource, 'scripts', 'tools', 'validate-consumer-linkage.mjs'), '--consumer', root], { cwd: manifest.sharedCoreSource, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const sharedCoreRoot = path.resolve(root, manifest.sharedCoreSource);
+  const output = execFileSync('node', [path.join(sharedCoreRoot, 'scripts', 'tools', 'validate-consumer-linkage.mjs'), '--consumer', root], { cwd: sharedCoreRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   console.log(output.trim());
 }
 

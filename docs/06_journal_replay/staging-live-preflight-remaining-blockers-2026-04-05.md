@@ -7,9 +7,9 @@ This file captures a dated blocker list from one point in time.
 
 ## Current Active Sources
 
-- Runbook: `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/staging-live-preflight-runbook.md`
-- Template: `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/staging-live-preflight-evidence-template.md`
-- Historical index: `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/evidence-records-index.md`
+- Runbook: `docs/06_journal_replay/staging-live-preflight-runbook.md`
+- Template: `docs/06_journal_replay/staging-live-preflight-evidence-template.md`
+- Historical index: `docs/06_journal_replay/evidence-records-index.md`
 
 ## Snapshot Summary (As Of 2026-04-05)
 

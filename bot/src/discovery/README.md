@@ -32,5 +32,5 @@ Discovery does not own decision truth. Canonical decision-history remains cycle-
 
 ## Dependencies
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/02_pipeline/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/forensics-evidence-plane.md`
+- `docs/02_pipeline/README.md`
+- `docs/architecture/forensics-evidence-plane.md`

@@ -7,55 +7,56 @@ Authority: authoritative for documentation-tier classification in BobbyExecute.
 
 ### Tier 0: Governance Entry
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/governance/SoT.md`
+- `governance/SoT.md`
 
 ### Tier 1: Canonical Architecture And Boundaries
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/01_architecture/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/02_pipeline/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/05_governance/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/target-architecture-4-plane.md`
+- `README.md`
+- `docs/01_architecture/README.md`
+- `docs/02_pipeline/README.md`
+- `docs/05_governance/README.md`
+- `docs/architecture/target-architecture-4-plane.md`
 
 The Tier 1 architecture and boundary docs above now also carry the Dashboard V1 target route model (`/overview`, `/control`, `/journal`, `/recovery`, `/advanced`) and the responsive/mobile addendum.
 
 ### Tier 2: Canonical Support Documents
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/glossary/architecture-terms.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/forensics-evidence-plane.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/signing-architecture.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/workflow-consumers.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/journal-memory-casebook-architecture.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/journal-memory-validation-gates.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/03_skill_plane/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/04_sidecars/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/README.md`
+- `docs/glossary/architecture-terms.md`
+- `docs/architecture/forensics-evidence-plane.md`
+- `docs/architecture/signing-architecture.md`
+- `docs/architecture/workflow-consumers.md`
+- `docs/architecture/journal-memory-casebook-architecture.md`
+- `docs/architecture/journal-memory-validation-gates.md`
+- `docs/architecture/dashboard-v1-control-spec.md`
+- `docs/03_skill_plane/README.md`
+- `docs/04_sidecars/README.md`
+- `docs/06_journal_replay/README.md`
 
 ### Tier 3: Operational Runbooks, Pointers, And Env Examples (Non-Canonical Architecture)
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/local-run.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/local-run-macos.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/local-run-windows.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/.env.papertrade.example`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/.env.live-local.example`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/dashboard/.env.example`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/signer/.env.example`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/staging-live-preflight-runbook.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/staging-live-preflight-runbook-macos.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/staging-live-preflight-runbook-windows.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/boot-critical-artifact-preparation.md` (pointer only)
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/staging-live-preflight-evidence-template.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/bot/README.md`
+- `docs/local-run.md`
+- `docs/local-run-macos.md`
+- `docs/local-run-windows.md`
+- `.env.papertrade.example`
+- `.env.live-local.example`
+- `dashboard/.env.example`
+- `signer/.env.example`
+- `docs/06_journal_replay/staging-live-preflight-runbook.md`
+- `docs/06_journal_replay/staging-live-preflight-runbook-macos.md`
+- `docs/06_journal_replay/staging-live-preflight-runbook-windows.md`
+- `docs/06_journal_replay/boot-critical-artifact-preparation.md` (pointer only)
+- `docs/06_journal_replay/staging-live-preflight-evidence-template.md`
+- `bot/README.md`
 
 ### Tier 4: Historical Evidence And Legacy Records
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/evidence-records-index.md`
+- `docs/06_journal_replay/evidence-records-index.md`
 - dated evidence snapshots under `docs/06_journal_replay/`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/archive/README.md`
+- `archive/README.md`
 
 ## Shared-Core Boundary
 
-Shared-core assets are consumed only through `C:/workspace/main_projects/dotBot/bobbyExecute/.codex/shared-core-consumer.json`.
+Shared-core assets are consumed only through `.codex/shared-core-consumer.json`.
 
 The standalone shared-core repository is a workflow dependency, not BobbyExecute runtime authority.
 

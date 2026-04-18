@@ -60,7 +60,7 @@ function Import-EnvFile {
 ## Step 2: Prepare the Signer
 
 ```powershell
-Set-Location C:\workspace\main_projects\dotBot\bobbyExecute\signer
+Set-Location signer
 npm install
 Copy-Item .env.example .env.local
 # Fill SIGNER_AUTH_TOKEN, SIGNER_WALLET_PRIVATE_KEY, and SIGNER_WALLET_ADDRESS.
@@ -72,7 +72,7 @@ npm start
 ## Step 3: Prepare `bot\.env.live-local`
 
 ```powershell
-Set-Location C:\workspace\main_projects\dotBot\bobbyExecute\bot
+Set-Location bot
 npm install
 Copy-Item ..\.env.live-local.example .env.live-local
 # Fill the live-limited env values before continuing, including CONTROL_TOKEN,
@@ -110,7 +110,7 @@ Use the same `bot\.env.live-local` values in every bot window.
 Window B: bot control
 
 ```powershell
-Set-Location C:\workspace\main_projects\dotBot\bobbyExecute\bot
+Set-Location bot
 Import-EnvFile .\.env.live-local
 npm run start:control
 ```
@@ -118,7 +118,7 @@ npm run start:control
 Window C: bot worker
 
 ```powershell
-Set-Location C:\workspace\main_projects\dotBot\bobbyExecute\bot
+Set-Location bot
 Import-EnvFile .\.env.live-local
 npm run start:worker
 ```
@@ -126,7 +126,7 @@ npm run start:worker
 Window D: bot runtime server
 
 ```powershell
-Set-Location C:\workspace\main_projects\dotBot\bobbyExecute\bot
+Set-Location bot
 Import-EnvFile .\.env.live-local
 # This script repeats live:preflight and then starts the server.
 npm run live:test
@@ -135,7 +135,7 @@ npm run live:test
 Window E: dashboard
 
 ```powershell
-Set-Location C:\workspace\main_projects\dotBot\bobbyExecute\dashboard
+Set-Location dashboard
 npm install
 Copy-Item .env.example .env.local
 # Fill CONTROL_SERVICE_URL, CONTROL_TOKEN, and OPERATOR_READ_TOKEN.

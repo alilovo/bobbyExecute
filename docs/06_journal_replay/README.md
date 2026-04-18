@@ -61,7 +61,7 @@ The dashboard may display canonical decision history, but it does not own or red
 
 - Runbooks/templates are operational guidance only.
 - Dated evidence snapshots are historical records.
-- Historical index: `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/evidence-records-index.md`.
+- Historical index: `docs/06_journal_replay/evidence-records-index.md`.
 
 ## What This Is Not
 
@@ -71,10 +71,10 @@ The dashboard may display canonical decision history, but it does not own or red
 
 ## Dependencies
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/01_architecture/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/02_pipeline/README.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/forensics-evidence-plane.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/architecture/journal-memory-casebook-architecture.md`
+- `docs/01_architecture/README.md`
+- `docs/02_pipeline/README.md`
+- `docs/architecture/forensics-evidence-plane.md`
+- `docs/architecture/journal-memory-casebook-architecture.md`
 
 ## Deferred Scope
 

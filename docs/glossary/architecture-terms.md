@@ -1,7 +1,7 @@
 # Architecture Terms
 
 Scope: repository terminology lock for architecture and governance documentation.
-Authority: canonical support for wording consistency; governance rules remain in `C:/workspace/main_projects/dotBot/bobbyExecute/governance/SoT.md`.
+Authority: canonical support for wording consistency; governance rules remain in `governance/SoT.md`.
 
 ## Deterministic Authority Plane
 Only plane that can create trade decision/execution authority. Runtime authority is produced through typed authority artifacts and deterministic policy/risk/decision code paths.

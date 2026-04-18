@@ -14,7 +14,8 @@
   "runtimeConfigFiles": [
     "render.yaml",
     "Dockerfile",
-    ".env.example",
+    "bot/.env",
+    "dashboard/.env.local",
     "bot/package.json",
     "dashboard/package.json"
   ],
@@ -43,7 +44,8 @@
     "docs/06_journal_replay/README.md"
   ],
   "optionalEnvReferenceFiles": [
-    ".env.example",
+    "dashboard/.env.example",
+    "signer/.env.example",
     "render.yaml"
   ],
   "ignorePaths": [

@@ -9,8 +9,8 @@ Keep legacy material discoverable without allowing it to act as current architec
 
 ## Active Canonical Sources
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/repo-specific-canonical-sources.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/governance/SoT.md`
+- `docs/repo-specific-canonical-sources.md`
+- `governance/SoT.md`
 
 ## Archive Policy
 
@@ -22,7 +22,7 @@ Keep legacy material discoverable without allowing it to act as current architec
 
 Dated operational snapshots should live under `docs/06_journal_replay/` and be listed in:
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/06_journal_replay/evidence-records-index.md`
+- `docs/06_journal_replay/evidence-records-index.md`
 
 ## Notes
 

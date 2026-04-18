@@ -58,7 +58,7 @@ function Import-EnvFile {
 ## Step 2: Prepare `bot\.env`
 
 ```powershell
-Set-Location C:\workspace\main_projects\dotBot\bobbyExecute\bot
+Set-Location bot
 npm install
 Copy-Item ..\.env.papertrade.example .env
 # Fill the env file before continuing.
@@ -90,7 +90,7 @@ Use the same `bot\.env` values in every bot window.
 Window A: control service
 
 ```powershell
-Set-Location C:\workspace\main_projects\dotBot\bobbyExecute\bot
+Set-Location bot
 Import-EnvFile .\.env
 npm run start:control
 ```
@@ -98,7 +98,7 @@ npm run start:control
 Window B: worker
 
 ```powershell
-Set-Location C:\workspace\main_projects\dotBot\bobbyExecute\bot
+Set-Location bot
 Import-EnvFile .\.env
 npm run start:worker
 ```
@@ -106,7 +106,7 @@ npm run start:worker
 Window C: public API server
 
 ```powershell
-Set-Location C:\workspace\main_projects\dotBot\bobbyExecute\bot
+Set-Location bot
 Import-EnvFile .\.env
 npm run start:server
 ```
@@ -114,7 +114,7 @@ npm run start:server
 Window D: dashboard
 
 ```powershell
-Set-Location C:\workspace\main_projects\dotBot\bobbyExecute\dashboard
+Set-Location dashboard
 npm install
 Copy-Item .env.example .env.local
 # Fill CONTROL_SERVICE_URL, CONTROL_TOKEN, and OPERATOR_READ_TOKEN.

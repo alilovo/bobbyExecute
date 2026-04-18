@@ -25,5 +25,5 @@ Decision-time truth is owned by deterministic runtime artifacts; outcome-time an
 
 ## Dependencies
 
-- `C:/workspace/main_projects/dotBot/bobbyExecute/governance/SoT.md`
-- `C:/workspace/main_projects/dotBot/bobbyExecute/docs/05_governance/README.md`
+- `governance/SoT.md`
+- `docs/05_governance/README.md`
