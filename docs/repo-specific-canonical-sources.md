@@ -57,8 +57,8 @@ The Tier 1 architecture and boundary docs above now also carry the Dashboard V1 
 ## Shared-Core Boundary
 
 Shared-core assets are consumed only through `.codex/shared-core-consumer.json`.
-
-The standalone shared-core repository is a workflow dependency, not BobbyExecute runtime authority.
+The current consumer overlay is `docs/model-agnostic-workflow-system-consumer.md`.
+The standalone `model-agnostic-workflow-system` repository is a workflow dependency, not BobbyExecute runtime authority.
 
 ## Classification Rules
 

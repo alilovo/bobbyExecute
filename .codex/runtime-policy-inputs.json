@@ -6,7 +6,7 @@
     "governance/SoT.md",
     "governance/cursor_rule.md",
     "governance/file_path.md",
-    "docs/codex-workflow-consumer.md",
+    "docs/model-agnostic-workflow-system-consumer.md",
     "docs/repo-specific-canonical-sources.md",
     "docs/05_governance/README.md",
     "docs/06_journal_replay/README.md"

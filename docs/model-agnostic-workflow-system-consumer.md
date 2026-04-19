@@ -1,13 +1,14 @@
-# Codex Workflow Consumer Overlay
+# Model-Agnostic Workflow System Consumer Overlay
 
 Scope: shared-core consumer linkage for this repository.  
 Authority: authoritative for shared-core linkage only, not for runtime architecture.
 
-This repository consumes the standalone shared-core package through the consumer manifest.
+This repository consumes the standalone `model-agnostic-workflow-system` shared-core package through the consumer manifest.
 
 ## Linked Version
 
 - shared-core version: `0.2.1`
+- package fingerprint: `42c40e701633cce0606efce1a7057c4831fe095a66676906bfa8270049d97c96`
 - linkage mode: standalone local repository reference
 
 ## Adopted Shared-Core Skills
@@ -39,5 +40,5 @@ Architecture truth tiering is owned by:
 ## Operator Rule
 
 - read `.codex/shared-core-consumer.json` before using shared-core assets
-- do not edit the standalone shared-core repository from this repository
+- do not edit the standalone `model-agnostic-workflow-system` repository from this repository
 - keep the local overlay inputs aligned whenever canonical docs move
