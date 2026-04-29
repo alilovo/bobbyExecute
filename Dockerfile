@@ -19,7 +19,7 @@ COPY --from=build /app/bot/package*.json ./bot/
 COPY --from=build /app/bot/node_modules ./bot/node_modules
 COPY --from=build /app/bot/dist ./bot/dist
 COPY --from=build /app/bot/openapi.yaml ./bot/openapi.yaml
-
+COPY --from=build /app/bot/migrations    ./bot/migrations
 EXPOSE 3333
 
 CMD ["node", "bot/dist/server/run.js"]
