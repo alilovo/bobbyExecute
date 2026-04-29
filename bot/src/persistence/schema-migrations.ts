@@ -76,8 +76,8 @@ export class SchemaMigrationError extends Error {
   }
 }
 
-export const DEFAULT_MIGRATIONS_DIR = join(process.cwd(), "migrations");
-
+export const DEFAULT_MIGRATIONS_DIR =
+  process.env.MIGRATIONS_DIR ?? join(process.cwd(), "migrations");
 function checksum(content: string): string {
   return createHash("sha256").update(content, "utf8").digest("hex");
 }
