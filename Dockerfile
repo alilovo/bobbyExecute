@@ -37,4 +37,4 @@ CMD ["node", "bot/dist/server/run.js"]
 COPY --from=build /app/bot/migrations    ./bot/migrations
 EXPOSE 3333
 
-CMD ["node", "bot/dist/server/run.js"]
+CMD ["sh", "-c", "npm run --prefix bot db:migrate && node bot/dist/server/run.js"]
