@@ -3,7 +3,7 @@
  * Fail-closed: exits on config validation failure.
  */
 import { loadConfig } from "./config/load-config.js";
-import { createServer } from "./server/index.js";
+import { createServer, createControlServer } from "./server/index.js";
 import { createRuntimeVisibilityRepository } from "./persistence/runtime-visibility-repository.js";
 
 export async function bootstrap(options?: {
@@ -35,12 +35,15 @@ export async function bootstrap(options?: {
     })
   );
 
-  const server = await createServer({
+  const server = await createControlServer({
     port,
     host,
     dashboardOrigin: config.dashboardOrigin,
     runtimeVisibilityRepository,
     runtimeEnvironment,
+    controlAuthToken: process.env.CONTROL_TOKEN,
+    operatorReadToken: process.env.OPERATOR_READ_TOKEN,
+    databaseUrl: process.env.DATABASE_URL,
     advisoryLLMConfig: {
       enabled: config.advisoryLLMEnabled,
       provider: config.advisoryLLMProvider,
