@@ -10,7 +10,7 @@ import {
 import { validateFreshness } from "../freshness.js";
 
 const BASE_URL = "https://api.dexpaprika.com";
-const DEFAULT_MAX_STALENESS_MS = 30_000;
+const DEFAULT_MAX_STALENESS_MS = Number(process.env.MARKET_DATA_MAX_AGE_MS ?? 90_000);
 
 export interface DexPaprikaClientConfig {
   baseUrl?: string;
