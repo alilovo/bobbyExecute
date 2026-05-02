@@ -70,7 +70,7 @@ function mapRecord(row: Record<string, unknown>): RuntimeVisibilityRecord {
     environment: String(row.environment),
     workerId: String(row.worker_id),
     snapshot: clone(snapshot),
-    lastHeartbeatAt: String(row.last_heartbeat_at),
+lastHeartbeatAt: new Date(row.last_heartbeat_at).toISOString(),
     lastCycleAt: row.last_cycle_at == null ? undefined : String(row.last_cycle_at),
     lastSeenReloadNonce: row.last_seen_reload_nonce == null ? undefined : Number(row.last_seen_reload_nonce),
     lastAppliedVersionId: row.last_applied_version_id == null ? undefined : String(row.last_applied_version_id),
