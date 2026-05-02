@@ -10,7 +10,7 @@ import {
 import { validateFreshness } from "../freshness.js";
 
 const BASE_URL = "https://solana-gateway.moralis.io";
-const DEFAULT_MAX_STALENESS_MS = 30_000;
+const DEFAULT_MAX_STALENESS_MS = Number(process.env.MARKET_DATA_MAX_AGE_MS ?? 90_000);
 const MORALIS_API_KEY_HEADER = "X-Api-Key";
 
 export interface MoralisClientConfig {
