@@ -2,7 +2,7 @@
  * Freshness validation for adapter responses.
  * Rejects data older than maxStalenessMs.
  */
-const DEFAULT_MAX_STALENESS_MS = 30_000;
+const DEFAULT_MAX_STALENESS_MS = Number(process.env.MARKET_DATA_MAX_AGE_MS ?? 90_000);
 
 /**
  * Parse timestamp from API response. Supports ISO string, Unix seconds, Unix ms.
