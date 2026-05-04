@@ -221,11 +221,10 @@ function mapActiveRow(row: Record<string, unknown>): RuntimeConfigActiveRecord {
     killSwitch: Boolean(row.kill_switch),
     killSwitchReason: row.kill_switch_reason == null ? undefined : String(row.kill_switch_reason),
     pendingApply: Boolean(row.pending_apply),
+    requiresRestart: Boolean(row.requires_restart),
     requestedAt: new Date(row.requested_at as string).toISOString(),
     appliedAt: row.applied_at == null ? undefined : new Date(row.applied_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
-    updatedAt: new Date(row.updated_at).toISOString(),
-    updatedAt: String(row.updated_at),
   };
 }
 

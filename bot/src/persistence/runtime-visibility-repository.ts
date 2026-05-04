@@ -70,16 +70,16 @@ function mapRecord(row: Record<string, unknown>): RuntimeVisibilityRecord {
     environment: String(row.environment),
     workerId: String(row.worker_id),
     snapshot: clone(snapshot),
-lastHeartbeatAt: new Date(row.last_heartbeat_at).toISOString(),
-    lastCycleAt: row.last_cycle_at == null ? undefined : new Date(row.last_cycle_at).toISOString(),
+    lastHeartbeatAt: new Date(row.last_heartbeat_at as string).toISOString(),
+    lastCycleAt: row.last_cycle_at == null ? undefined : new Date(row.last_cycle_at as string).toISOString(),
     lastSeenReloadNonce: row.last_seen_reload_nonce == null ? undefined : Number(row.last_seen_reload_nonce),
     lastAppliedVersionId: row.last_applied_version_id == null ? undefined : String(row.last_applied_version_id),
     lastValidVersionId: row.last_valid_version_id == null ? undefined : String(row.last_valid_version_id),
     degraded: Boolean(row.degraded),
     degradedReason: row.degraded_reason == null ? undefined : String(row.degraded_reason),
     errorState: row.error_state == null ? undefined : String(row.error_state),
-    observedAt: new Date(row.observed_at).toISOString(),
-    updatedAt: new Date(row.updated_at).toISOString(),
+    observedAt: new Date(row.observed_at as string).toISOString(),
+    updatedAt: new Date(row.updated_at as string).toISOString(),
   };
 }
 
