@@ -1,6 +1,6 @@
 {
   "name": "@onchain-trading-bot/core",
-"version": "0.1.2",
+"version": "0.1.3",
   "description": "Production-grade Onchain Trading Bot - OrchestrAI patterns",
   "type": "module",
   "main": "dist/index.js",
