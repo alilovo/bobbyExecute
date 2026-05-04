@@ -198,11 +198,12 @@ function mapVersionRow(row: Record<string, unknown>): RuntimeConfigVersionRecord
     status: String(row.status) as RuntimeConfigVersionRecord["status"],
     createdBy: String(row.created_by),
     reason: row.reason == null ? undefined : String(row.reason),
-    createdAt: String(row.created_at),
-    activatedAt: row.activated_at == null ? undefined : String(row.activated_at),
+    createdAt: new Date(row.created_at as string).toISOString(),
+    activatedAt: row.activated_at == null ? undefined : new Date(row.activated_at as string).toISOString(),
     activatedBy: row.activated_by == null ? undefined : String(row.activated_by),
-    appliedAt: row.applied_at == null ? undefined : String(row.applied_at),
+    appliedAt: row.applied_at == null ? undefined : new Date(row.applied_at as string).toISOString(),
     appliedBy: row.applied_by == null ? undefined : String(row.applied_by),
+    
   };
 }
 
@@ -220,10 +221,10 @@ function mapActiveRow(row: Record<string, unknown>): RuntimeConfigActiveRecord {
     killSwitch: Boolean(row.kill_switch),
     killSwitchReason: row.kill_switch_reason == null ? undefined : String(row.kill_switch_reason),
     pendingApply: Boolean(row.pending_apply),
-    pendingReason: row.pending_reason == null ? undefined : String(row.pending_reason),
-    requiresRestart: Boolean(row.requires_restart),
-    requestedAt: String(row.requested_at),
-    appliedAt: row.applied_at == null ? undefined : String(row.applied_at),
+    requestedAt: new Date(row.requested_at as string).toISOString(),
+    appliedAt: row.applied_at == null ? undefined : new Date(row.applied_at as string).toISOString(),
+    updatedAt: new Date(row.updated_at as string).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
     updatedAt: String(row.updated_at),
   };
 }
