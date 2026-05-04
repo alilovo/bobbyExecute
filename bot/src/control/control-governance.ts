@@ -1215,7 +1215,9 @@ export function evaluateLivePromotionGate(
   const reasons: ControlLivePromotionGateReason[] = [];
   const currentMode = snapshot.runtimeConfig.appliedMode ?? snapshot.runtimeConfig.requestedMode ?? "unknown";
   const currentRuntimeStatus = snapshot.runtime?.status ?? "unknown";
-  const workerHeartbeatAt = snapshot.worker?.lastHeartbeatAt;
+  const workerHeartbeatAt = snapshot.worker?.lastHeartbeatAt 
+  ? new Date(snapshot.worker.lastHeartbeatAt).toISOString() 
+  : undefined;
   const activeRestartAlertCount = snapshot.restartAlerts.activeAlertCount ?? 0;
   const restartRequired = Boolean(snapshot.restart?.required || snapshot.runtimeConfig.requiresRestart || snapshot.runtimeConfig.pendingApply);
   const restartInProgress = Boolean(snapshot.restart?.inProgress);
